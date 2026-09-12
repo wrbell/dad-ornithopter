@@ -1,0 +1,217 @@
+advanced_modes_status: Show status of all five advanced control modes.
+aero_cal_reset: Reset all calibrated values to original library defaults.
+aero_cal_status: Print aerodynamic calibration status.
+aerobatic_discovery_enable: Enable aerobatic discovery mode.
+aerobatic_status: Print current aerobatic precision status.
+aft_stow_verify: Confirm aft stow geometry is safe for storage.
+airborne_reset_flight: Call at arming / start of each new flight to reset cal trigger.
+airborne_status: Ground station: show airborne detection state.
+airspeed_hold_disable: Disable airspeed hold.
+airspeed_hold_enable: Enable airspeed hold system.
+aoa_cl_disable
+aoa_cl_enable
+arm: Arm the aircraft — enables ODrives, transitions to flight mode.
+attitude_hold_disable: Disable attitude hold — aircraft requires constant pilot input.
+attitude_hold_enable: Enable attitude hold (default on).
+attitude_hold_reset: Reset attitude hold state — call on ARM or after mode change.
+attitude_hold_set_intent_gain: Override gain scale for one intent. attitude_hold_set_intent_gain dart 0.30
+attitude_hold_status: Ground station: show attitude hold state.
+attitude_hold_tune: Adjust an attitude hold gain parameter in flight.
+auto_disc_disable
+auto_disc_enable
+auto_disc_status
+backward_taxi_disable
+backward_taxi_enable
+calibrate_descent_controller: Calibrate the descent rate controller from TC-02 measured data.
+calibrate_servo_feedback: Calibrate per-servo ADC voltage-to-angle mapping.
+cg_calibrate_now: Manually trigger CG calibration pass (pilot command).
+cg_reset: Reset CG estimates and confidence (use after payload change).
+cg_set_margin: Override stability margin for a specific intent (mm).
+cg_status: Ground station: show complete CG management state.
+confirm_remap
+controlled_landing_reset
+controlled_landing_status: Ground station: show controlled landing and damage tolerance state.
+corridor_guard_disable: Disable corridor guard — operator accepts envelope responsibility.
+corridor_guard_enable: Enable conversion corridor guard.
+crew_hover_disable: Switch hover to attitude-reference mode (classic RC helicopter feel).
+crew_hover_enable: Enable velocity-referenced hover (default ON when in hover mode).
+dart_reset: Reset dart state — call on disarm.
+dart_set_mode_weights: Override dart mode blend weights (normally set by Loop 5).
+dart_status: Ground station: show dart control state.
+descent_ctrl_disengage: Disengage precision descent controller.
+descent_ctrl_engage: Engage the precision descent rate controller.
+descent_ctrl_status: Print precision descent controller status.
+disarm: Disarm the aircraft — safe state, all wings idle.
+disc_mode_engage: Engage Optimizer Discovery Mode.
+disc_mode_engage_focused: Engage Optimizer Discovery Mode with a specific focus.
+disc_mode_exit: Exit Discovery Mode and return to normal flight.
+disc_mode_focus_list
+disc_mode_status: Print current discovery mode status.
+disc_registry
+discovery_disable: Disable discovery mode and return to normal optimizer.
+discovery_enable: Enable discovery mode and pre-load aerodynamic hypothesis queue.
+discovery_status: Print discovery system status.
+ea_status: Print emergency avoidance status.
+effective_aoa_status
+emergency_stop
+exploration_disable
+exploration_enable
+exploration_status: Print complete exploration system status.
+failure_briefing: Print a pre-flight or in-flight failure briefing.
+failure_table_status: Quick status — is the table built and how complete is it.
+fault_status: Print complete fault and degradation status.
+fault_summary: Complete fault and degradation summary for pilot and GS.
+fault_wing_restore: Restore a wing to healthy state (after physical repair / clear_errors).
+fleet_status: Show what's in the outbox, ready to share with other drones.
+force_waveform_status
+freeze_optimizers
+gef_arm
+glassy_approach_arm
+gnd_clear_status: Print ground clearance controller status.
+gnd_state_status: Print current ground state and boundaries.
+ground_ops_flight
+ground_ops_park
+ground_ops_status: Print current ground operations mode and clearances.
+ground_ops_taxi
+gs_inject_hypothesis: Inject a hypothesis live from the ground station.
+gs_inject_note: Record an operator observation to the learning log.
+gs_inject_parameter: Override a named parameter value live from the ground station.
+h33_disengage: Return to normal 4-pair configuration.
+h33_engage: Engage an H-33 morphing configuration.
+h33_h34_h35_disengage_all
+h33_status: Ground station status report for H-33.
+h34_disengage
+h34_engage: Engage an H-34 dynamic sweep variant.
+h34_status
+h35_disengage
+h35_engage: Engage H-35 thrust/lift separation.
+h35_lift_report
+h35_status: Ground station status report for H-35.
+h36_disengage
+h36_engage: Engage H-36 minimum-power loiter/ferry configuration.
+h36_ferry_report
+h36_loiter_report
+h36_status: Ground station status for H-36.
+hover_mode_calibrate: Update hover mode with measured hover frequency from TC-02.
+hover_mode_disengage
+hover_mode_engage
+hover_mode_status: Ground station status for hover mode.
+hypothesis_results: Ground station: print hypothesis evaluation results.
+hypothesis_status: Ground station: show queue and results summary.
+hypothesis_strouhal_targets: Show Strouhal-optimal parameters for the current airspeed.
+inbox_check: Scan inbox and USB for pending hypotheses or knowledge files.
+inject_hypothesis
+inject_hypothesis_file
+knowledge_auto_export
+knowledge_boot_check
+knowledge_export
+knowledge_export_now: Export current learning state to the outbox immediately.
+knowledge_export_usb
+knowledge_import: Import a knowledge file from another drone or a merged fleet file.
+knowledge_import_usb
+knowledge_status: Print current knowledge state — what has been learned.
+l4_status: Print Loop 4 optimizer status.
+l5_status: Print yaw modality optimizer status.
+l9_disable
+l9_enable
+l9_freeze: Freeze a parameter — prevents Loop 9 from changing it.
+l9_freeze_all
+l9_reset
+l9_status: Print meta-optimizer status.
+l9_unfreeze: Unfreeze a parameter.
+learning_history: Ground station: show cross-flight learning progress.
+lever_learning_status: Print summary of what the long-term lever learning has found.
+lever_map_live
+lift_balance_report: Report port vs starboard lift balance and pair contributions.
+lm6_zone_report: Print current lever zone assignments and performance summary.
+load_hypotheses_usb
+load_mechanism_weights: Load previously learned mechanism weights.
+log_improvement: Record any measurable improvement to the learning log.
+loiter_endurance_start
+margin_status: Print current flight margin state to console and GS.
+mechanism_weight_report: Print current mechanism weight rankings for all three axes.
+mechanism_weight_reset
+merge_fleet_knowledge: Merge knowledge files from multiple drones into one unified file.
+morphing_next
+morphing_speed_report: Print the full morphing speed leaderboard.
+morphing_speed_reset
+morphing_speed_start
+morphing_speed_status
+motor_health
+motor_peaks
+panel_status
+persist_checkpoint: Mid-flight checkpoint — save current learning state without shutdown.
+persist_load_all: Load all persisted learning state at startup.
+persist_save_all: Save all learned state to disk.
+persist_status: Show what is currently persisted on disk.
+pilot_intent_status
+pitot_force_invalid
+pitot_force_valid
+pitot_status
+polar_survey_start: Begin the autonomous in-flight polar survey.
+porpoise_status
+position_hold_disable: Disable GPS position hold.
+position_hold_enable: Enable GPS position hold system.
+position_hold_engage: Manually capture current GPS position as hold target.
+position_hold_release: Release position hold (return to attitude control).
+precision_status: Print current precision metrics and lever map.
+prog_registry_save: Save progressive failure registry to SD card.
+prog_sim_abort
+prog_sim_approve
+prog_sim_request
+prog_sim_status: Print progressive simulation registry status.
+promote_mode
+query_failure: Query the failure table for a specific combination of failed wings.
+restore_optimizers
+retire_mode
+rope_health_status
+save_mechanism_weights: Persist mechanism weights to knowledge registry.
+seed_hypotheses: Inject aerodynamic hypotheses into the discovery queue.
+servo_bandwidth_status
+servo_health_report: Report servo health from AoA tracking error history.
+set
+set_h26_classification: Set H-26 classification from TC-02 result.
+soft_stop_disable: Disable soft-stop — diagnostic use only. Increases rope wear.
+soft_stop_enable: Enable soft-stop system (default).
+soft_stop_set_min_vel: Set minimum velocity at reversal as fraction of full speed (0.1-0.6).
+soft_stop_set_zone: Set soft-stop zone depth in degrees (5-20° recommended).
+soft_stop_status: Ground station: show per-wing soft-stop state.
+stall_detector_status: Print current per-pair stall detection status.
+status
+storm_stow
+storm_stow_status
+stroke_position_status: Display actual vs commanded stroke position per pair.
+strouhal_status
+tc01_abort
+tc01_confirm
+tc01_start
+tc01_status
+tc02_abort
+tc02_continue
+tc02_start
+tc02_status
+tc03_abort
+tc03_continue
+tc03_start
+tc03_status
+tc04_abort
+tc04_continue
+tc04_start
+tc04_status
+tc_export
+tc_results
+thrust_lift_status
+trim_balance_report
+turn_coord_disable: Disable turn coordination — manual pedal control only.
+turn_coord_enable: Enable automatic turn coordination.
+update_servo_bandwidth: Update servo bandwidth model from H-27 test measurement.
+user_hypothesis_status: Print status of all injected user hypotheses.
+violent_manoeuvre_status: Print violent manoeuvre authority system status.
+wake_timing_status
+water_phase_status
+wave_departure_advice
+wave_status
+wing_sim_abort: Abort current simulation — called by pilot via ground station.
+wing_sim_approve
+wing_sim_request
+wing_sim_status: Print current simulation registry status.

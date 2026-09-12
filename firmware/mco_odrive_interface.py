@@ -1,0 +1,447 @@
+#!/usr/bin/env python3
+"""
+MCO-1D ODrive S1 CAN Interface — 8 boards, 8 axes (1 motor per board)
+=======================================================================
+
+ARCHITECTURE:
+  8 × ODrive S1 boards on CAN bus (node IDs 0-7)
+  Each S1 board drives ONE motor — axis is always singular (no axis0/axis1).
+
+  Board 0  (CAN node 0):  W1 port
+  Board 1  (CAN node 1):  W1 starboard
+  Board 2  (CAN node 2):  W2 port
+  Board 3  (CAN node 3):  W2 starboard
+  Board 4  (CAN node 4):  W3 port
+  Board 5  (CAN node 5):  W3 starboard
+  Board 6  (CAN node 6):  W4 port
+  Board 7  (CAN node 7):  W4 starboard
+
+  Wing index → node ID mapping:
+    wing_idx 0 = W1 port      → node 0
+    wing_idx 1 = W1 starboard → node 1
+    wing_idx 2 = W2 port      → node 2
+    wing_idx 3 = W2 starboard → node 3
+    wing_idx 4 = W3 port      → node 4
+    wing_idx 5 = W3 starboard → node 5
+    wing_idx 6 = W4 port      → node 6
+    wing_idx 7 = W4 starboard → node 7
+
+  This is a direct 1:1 mapping — wing_idx IS the node_id.
+  No axis0/axis1 distinction. No (node | 0x10) trick. Simpler.
+
+CAN message format (ODrive S1):
+  Arbitration ID = (node_id << 5) | cmd_id
+  This is the SAME formula as ODrive v3.6 axis0.
+  Since the S1 is single-axis, every board uses this formula directly.
+
+CAN-FD:
+  The S1 supports CAN-FD at up to 12 Mbps.
+  For the MCO-1D we run standard CAN at 1 Mbps for Pi compatibility.
+  CAN-FD can be enabled later by changing mco_can_setup.sh.
+
+Encoder:
+  The S1 has an on-board absolute magnetic encoder.
+  Mount the included 1/4" diametrically magnetised magnet on the motor shaft.
+  pos_estimate is in turns (absolute from cold start — no index search).
+  No external encoder board required. No calibration index search at boot.
+
+Brake resistor:
+  Each S1 must have its own brake resistor — they CANNOT be shared.
+  Comes with a 2 Ω 50W resistor. Connect to the brake resistor terminal.
+  At stroke reversal, regenerated energy is dissipated locally per board.
+
+Requirements:
+  pip install python-can
+  sudo ip link set can0 up type can bitrate 1000000
+  (or CAN-FD: sudo ip link set can0 up type can-fd bitrate 1000000 dbitrate 5000000)
+"""
+
+import struct
+import time
+import math
+
+try:
+    import can
+    CAN_AVAILABLE = True
+except ImportError:
+    CAN_AVAILABLE = False
+    print("[WARN] python-can not installed — ODrive S1 in simulation mode")
+
+# ── ODrive S1 CAN command IDs ─────────────────────────────────────────────────
+# These are identical to the ODrive v3.6 / Pro command set.
+CMD_HEARTBEAT     = 0x001   # Heartbeat (axis error, state, flags)
+CMD_ESTOP         = 0x002   # Emergency stop
+CMD_GET_ERROR     = 0x003   # Get axis error
+CMD_SET_STATE     = 0x007   # Set axis requested state
+CMD_GET_ENCODER   = 0x009   # Get encoder estimates (pos_turns, vel_rps)
+CMD_SET_POS       = 0x00C   # Set input position
+CMD_SET_VEL       = 0x00D   # Set input velocity (vel_rps, torque_ff)
+CMD_SET_TORQUE    = 0x00E   # Set input torque
+CMD_GET_IQ        = 0x014   # Get Iq setpoint and measured
+CMD_GET_TEMP      = 0x015   # Get FET and motor temperature
+CMD_GET_VBUS      = 0x017   # Get bus voltage and current
+CMD_SET_LIMITS    = 0x011   # Set velocity and current limits
+CMD_CLEAR_ERRORS  = 0x018   # Clear all errors
+
+# ODrive axis states
+STATE_UNDEFINED         = 0
+STATE_IDLE              = 1
+STATE_CLOSED_LOOP       = 8
+STATE_FULL_CALIBRATION  = 3
+
+# Number of S1 boards / wings
+N_BOARDS = 8    # 8 × ODrive S1, one per wing
+N_WINGS  = 8    # always equal — each board drives exactly one wing
+
+# Wing index → pair and side (for logging and wave library)
+WING_NAMES = [
+    'W1p', 'W1s',   # nodes 0, 1
+    'W2p', 'W2s',   # nodes 2, 3
+    'W3p', 'W3s',   # nodes 4, 5
+    'W4p', 'W4s',   # nodes 6, 7
+]
+
+def wing_to_node(wing_idx):
+    """
+    Map wing index (0-7) directly to CAN node ID.
+    On the ODrive S1, wing_idx == node_id. Simple 1:1.
+    """
+    return wing_idx
+
+def _arb_id(node_id, cmd_id):
+    """
+    ODrive S1 CAN arbitration ID.
+    Formula: (node_id << 5) | cmd_id
+    Single axis — no axis0/axis1 distinction. No 0x10 offset.
+    """
+    return (node_id << 5) | cmd_id
+
+
+class ODriveInterface:
+    """
+    Interface to 8 × ODrive S1 boards controlling 8 wing motors.
+    Each board (node 0-7) drives exactly one wing.
+    Wing index equals node ID — the simplest possible mapping.
+    """
+
+    def __init__(self, channel="can0", bitrate=1_000_000):
+        self._bus   = None
+        self._sim   = not CAN_AVAILABLE
+        if CAN_AVAILABLE:
+            try:
+                self._bus = can.interface.Bus(
+                    channel=channel,
+                    bustype="socketcan",
+                    bitrate=bitrate,
+                )
+                print(f"[S1] CAN bus {channel} opened at {bitrate//1000} kbps "
+                      f"(8 nodes, 1 motor each)")
+            except Exception as e:
+                print(f"[S1] CAN open failed: {e} — simulation mode")
+                self._sim = True
+
+    # ── Low-level CAN ─────────────────────────────────────────────────────────
+
+    def _send(self, node_id, cmd_id, data: bytes = b""):
+        """Send a CAN frame to one S1 board."""
+        if self._sim or not self._bus:
+            return
+        msg = can.Message(
+            arbitration_id=_arb_id(node_id, cmd_id),
+            data=data,
+            is_extended_id=False,
+        )
+        try:
+            self._bus.send(msg, timeout=0.002)
+        except Exception as e:
+            print(f"[S1] CAN send node {node_id} cmd 0x{cmd_id:03X}: {e}")
+
+    def _request(self, node_id, cmd_id, timeout_s=0.004):
+        """Send a request frame and wait for the response frame."""
+        self._send(node_id, cmd_id)
+        if self._sim or not self._bus:
+            return None
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                msg = self._bus.recv(timeout=timeout_s)
+                if msg is None:
+                    break
+                # Accept the response with the matching arb ID
+                if msg.arbitration_id == _arb_id(node_id, cmd_id):
+                    return msg
+            except Exception:
+                break
+        return None
+
+    # ── Axis state control ────────────────────────────────────────────────────
+
+    def set_state(self, node_id, state):
+        """Set axis state on one S1 board."""
+        data = struct.pack("<I", state)
+        self._send(node_id, CMD_SET_STATE, data)
+
+    def enable_wing(self, wing_idx):
+        """Enable closed-loop control on one wing motor."""
+        self.set_state(wing_to_node(wing_idx), STATE_CLOSED_LOOP)
+
+    def idle_wing(self, wing_idx):
+        """Set one wing motor to idle (no torque, no velocity)."""
+        self.set_state(wing_to_node(wing_idx), STATE_IDLE)
+
+    def enable_all(self):
+        """Enable closed-loop control on all 8 wing motors."""
+        for i in range(N_WINGS):
+            self.enable_wing(i)
+            time.sleep(0.015)   # stagger to avoid CAN bus burst
+        print("[S1] All 8 motors enabled (closed-loop)")
+
+    def idle_all(self):
+        """Set all 8 wing motors to idle."""
+        for i in range(N_WINGS):
+            self.idle_wing(i)
+        print("[S1] All 8 motors idle")
+
+    def estop(self):
+        """Emergency stop all motors immediately."""
+        for i in range(N_WINGS):
+            self._send(wing_to_node(i), CMD_ESTOP)
+        print("[S1] ESTOP sent to all 8 nodes")
+
+    def clear_errors(self, wing_idx=None):
+        """Clear errors on one or all wings."""
+        targets = [wing_idx] if wing_idx is not None else list(range(N_WINGS))
+        for i in targets:
+            self._send(wing_to_node(i), CMD_CLEAR_ERRORS)
+
+    # ── Velocity commands ─────────────────────────────────────────────────────
+
+    def set_velocity(self, wing_idx, vel_rps, torque_ff=0.0):
+        """
+        Command motor shaft velocity for one wing.
+        vel_rps:   rotations per second at motor shaft
+        torque_ff: feedforward torque (N·m), usually 0.0 for flapping
+        """
+        node = wing_to_node(wing_idx)
+        data = struct.pack("<ff", vel_rps, torque_ff)
+        self._send(node, CMD_SET_VEL, data)
+
+    def set_flap_freq(self, wing_idx, freq_hz, reducer_ratio=7):
+        """Command motor velocity for a target flap frequency."""
+        self.set_velocity(wing_idx, freq_hz * reducer_ratio)
+
+    def set_all_velocities(self, vel_rps_list):
+        """
+        Set individual velocities for all 8 wings.
+        vel_rps_list: list of 8 floats (motor shaft rev/s per wing)
+        """
+        for i, vel in enumerate(vel_rps_list[:N_WINGS]):
+            self.set_velocity(i, vel)
+
+    def set_cascade_freq(self, freq_hz, reducer_ratio=7):
+        """
+        Command all 8 wings at the same flapping frequency.
+        Per-wing phase offset is handled in the wave library;
+        all motors run at the same shaft speed (frequency × gear ratio).
+        """
+        rps = freq_hz * reducer_ratio
+        for i in range(N_WINGS):
+            self.set_velocity(i, rps)
+
+    def set_velocity_limit(self, wing_idx, vel_limit_rps, current_limit_A=None):
+        """
+        Set velocity and optionally current limits on one S1.
+        vel_limit_rps: maximum shaft velocity (rad/s or rps — check firmware)
+        current_limit_A: maximum current in amps (None = don't change)
+        Uses SET_LIMITS command (0x011).
+        """
+        node  = wing_to_node(wing_idx)
+        vlim  = float(vel_limit_rps)
+        clim  = float(current_limit_A) if current_limit_A is not None else 0.0
+        data  = struct.pack("<ff", vlim, clim)
+        self._send(node, CMD_SET_LIMITS, data)
+
+    # ── Position commands ─────────────────────────────────────────────────────
+
+    def set_position(self, wing_idx, pos_turns, vel_ff=0.0, torque_ff=0.0):
+        """
+        Set motor shaft position in turns.
+        The S1 absolute encoder means cold-start position is known immediately —
+        no index search or homing required before position commands.
+        """
+        node = wing_to_node(wing_idx)
+        data = struct.pack("<fff", pos_turns, vel_ff, torque_ff)
+        self._send(node, CMD_SET_POS, data)
+
+    def set_initial_phases(self, phase_offsets_deg, reducer_ratio=7):
+        """
+        Move each wing to its initial cascade phase before enabling velocity.
+        The S1 on-board absolute encoder means the motor knows where it is
+        from power-on — position commands are immediately meaningful.
+        phase_offsets_deg: list of 8 phase angles (0-360°)
+        """
+        for i, phase_deg in enumerate(phase_offsets_deg[:N_WINGS]):
+            pos_turns = phase_deg / 360.0
+            self.set_position(i, pos_turns)
+            time.sleep(0.025)
+        print("[S1] Initial cascade phases set")
+
+    # ── Telemetry reads ───────────────────────────────────────────────────────
+
+    def read_encoder_estimates(self):
+        """
+        Read pos_estimate and vel_estimate from all 8 S1 boards.
+        The S1 uses an on-board absolute magnetic encoder.
+        Position is in turns (absolute from power-on — no drift on cold start).
+
+        Returns:
+            positions_rad:   list of 8 floats (motor shaft, radians)
+            velocities_rps:  list of 8 floats (motor shaft, rev/s)
+        Nones indicate CAN timeout or CAN not available.
+        """
+        if self._sim:
+            return [0.0] * N_WINGS, [0.0] * N_WINGS
+
+        positions  = []
+        velocities = []
+        for i in range(N_WINGS):
+            msg = self._request(wing_to_node(i), CMD_GET_ENCODER)
+            if msg and len(msg.data) >= 8:
+                pos_turns, vel_rps = struct.unpack("<ff", msg.data[:8])
+                positions.append(pos_turns * 2 * math.pi)  # turns → rad
+                velocities.append(vel_rps)
+            else:
+                positions.append(None)
+                velocities.append(None)
+        return positions, velocities
+
+    def read_currents(self):
+        """
+        Read Iq_measured from all 8 S1 boards.
+        Returns list of 8 floats (amps). 0.0 on failure.
+        """
+        if self._sim:
+            return [0.0] * N_WINGS
+
+        currents = []
+        for i in range(N_WINGS):
+            msg = self._request(wing_to_node(i), CMD_GET_IQ)
+            if msg and len(msg.data) >= 8:
+                _iq_setpt, iq_meas = struct.unpack("<ff", msg.data[:8])
+                currents.append(abs(iq_meas))
+            else:
+                currents.append(0.0)
+        return currents
+
+    def read_temperatures(self):
+        """
+        Read FET and motor temperatures from all 8 S1 boards.
+        The S1 has on-board thermistors — reliable thermal monitoring.
+        Returns list of 8 dicts {'fet_C': float, 'motor_C': float}.
+        """
+        if self._sim:
+            return [{'fet_C': 25.0, 'motor_C': 25.0}] * N_WINGS
+
+        temps = []
+        for i in range(N_WINGS):
+            msg = self._request(wing_to_node(i), CMD_GET_TEMP)
+            if msg and len(msg.data) >= 8:
+                fet_c, mot_c = struct.unpack("<ff", msg.data[:8])
+                temps.append({'fet_C': round(fet_c, 1),
+                              'motor_C': round(mot_c, 1)})
+            else:
+                temps.append({'fet_C': None, 'motor_C': None})
+        return temps
+
+    def read_vbus(self):
+        """
+        Read bus voltage from node 0.
+        Returns float volts. 0.0 on failure.
+        """
+        if self._sim:
+            return 14.8
+
+        msg = self._request(0, CMD_GET_VBUS)
+        if msg and len(msg.data) >= 8:
+            vbus, _ibus = struct.unpack("<ff", msg.data[:8])
+            return vbus
+        return 0.0
+
+    def read_all_states(self):
+        """
+        Read heartbeat from all 8 nodes.
+        Returns list of 8 dicts with 'error', 'state', 'responding'.
+        Heartbeat is sent automatically by the S1 at configured rate.
+        This polls for the latest heartbeat frame from each node.
+        """
+        states = []
+        for i in range(N_WINGS):
+            msg = self._request(wing_to_node(i), CMD_HEARTBEAT, timeout_s=0.01)
+            if msg and len(msg.data) >= 8:
+                axis_error = struct.unpack("<I", msg.data[:4])[0]
+                axis_state = msg.data[4] if len(msg.data) > 4 else 0
+                states.append({
+                    'responding': True,
+                    'error':      axis_error,
+                    'state':      axis_state,
+                    'wing':       WING_NAMES[i],
+                    'node':       i,
+                })
+            else:
+                states.append({
+                    'responding': False,
+                    'error':      None,
+                    'state':      None,
+                    'wing':       WING_NAMES[i],
+                    'node':       i,
+                })
+        return states
+
+    def get_vel_limit(self, wing_idx=0):
+        """
+        Read velocity limit from one S1 board.
+        Used by mco_preflight_checks.py to verify configuration.
+        Returns vel_limit_rps or None.
+        """
+        # ODrive S1 does not expose vel_limit over a dedicated read command
+        # in the simple CAN protocol. Return None to signal manual check needed.
+        # With odrivetool or web GUI, verify: axis0.controller.config.vel_limit
+        return None   # use mco_odrive_setup.py --verify for this
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+
+    def close(self):
+        """Idle all motors and shut down the CAN bus."""
+        self.idle_all()
+        if self._bus:
+            try:
+                self._bus.shutdown()
+            except Exception:
+                pass
+        print("[S1] Interface closed")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
+# ── CAN node lookup helpers ───────────────────────────────────────────────────
+
+def pair_to_nodes(pair_idx):
+    """
+    Return the two CAN node IDs for a wing pair (1-indexed).
+    pair_idx 1 → nodes (0, 1)  [W1 port, W1 starboard]
+    pair_idx 2 → nodes (2, 3)  [W2 port, W2 starboard]
+    pair_idx 3 → nodes (4, 5)
+    pair_idx 4 → nodes (6, 7)
+    """
+    base = (pair_idx - 1) * 2
+    return base, base + 1
+
+def node_to_wing_name(node_id):
+    """Return the wing name string for a CAN node ID."""
+    if 0 <= node_id < N_WINGS:
+        return WING_NAMES[node_id]
+    return f"node{node_id}"

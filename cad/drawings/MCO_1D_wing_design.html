@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MCO-1D Wing Design Specification</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#05080f;--panel:#080e1a;--border:#1a2d45;
+  --teal:#2de8c4;--teal-dim:#0d5a4a;--teal-lt:#e0faf5;
+  --amber:#f0b429;--red:#e05050;--blue:#4db8ff;
+  --text:#c8dce8;--muted:#5a7a8a;--rule:#0d2030;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;}
+.page{width:1100px;margin:0 auto;padding:20px;}
+.hdr{background:#030710;border-bottom:2px solid var(--teal-dim);padding:14px 24px;
+  display:flex;justify-content:space-between;align-items:center;margin:-20px -20px 24px;}
+.htitle{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;
+  color:var(--teal);letter-spacing:3px;}
+.hsub{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:3px;}
+.hmeta{text-align:right;font-size:9px;color:var(--muted);line-height:1.7;}
+.sec{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;
+  color:var(--teal);letter-spacing:3px;border-bottom:1px solid var(--teal-dim);
+  padding-bottom:4px;margin:20px 0 10px;}
+.subsec{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:600;
+  color:var(--amber);letter-spacing:2px;margin:10px 0 5px;}
+.panel{background:var(--panel);border:1px solid var(--border);padding:14px;margin-bottom:14px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;}
+.spec{width:100%;border-collapse:collapse;font-size:9px;}
+.spec th{background:#030a14;color:var(--teal);letter-spacing:2px;
+  padding:5px 8px;text-align:left;border-bottom:1px solid var(--teal-dim);}
+.spec td{padding:4px 8px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.5;}
+.spec td:first-child{color:var(--muted);white-space:nowrap;}
+.spec tr:hover td{background:#0a1525;}
+.vg{color:var(--teal)!important;}.vy{color:var(--amber)!important;}
+.vr{color:var(--red)!important;}.vb{color:var(--blue)!important;}
+.note{font-size:8.5px;color:var(--muted);line-height:1.7;
+  border-left:2px solid var(--teal-dim);padding-left:10px;margin:8px 0;}
+.warn{border-left-color:var(--amber);}
+.diagbox{background:#030710;border:1px solid var(--border);padding:10px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="hdr">
+  <div>
+    <div class="htitle">MCO-1D WING DESIGN SPECIFICATION</div>
+    <div class="hsub">Selig S1223 · 120mm chord · All decisions consolidated · First iteration · Rev A May 2026</div>
+  </div>
+  <div class="hmeta">DWG: MCO-1D-WING-001 Rev A<br>Coordinates: UIUC Database<br>DESIGN STAGE</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 1: AIRFOIL CROSS-SECTION — EXACT UIUC COORDINATES -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="sec">1. AIRFOIL CROSS-SECTION — SELIG S1223 (EXACT UIUC COORDINATES)</div>
+<div class="diagbox">
+<svg viewBox="-60 -140 980 280" xmlns="http://www.w3.org/2000/svg"
+     style="width:100%;display:block;background:#030710;">
+<defs>
+  <marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <path d="M0,0 L0,7 L7,3.5 z" fill="#2de8c4"/></marker>
+  <marker id="arrw" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <path d="M0,0 L0,7 L7,3.5 z" fill="#c8dce8"/></marker>
+  <marker id="arry" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <path d="M0,0 L0,7 L7,3.5 z" fill="#f0b429"/></marker>
+  <marker id="arrb" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <path d="M0,0 L0,7 L7,3.5 z" fill="#4db8ff"/></marker>
+  <marker id="arre" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+    <path d="M0,0 L0,7 L7,3.5 z" fill="#e05050"/></marker>
+</defs>
+
+<!-- Grid -->
+<line x1="0" y1="-135" x2="0" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="78" y1="-135" x2="78" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="156" y1="-135" x2="156" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="234" y1="-135" x2="234" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="312" y1="-135" x2="312" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="390" y1="-135" x2="390" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="468" y1="-135" x2="468" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="546" y1="-135" x2="546" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="624" y1="-135" x2="624" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="702" y1="-135" x2="702" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+<line x1="780" y1="-135" x2="780" y2="120" stroke="#0a1825" stroke-width="0.4"/>
+
+<!-- Chord line -->
+<line x1="-10" y1="0" x2="790" y2="0" stroke="#132535" stroke-width="0.8" stroke-dasharray="8,5"/>
+<text x="-12" y="3" fill="#2a4a5a" font-size="8" font-family="monospace" text-anchor="end">chord</text>
+
+<!-- ══════════════════════════════════════════
+     EXACT S1223 AIRFOIL OUTLINE
+     Coordinates × 780 (chord_px), Y flipped
+     ══════════════════════════════════════════ -->
+
+<!-- AIRFOIL FILL -->
+<path d="M 780.0,-0.0 L 778.7,-1.0 L 775.5,-3.9 L 770.8,-8.1 L 765.0,-12.8 L 757.5,-17.6 L 747.9,-22.3 L 736.2,-27.1 L 722.6,-32.1 L 707.0,-37.2 L 689.6,-42.3 L 670.4,-47.5 L 649.6,-52.6 L 627.2,-57.7 L 603.5,-62.7 L 578.5,-67.6 L 552.4,-72.4 L 525.4,-76.9 L 497.6,-81.2 L 469.2,-85.3 L 440.4,-89.1 L 411.4,-92.7 L 382.4,-96.0 L 353.7,-98.9 L 325.4,-101.5 L 297.9,-103.5 L 271.3,-104.9 L 245.6,-105.5 L 221.1,-105.3 L 197.9,-104.1 L 175.8,-101.7 L 154.8,-98.2 L 134.8,-93.8 L 115.9,-88.6 L 98.2,-82.7 L 81.8,-76.2 L 66.7,-69.3 L 53.0,-61.9 L 40.7,-54.3 L 30.1,-46.6 L 21.0,-38.7 L 13.7,-30.9 L 8.0,-23.0 L 3.9,-15.4 L 1.2,-8.1 L 0.0,-1.4 L 0.3,4.4 L 2.1,8.7 L 6.2,11.1 L 13.4,12.1 L 23.4,12.4 L 36.1,11.9 L 51.2,11.0 L 68.5,9.4 L 88.0,7.2 L 109.4,4.4 L 132.6,0.6 L 158.2,-4.2 L 186.0,-9.5 L 215.8,-15.0 L 247.7,-20.7 L 281.1,-26.2 L 316.0,-31.4 L 352.1,-36.0 L 388.9,-40.0 L 426.2,-43.2 L 463.5,-45.4 L 500.6,-46.6 L 536.9,-46.8 L 572.1,-45.8 L 605.7,-43.8 L 637.5,-40.7 L 666.9,-36.7 L 693.6,-31.9 L 717.3,-26.4 L 737.7,-20.5 L 754.2,-14.2 L 766.4,-8.3 L 774.3,-3.7 L 778.6,-0.9 L 780.0,-0.0 Z"
+      fill="#050e1e" stroke="none"/>
+
+<!-- AIRFOIL OUTLINE (exact coordinates) -->
+<path d="M 780.0,-0.0 L 778.7,-1.0 L 775.5,-3.9 L 770.8,-8.1 L 765.0,-12.8 L 757.5,-17.6 L 747.9,-22.3 L 736.2,-27.1 L 722.6,-32.1 L 707.0,-37.2 L 689.6,-42.3 L 670.4,-47.5 L 649.6,-52.6 L 627.2,-57.7 L 603.5,-62.7 L 578.5,-67.6 L 552.4,-72.4 L 525.4,-76.9 L 497.6,-81.2 L 469.2,-85.3 L 440.4,-89.1 L 411.4,-92.7 L 382.4,-96.0 L 353.7,-98.9 L 325.4,-101.5 L 297.9,-103.5 L 271.3,-104.9 L 245.6,-105.5 L 221.1,-105.3 L 197.9,-104.1 L 175.8,-101.7 L 154.8,-98.2 L 134.8,-93.8 L 115.9,-88.6 L 98.2,-82.7 L 81.8,-76.2 L 66.7,-69.3 L 53.0,-61.9 L 40.7,-54.3 L 30.1,-46.6 L 21.0,-38.7 L 13.7,-30.9 L 8.0,-23.0 L 3.9,-15.4 L 1.2,-8.1 L 0.0,-1.4"
+      fill="none" stroke="#2de8c4" stroke-width="2.0"/>
+<path d="M 0.0,-1.4 L 0.3,4.4 L 2.1,8.7 L 6.2,11.1 L 13.4,12.1 L 23.4,12.4 L 36.1,11.9 L 51.2,11.0 L 68.5,9.4 L 88.0,7.2 L 109.4,4.4 L 132.6,0.6 L 158.2,-4.2 L 186.0,-9.5 L 215.8,-15.0 L 247.7,-20.7 L 281.1,-26.2 L 316.0,-31.4 L 352.1,-36.0 L 388.9,-40.0 L 426.2,-43.2 L 463.5,-45.4 L 500.6,-46.6 L 536.9,-46.8 L 572.1,-45.8 L 605.7,-43.8 L 637.5,-40.7 L 666.9,-36.7 L 693.6,-31.9 L 717.3,-26.4 L 737.7,-20.5 L 754.2,-14.2 L 766.4,-8.3 L 774.3,-3.7 L 778.6,-0.9 L 780.0,-0.0"
+      fill="none" stroke="#2de8c4" stroke-width="2.0"/>
+
+<!-- ══════════════════════════════════════════
+     INTERNAL STRUCTURE OVERLAY
+     Key coords from calculated station data:
+     20%c: x=156, upper=-98.4, lower=-3.8
+     65%c: x=507, upper=-79.8, lower=-46.6
+     ══════════════════════════════════════════ -->
+
+<!-- D-BOX FILL (LE to 65%c) -->
+<!-- Traced along actual upper and lower surface -->
+<path d="M 0.0,-1.4 L 2.1,8.7 L 6.2,11.1 L 13.4,12.1 L 23.4,12.4 L 36.1,11.9
+         L 51.2,11.0 L 68.5,9.4 L 88.0,7.2 L 109.4,4.4 L 132.6,0.6 L 158.2,-4.2
+         L 186.0,-9.5 L 215.8,-15.0 L 247.7,-20.7 L 281.1,-26.2 L 316.0,-31.4
+         L 352.1,-36.0 L 388.9,-40.0 L 426.2,-43.2 L 463.5,-45.4 L 500.6,-46.6
+         L 507.0,-46.6
+         L 507.0,-79.8
+         L 497.6,-81.2 L 469.2,-85.3 L 440.4,-89.1 L 411.4,-92.7 L 382.4,-96.0
+         L 353.7,-98.9 L 325.4,-101.5 L 297.9,-103.5 L 271.3,-104.9 L 245.6,-105.5
+         L 221.1,-105.3 L 197.9,-104.1 L 175.8,-101.7 L 154.8,-98.2 L 134.8,-93.8
+         L 115.9,-88.6 L 98.2,-82.7 L 81.8,-76.2 L 66.7,-69.3 L 53.0,-61.9
+         L 40.7,-54.3 L 30.1,-46.6 L 21.0,-38.7 L 13.7,-30.9 L 8.0,-23.0
+         L 3.9,-15.4 L 1.2,-8.1 L 0.0,-1.4 Z"
+      fill="#0a1e35" stroke="none" opacity="0.85"/>
+
+<!-- MAIN SPAR — vertical bar at 20%c (x=156) from upper to lower surface -->
+<rect x="153" y="-98.4" width="6" height="94.6" fill="#f0b429" rx="1"/>
+
+<!-- SPAR HOLE (circle) -->
+<circle cx="156" cy="-51.1" r="7" fill="#030710" stroke="#f0b429" stroke-width="1.5"/>
+<text x="156" y="-47.5" fill="#f0b429" font-size="6.5" font-family="monospace"
+      text-anchor="middle">ø2.2</text>
+
+<!-- D-BOX REAR WALL at 65%c (x=507) -->
+<rect x="504" y="-79.8" width="6" height="33.2" fill="#4db8ff" rx="1"/>
+
+<!-- D-BOX SKIN HIGHLIGHT — upper surface LE to 65%c -->
+<path d="M 0.0,-1.4 L 1.2,-8.1 L 3.9,-15.4 L 8.0,-23.0 L 13.7,-30.9
+         L 21.0,-38.7 L 30.1,-46.6 L 40.7,-54.3 L 53.0,-61.9 L 66.7,-69.3
+         L 81.8,-76.2 L 98.2,-82.7 L 115.9,-88.6 L 134.8,-93.8 L 154.8,-98.2
+         L 175.8,-101.7 L 197.9,-104.1 L 221.1,-105.3 L 245.6,-105.5
+         L 271.3,-104.9 L 297.9,-103.5 L 325.4,-101.5 L 353.7,-98.9
+         L 382.4,-96.0 L 411.4,-92.7 L 440.4,-89.1 L 469.2,-85.3
+         L 497.6,-81.2 L 507.0,-79.8"
+      fill="none" stroke="#4db8ff" stroke-width="3.0" opacity="0.55"/>
+
+<!-- D-BOX SKIN HIGHLIGHT — lower surface LE to 65%c -->
+<path d="M 0.0,-1.4 L 0.3,4.4 L 2.1,8.7 L 6.2,11.1 L 13.4,12.1 L 23.4,12.4
+         L 36.1,11.9 L 51.2,11.0 L 68.5,9.4 L 88.0,7.2 L 109.4,4.4
+         L 132.6,0.6 L 158.2,-4.2 L 186.0,-9.5 L 215.8,-15.0 L 247.7,-20.7
+         L 281.1,-26.2 L 316.0,-31.4 L 352.1,-36.0 L 388.9,-40.0
+         L 426.2,-43.2 L 463.5,-45.4 L 500.6,-46.6 L 507.0,-46.6"
+      fill="none" stroke="#4db8ff" stroke-width="3.0" opacity="0.55"/>
+
+<!-- INTERIOR RIB LINES (at 30%, 40%, 50% chord) -->
+<!-- 30%c: x=234, upper=-103.5, lower=-20.7 -->
+<line x1="234" y1="-103.5" x2="234" y2="-20.7"
+      stroke="#2de8c4" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.35"/>
+<!-- 40%c: x=312, upper=-102.5, lower=-30.8 -->
+<line x1="312" y1="-102.5" x2="312" y2="-30.8"
+      stroke="#2de8c4" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.35"/>
+<!-- 50%c: x=390, upper=-95.1, lower=-40.1 -->
+<line x1="390" y1="-95.1" x2="390" y2="-40.1"
+      stroke="#2de8c4" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.35"/>
+
+<!-- CAMBER LINE (approximate, for reference) -->
+<path d="M 0,-1.4 C 50,-20 150,-55 245,-62 C 340,-68 420,-65 507,-63
+         C 580,-62 650,-55 720,-35 C 750,-25 770,-12 780,0"
+      fill="none" stroke="#3a5a3a" stroke-width="0.8" stroke-dasharray="6,4" opacity="0.5"/>
+<text x="400" y="-70" fill="#2a4a2a" font-size="7" font-family="monospace"
+      text-anchor="middle" opacity="0.7">camber line</text>
+
+<!-- ═══════════════════════════
+     DIMENSION ANNOTATIONS
+     ═══════════════════════════ -->
+
+<!-- LE and TE labels -->
+<circle cx="0" cy="-1.4" r="3" fill="none" stroke="#2de8c4" stroke-width="1.0"/>
+<text x="-8" y="-4" fill="#c8dce8" font-size="8" font-family="monospace" text-anchor="end">LE</text>
+<text x="788" y="3" fill="#c8dce8" font-size="8" font-family="monospace">TE</text>
+
+<!-- Chord dimension -->
+<line x1="0" y1="95" x2="780" y2="95" stroke="#c8dce8" stroke-width="0.7"
+      marker-start="url(#arrw)" marker-end="url(#arrw)"/>
+<text x="390" y="90" fill="#c8dce8" font-size="9" font-family="monospace"
+      text-anchor="middle">120mm CHORD</text>
+
+<!-- Max thickness at 19.8%c = x≈154 -->
+<!-- upper=-98.2, lower=-4.2 → height=94px = 14.5mm -->
+<line x1="-40" y1="-98.2" x2="-40" y2="-4.2"
+      stroke="#c8dce8" stroke-width="0.7" marker-start="url(#arrw)" marker-end="url(#arrw)"/>
+<text x="-44" y="-51" fill="#c8dce8" font-size="8" font-family="monospace"
+      text-anchor="end" transform="rotate(-90,-44,-51)">14.5mm (12.1%c)</text>
+<text x="-44" y="-38" fill="#5a7a8a" font-size="7" font-family="monospace"
+      text-anchor="end" transform="rotate(-90,-44,-38)">at 19.8%c</text>
+<!-- Tick marks -->
+<line x1="-45" y1="-98.2" x2="-30" y2="-98.2" stroke="#c8dce8" stroke-width="0.5"/>
+<line x1="-45" y1="-4.2" x2="-30" y2="-4.2" stroke="#c8dce8" stroke-width="0.5"/>
+
+<!-- Max camber annotation (at 49%c x=382, upper=-96.0, camber=8.1%) -->
+<!-- Camber height = 8.1% × 780 = 63px approx -->
+<line x1="382" y1="-128" x2="382" y2="-64"
+      stroke="#5a7a8a" stroke-width="0.6" marker-start="url(#arrw)" marker-end="url(#arrw)"/>
+<text x="395" y="-95" fill="#5a7a8a" font-size="8" font-family="monospace">9.7mm</text>
+<text x="395" y="-84" fill="#4a6a4a" font-size="7" font-family="monospace">camber</text>
+<text x="395" y="-73" fill="#4a6a4a" font-size="7" font-family="monospace">at 49%c</text>
+
+<!-- Spar annotation -->
+<line x1="156" y1="-108" x2="120" y2="-128"
+      stroke="#f0b429" stroke-width="0.8"/>
+<text x="118" y="-132" fill="#f0b429" font-size="8.5" font-family="monospace"
+      text-anchor="end">MAIN SPAR</text>
+<text x="118" y="-122" fill="#f0b429" font-size="8" font-family="monospace"
+      text-anchor="end">x=24mm  20%c</text>
+<text x="118" y="-112" fill="#7a5a1a" font-size="7.5" font-family="monospace"
+      text-anchor="end">ø2.0mm CF tube</text>
+
+<!-- D-box rear wall annotation -->
+<line x1="507" y1="-88" x2="545" y2="-128"
+      stroke="#4db8ff" stroke-width="0.8"/>
+<text x="548" y="-132" fill="#4db8ff" font-size="8.5" font-family="monospace">D-BOX REAR WALL</text>
+<text x="548" y="-122" fill="#4db8ff" font-size="8" font-family="monospace">x=78mm  65%c</text>
+
+<!-- Zone labels -->
+<text x="253" y="-60" fill="#4db8ff" font-size="8" font-family="monospace"
+      text-anchor="middle" opacity="0.7">D-BOX ZONE</text>
+<text x="253" y="-50" fill="#2a4a5a" font-size="7" font-family="monospace"
+      text-anchor="middle">CF skin + gyroid 12%</text>
+
+<text x="643" y="-30" fill="#3a5a6a" font-size="8" font-family="monospace"
+      text-anchor="middle">MEMBRANE</text>
+<text x="643" y="-20" fill="#2a4a5a" font-size="7" font-family="monospace"
+      text-anchor="middle">ripstop nylon</text>
+
+<!-- %c scale markers below chord line -->
+<text x="0"   y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">0%</text>
+<text x="78"  y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">10%</text>
+<text x="156" y="18" fill="#f0b429" font-size="7" font-family="monospace" text-anchor="middle">20%</text>
+<text x="234" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">30%</text>
+<text x="312" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">40%</text>
+<text x="390" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">50%</text>
+<text x="468" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">60%</text>
+<text x="507" y="18" fill="#4db8ff" font-size="7" font-family="monospace" text-anchor="middle">65%</text>
+<text x="624" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">80%</text>
+<text x="780" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">100%</text>
+
+<!-- mm scale markers -->
+<text x="0"   y="30" fill="#1a3a4a" font-size="6.5" font-family="monospace" text-anchor="middle">0</text>
+<text x="156" y="30" fill="#7a5a1a" font-size="6.5" font-family="monospace" text-anchor="middle">24mm</text>
+<text x="390" y="30" fill="#1a3a4a" font-size="6.5" font-family="monospace" text-anchor="middle">60mm</text>
+<text x="507" y="30" fill="#1a4a5a" font-size="6.5" font-family="monospace" text-anchor="middle">78mm</text>
+<text x="780" y="30" fill="#1a3a4a" font-size="6.5" font-family="monospace" text-anchor="middle">120mm</text>
+
+<!-- LEGEND -->
+<rect x="600" y="55" width="175" height="72" rx="2" fill="#030710" stroke="#1a2d45" stroke-width="0.8"/>
+<text x="610" y="70" fill="#2de8c4" font-size="8.5" font-family="'Rajdhani',sans-serif" font-weight="600">LEGEND</text>
+<rect x="608" y="76" width="8" height="8" fill="#4db8ff" opacity="0.6" rx="1"/>
+<text x="622" y="83" fill="#c8dce8" font-size="7.5" font-family="monospace">D-box CF skin (upper+lower)</text>
+<rect x="608" y="88" width="8" height="8" fill="#f0b429" rx="1"/>
+<text x="622" y="95" fill="#c8dce8" font-size="7.5" font-family="monospace">Main spar (CF tube 2.0mm)</text>
+<rect x="608" y="100" width="8" height="8" fill="#0a1e35" stroke="#4db8ff" stroke-width="0.5" rx="1"/>
+<text x="622" y="107" fill="#c8dce8" font-size="7.5" font-family="monospace">D-box interior (gyroid 12%)</text>
+<line x1="608" y1="116" x2="616" y2="116" stroke="#2de8c4" stroke-width="0.8" stroke-dasharray="3,2"/>
+<text x="622" y="119" fill="#c8dce8" font-size="7.5" font-family="monospace">Interior rib stations</text>
+
+<!-- S1223 PROPERTIES BOX -->
+<rect x="600" y="-135" width="175" height="82" rx="2" fill="#030710" stroke="#1a2d45" stroke-width="0.8"/>
+<text x="610" y="-120" fill="#2de8c4" font-size="8.5" font-family="'Rajdhani',sans-serif" font-weight="600">S1223 PROPERTIES</text>
+<text x="610" y="-108" fill="#5a7a8a" font-size="7.5" font-family="monospace">Source: UIUC ADB</text>
+<text x="610" y="-96" fill="#5a7a8a" font-size="7.5" font-family="monospace">Max t/c: 12.1% at 19.8%c</text>
+<text x="610" y="-84" fill="#5a7a8a" font-size="7.5" font-family="monospace">Max camber: 8.1% at 49%c</text>
+<text x="610" y="-72" fill="#5a7a8a" font-size="7.5" font-family="monospace">At 120mm chord:</text>
+<text x="610" y="-60" fill="#2de8c4" font-size="7.5" font-family="monospace">Max thickness: 14.5mm</text>
+<text x="610" y="-48" fill="#2de8c4" font-size="7.5" font-family="monospace">Max camber: 9.7mm</text>
+
+<!-- NOTE: lower surface positive camber note -->
+<text x="300" y="50" fill="#2a4a3a" font-size="7" font-family="monospace" text-anchor="middle">
+  NOTE: Lower surface is above chord line from ~17%c to TE — characteristic of high-lift S1223
+</text>
+
+</svg>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTION 2: CROSS-SECTION AT SPAR STATION (FRONT VIEW) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="sec">2. RIB CROSS-SECTION AT SPAR STATION (20%c) — FRONT VIEW</div>
+<div class="diagbox">
+<svg viewBox="-20 -130 520 220" xmlns="http://www.w3.org/2000/svg"
+     style="width:100%;display:block;background:#030710;">
+<!-- At 20%c: upper=-98.4px, lower=-3.8px → total height=94.6px = 14.56mm -->
+<!-- Scale same as above: 780px/120mm = 6.5px/mm -->
+<!-- Show rib front face at 20%c station, with spar hole and lightening holes -->
+
+<!-- Full airfoil outline AT 20%c station (silhouette — just the rectangle of airfoil height) -->
+<!-- Show as side-view cross section of rib face -->
+<!-- Width = rib thickness = 1.2mm = 7.8px -->
+<!-- Height = 94.6px (upper -98.4 to lower -3.8 at 20%c) -->
+
+<!-- Context: render at larger scale — 12px/mm -->
+<!-- At 12px/mm, chord = 1440px — too wide. Show just the rib face blown up. -->
+<!-- Use absolute mm dimensions at 8px/mm for clarity -->
+
+<!-- Scale for this diagram: 8px per mm -->
+<!-- Airfoil height at 20%c = 14.56mm → 116px -->
+<!-- Chord width at this rib face (1.2mm thick) = 9.6px -->
+<!-- Show rib face actual shape: we need the S1223 profile at 20%c depth -->
+<!-- Actually show a blown-up cross-sectional side view of the rib interior -->
+<!-- Represent as a rectangle of the correct aspect ratio with internal features -->
+
+<g transform="translate(10,100)">
+
+<!-- AIRFOIL PROFILE at 20%c station — use correct upper/lower surface heights -->
+<!-- At 20%c on actual S1223: upper y = +15.14mm, lower y = +0.58mm above chord -->
+<!-- Total depth from upper to lower = 14.56mm (correct!) -->
+<!-- Chord line is at y=0 in the airfoil, so: -->
+<!--   upper surface is 15.14mm above chord line -->
+<!--   lower surface is 0.58mm above chord line -->
+<!-- Upper surface inner (after skin): 15.14 - 0.12 = 15.02mm -->
+<!-- Lower surface inner: 0.58 + 0.12 = 0.70mm -->
+
+<!-- Scale: 8px/mm, centre on airfoil midline -->
+<!-- upper at -15.14×8 = -121px above chord line (y=0 in diagram = chord line) -->
+<!-- lower at -0.58×8 = -4.6px above chord line -->
+
+<!-- Draw as a tall thin rib face (1.2mm thick = 9.6px wide) -->
+<!-- Show airfoil contour shape at this chord station -->
+
+<!-- Simplified but proportionally correct shape at 20%c: -->
+<!-- Height = 14.56mm, width = chord = 120mm (but we show only the profile depth) -->
+
+<!-- Let's draw a proper cross-section schematic at enlarged scale -->
+<!-- Blow up to fill the SVG width: use 28px/mm scale -->
+<!-- 14.56mm tall × 28 = 407px, 1.2mm rib thick × 28 = 33.6px -->
+<!-- Position: spar hole centred at approx midpoint of upper surface -->
+
+<!-- At 20%c: upper = 15.14mm above chord, lower = 0.58mm above chord -->
+<!-- Centroid of section ≈ (15.14+0.58)/2 = 7.86mm above chord -->
+<!-- Spar centreline is at the centroid ≈ 7.86mm above chord = roughly 54% of section height from bottom -->
+
+<!-- Draw complete rib face at the 20%c station, 28px/mm scale -->
+<!-- Chord line at y=0 in local coords -->
+
+  <!-- Outer airfoil profile at 20%c, 28px/mm scale -->
+  <!-- upper = 15.14mm → -424px, lower = 0.58mm → -16px -->
+  <!-- Total height span: 424-16 = 408px -->
+  <!-- rib width (chord direction) = show at 120mm = 3360px — can't show full chord -->
+  <!-- Instead show PROFILE VIEW: the rib as seen from span direction -->
+  <!-- This shows the 120mm chord horizontally, 14.56mm height vertically -->
+  <!-- Use 5px/mm horizontal, 20px/mm vertical for clarity -->
+
+  <!-- At 5px/mm horizontal: chord = 600px; at 20px/mm vertical: height = 291px -->
+  <!-- Redraw with these scales -->
+</g>
+
+<!-- Better approach: show rib profile view at correct scales -->
+<!-- Use scale: 5px/mm horizontal (chord), 18px/mm vertical (height) -->
+<!-- Chord = 600px, max height at 31.5%c = 105.5/780 × 120 = 16.2mm × 18 = 292px -->
+
+<!-- Position: LE at x=0, TE at x=600, chord line at y=0 -->
+<g transform="translate(0,120)">
+
+<!-- CHORD LINE -->
+<line x1="0" y1="0" x2="600" y2="0" stroke="#132535" stroke-width="0.8" stroke-dasharray="6,4"/>
+<text x="-12" y="3" fill="#2a4a5a" font-size="8" font-family="monospace" text-anchor="end">chord</text>
+
+<!-- S1223 at 5px/mm horizontal, 18px/mm vertical -->
+<!-- Upper surface key points (x_mm × 5, -(y_mm) × 18) -->
+<!-- Upper: (0,0), (2.4,-2.3), (6.0,-8.2), (12.0,-13.8), (19.8,-18.1), (24,-18.2),
+           (30,-19.2), (49.5,-18.9), (60,-17.6), (78,-14.7), (96,-10.8), (120,0) -->
+<!-- These are: x_norm×120 for x_mm, y_norm×120 for y_mm -->
+
+<path d="M 600,0
+  L 599,0 L 598,-0.9 L 595,-2.8 L 592,-5.8 L 588,-9.1 L 583,-12.8
+  L 577,-16.1 L 570,-19.8 L 562,-23.4 L 553,-27.1 L 544,-30.7
+  L 533,-34.6 L 522,-38.2 L 509,-41.8 L 496,-45.5 L 482,-49.0
+  L 468,-52.5 L 453,-55.9 L 438,-59.3 L 422,-62.6 L 405,-65.7
+  L 388,-68.7 L 371,-71.5 L 352,-74.1 L 333,-76.5 L 314,-78.5
+  L 295,-80.2 L 276,-81.6 L 256,-82.7 L 236,-83.5 L 216,-83.9
+  L 196,-83.8 L 176,-82.9 L 158,-81.1 L 140,-78.7 L 123,-75.8
+  L 107,-72.2 L 91,-68.0 L 77,-63.2 L 63,-57.9 L 51,-52.1
+  L 40,-46.1 L 29,-39.7 L 21,-33.2 L 14,-26.5 L 8,-19.6
+  L 3,-12.4 L 1,-6.6 L 0,-1.3"
+  fill="none" stroke="#2de8c4" stroke-width="2.0"/>
+
+<!-- Lower surface -->
+<path d="M 0,-1.3
+  L 0,3.4 L 1,6.7 L 3,8.6 L 7,9.4 L 12,9.6
+  L 18,9.2 L 25,8.5 L 33,7.3 L 43,5.6 L 53,3.4
+  L 65,0.5 L 77,-2.9 L 92,-6.5 L 107,-9.6 L 123,-12.4
+  L 140,-14.9 L 158,-17.1 L 176,-19.0 L 196,-20.5 L 216,-21.6
+  L 236,-22.2 L 256,-22.4 L 276,-22.2 L 295,-21.7 L 314,-20.9
+  L 333,-19.7 L 352,-18.3 L 371,-16.7 L 388,-14.8 L 405,-12.8
+  L 422,-10.7 L 438,-8.6 L 453,-6.5 L 468,-4.5 L 482,-3.0
+  L 496,-2.1 L 509,-1.4 L 522,-0.9 L 533,-0.5 L 600,0"
+  fill="none" stroke="#2de8c4" stroke-width="2.0"/>
+
+<!-- FILL -->
+<path d="M 600,0 L 599,0 L 598,-0.9 L 595,-2.8 L 592,-5.8 L 588,-9.1 L 583,-12.8
+  L 577,-16.1 L 570,-19.8 L 562,-23.4 L 553,-27.1 L 544,-30.7 L 533,-34.6
+  L 522,-38.2 L 509,-41.8 L 496,-45.5 L 482,-49.0 L 468,-52.5 L 453,-55.9
+  L 438,-59.3 L 422,-62.6 L 405,-65.7 L 388,-68.7 L 371,-71.5 L 352,-74.1
+  L 333,-76.5 L 314,-78.5 L 295,-80.2 L 276,-81.6 L 256,-82.7 L 236,-83.5
+  L 216,-83.9 L 196,-83.8 L 176,-82.9 L 158,-81.1 L 140,-78.7 L 123,-75.8
+  L 107,-72.2 L 91,-68.0 L 77,-63.2 L 63,-57.9 L 51,-52.1 L 40,-46.1
+  L 29,-39.7 L 21,-33.2 L 14,-26.5 L 8,-19.6 L 3,-12.4 L 1,-6.6 L 0,-1.3
+  L 0,3.4 L 1,6.7 L 3,8.6 L 7,9.4 L 12,9.6 L 18,9.2 L 25,8.5 L 33,7.3
+  L 43,5.6 L 53,3.4 L 65,0.5 L 77,-2.9 L 92,-6.5 L 107,-9.6 L 123,-12.4
+  L 140,-14.9 L 158,-17.1 L 176,-19.0 L 196,-20.5 L 216,-21.6 L 236,-22.2
+  L 256,-22.4 L 276,-22.2 L 295,-21.7 L 314,-20.9 L 333,-19.7 L 352,-18.3
+  L 371,-16.7 L 388,-14.8 L 405,-12.8 L 422,-10.7 L 438,-8.6 L 453,-6.5
+  L 468,-4.5 L 482,-3.0 L 496,-2.1 L 509,-1.4 L 522,-0.9 L 533,-0.5 L 600,0 Z"
+  fill="#050e1e" stroke="none"/>
+
+<!-- D-BOX FILL (LE to 65%c = x=390) -->
+<path d="M 0,-1.3 L 0,3.4 L 1,6.7 L 3,8.6 L 7,9.4 L 12,9.6 L 18,9.2 L 25,8.5
+  L 33,7.3 L 43,5.6 L 53,3.4 L 65,0.5 L 77,-2.9 L 92,-6.5 L 107,-9.6
+  L 123,-12.4 L 140,-14.9 L 158,-17.1 L 176,-19.0 L 196,-20.5 L 216,-21.6
+  L 236,-22.2 L 256,-22.4 L 276,-22.2 L 295,-21.7 L 314,-20.9 L 333,-19.7
+  L 352,-18.3 L 371,-16.7 L 388,-14.8 L 390,-14.8
+  L 390,-65.7
+  L 388,-68.7 L 371,-71.5 L 352,-74.1 L 333,-76.5 L 314,-78.5 L 295,-80.2
+  L 276,-81.6 L 256,-82.7 L 236,-83.5 L 216,-83.9 L 196,-83.8 L 176,-82.9
+  L 158,-81.1 L 140,-78.7 L 123,-75.8 L 107,-72.2 L 91,-68.0 L 77,-63.2
+  L 63,-57.9 L 51,-52.1 L 40,-46.1 L 29,-39.7 L 21,-33.2 L 14,-26.5
+  L 8,-19.6 L 3,-12.4 L 1,-6.6 L 0,-1.3 Z"
+  fill="#0a1e35" stroke="none" opacity="0.8"/>
+
+<!-- D-BOX SKIN highlights -->
+<path d="M 0,-1.3 L 1,-6.6 L 3,-12.4 L 8,-19.6 L 14,-26.5 L 21,-33.2
+  L 29,-39.7 L 40,-46.1 L 51,-52.1 L 63,-57.9 L 77,-63.2 L 91,-68.0
+  L 107,-72.2 L 123,-75.8 L 140,-78.7 L 158,-81.1 L 176,-82.9 L 196,-83.8
+  L 216,-83.9 L 236,-83.5 L 256,-82.7 L 276,-81.6 L 295,-80.2 L 314,-78.5
+  L 333,-76.5 L 352,-74.1 L 371,-71.5 L 388,-68.7 L 390,-65.7"
+  fill="none" stroke="#4db8ff" stroke-width="3.0" opacity="0.5"/>
+<path d="M 0,-1.3 L 0,3.4 L 1,6.7 L 3,8.6 L 7,9.4 L 12,9.6 L 18,9.2 L 25,8.5
+  L 33,7.3 L 43,5.6 L 53,3.4 L 65,0.5 L 77,-2.9 L 92,-6.5 L 107,-9.6
+  L 123,-12.4 L 140,-14.9 L 158,-17.1 L 176,-19.0 L 196,-20.5 L 216,-21.6
+  L 236,-22.2 L 256,-22.4 L 276,-22.2 L 295,-21.7 L 314,-20.9 L 333,-19.7
+  L 352,-18.3 L 371,-16.7 L 388,-14.8 L 390,-14.8"
+  fill="none" stroke="#4db8ff" stroke-width="3.0" opacity="0.5"/>
+
+<!-- SPAR at 20%c = x=120 -->
+<!-- At 20%c: upper_y_mm=15.14→-272px at 18px/mm, lower_y_mm=0.58→-10.4px -->
+<!-- (These are relative to chord line y=0) -->
+<rect x="117" y="-75.3" width="6" height="85.4" fill="#f0b429" rx="1"/>
+<circle cx="120" cy="-33" r="9" fill="#030710" stroke="#f0b429" stroke-width="1.5"/>
+<text x="120" y="-29" fill="#f0b429" font-size="6.5" font-family="monospace"
+      text-anchor="middle">ø2.2</text>
+
+<!-- D-BOX REAR WALL at 65%c = x=390 -->
+<!-- At 65%c: upper_y_mm=12.27→-220px, lower_y_mm=7.18→-129px -->
+<rect x="387" y="-65.7" width="6" height="50.9" fill="#4db8ff" rx="1"/>
+
+<!-- LIGHTENING HOLES in rib (between spar and D-box rear wall) -->
+<!-- Hole 1: between 28%c (168px) and 43%c (258px), centred vertically in section -->
+<!-- At 35%c: upper≈-77px, lower≈-17px → mid=-47px, height=60px → holes of 40×18px -->
+<ellipse cx="213" cy="-48" rx="38" ry="15" fill="#030710" stroke="#2de8c4"
+         stroke-width="0.8" opacity="0.8"/>
+<!-- Hole 2: between 47%c (282px) and 62%c (372px) -->
+<ellipse cx="327" cy="-42" rx="38" ry="14" fill="#030710" stroke="#2de8c4"
+         stroke-width="0.8" opacity="0.8"/>
+
+<!-- Interior rib lines -->
+<line x1="168" y1="-80.6" x2="168" y2="-18.7"
+      stroke="#2de8c4" stroke-width="0.6" stroke-dasharray="4,2" opacity="0.3"/>
+<line x1="258" y1="-83.2" x2="258" y2="-21.5"
+      stroke="#2de8c4" stroke-width="0.6" stroke-dasharray="4,2" opacity="0.3"/>
+<line x1="348" y1="-75.1" x2="348" y2="-18.5"
+      stroke="#2de8c4" stroke-width="0.6" stroke-dasharray="4,2" opacity="0.3"/>
+
+<!-- MEMBRANE REGION indicator -->
+<text x="494" y="-35" fill="#3a5a6a" font-size="8" font-family="monospace" text-anchor="middle">MEMBRANE</text>
+<text x="494" y="-25" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">ripstop nylon</text>
+<text x="494" y="-15" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">stitched to tip</text>
+
+<!-- Anti-warp strips -->
+<line x1="0" y1="-8.2" x2="390" y2="-8.2" stroke="#2de8c4" stroke-width="1.0"
+      opacity="0.4" stroke-dasharray="8,4"/>
+<text x="60" y="-12" fill="#2a5a4a" font-size="6.5" font-family="monospace">CF tow strip @15%c</text>
+
+<!-- %c scale -->
+<text x="0"   y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">0%</text>
+<text x="120" y="18" fill="#f0b429" font-size="7" font-family="monospace" text-anchor="middle">20%</text>
+<text x="240" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">40%</text>
+<text x="360" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">60%</text>
+<text x="390" y="18" fill="#4db8ff" font-size="7" font-family="monospace" text-anchor="middle">65%</text>
+<text x="480" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">80%</text>
+<text x="600" y="18" fill="#2a4a5a" font-size="7" font-family="monospace" text-anchor="middle">100%</text>
+
+<!-- Title -->
+<text x="300" y="-100" fill="#f0b429" font-size="9" font-family="monospace"
+      text-anchor="middle" letter-spacing="1">RIB INTERIOR — SIDE VIEW (span-direction)</text>
+<text x="300" y="-90" fill="#5a7a8a" font-size="7.5" font-family="monospace"
+      text-anchor="middle">Exact S1223 profile · 5px/mm horizontal · 18px/mm vertical</text>
+
+</g>
+</svg>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SECTIONS 3-10: SPECIFICATION TABLES (same as before) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="sec">3. STRUCTURAL STATIONS — KEY DIMENSIONS AT 120mm CHORD</div>
+<div class="grid3">
+<div class="panel">
+  <div class="subsec">AIRFOIL PROPERTIES</div>
+  <table class="spec">
+    <tr><td>Chord</td><td class="vg">120mm (all 8 wings)</td></tr>
+    <tr><td>Max thickness</td><td class="vg">14.5mm at 19.8%c (23.8mm from LE)</td></tr>
+    <tr><td>Max camber</td><td class="vg">9.7mm at 49%c (58.8mm from LE)</td></tr>
+    <tr><td>LE radius</td><td>~2.5mm</td></tr>
+    <tr><td>Lower surface</td><td class="vy">Above chord line from ~17%c to TE</td></tr>
+    <tr><td>Upper at 20%c</td><td>+15.1mm above chord line</td></tr>
+    <tr><td>Lower at 20%c</td><td>+0.6mm above chord line</td></tr>
+    <tr><td>Section height at 20%c</td><td class="vg">14.5mm (spar station)</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">STRUCTURAL STATION HEIGHTS</div>
+  <table class="spec">
+    <tr><td>At 5%c (12mm)</td><td>Upper +9.8mm Lower −1.8mm H=11.6mm</td></tr>
+    <tr><td>At 20%c (24mm) ← SPAR</td><td class="vy">Upper +15.1mm Lower +0.6mm H=14.5mm</td></tr>
+    <tr><td>At 25%c (30mm)</td><td>Upper +16.0mm Lower +1.7mm H=14.3mm</td></tr>
+    <tr><td>At 40%c (48mm)</td><td>Upper +15.8mm Lower +4.7mm H=11.1mm</td></tr>
+    <tr><td>At 50%c (60mm)</td><td>Upper +14.6mm Lower +6.2mm H=8.4mm</td></tr>
+    <tr><td>At 65%c (78mm) ← D-BOX</td><td class="vb">Upper +12.3mm Lower +7.2mm H=5.1mm</td></tr>
+    <tr><td>At 80%c (96mm)</td><td>Upper +9.0mm Lower +6.5mm H=2.5mm</td></tr>
+    <tr><td>At 100%c (120mm)</td><td>H=0mm (TE)</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">SPAR SPECIFICATION</div>
+  <table class="spec">
+    <tr><td>Position</td><td class="vy">20%c = 24mm from LE</td></tr>
+    <tr><td>W1/W2/W4 spar</td><td class="vg">2.0mm OD × 1.5mm ID CF tube</td></tr>
+    <tr><td>W3 spar</td><td class="vy">2.5mm OD × 1.5mm ID CF tube</td></tr>
+    <tr><td>Spar hole in rib</td><td>ø2.2mm (0.1mm clearance)</td></tr>
+    <tr><td>Spar centreline height</td><td>~+7.9mm above chord line at 20%c</td></tr>
+    <tr><td>Spar material</td><td>HM CF pultruded, 0° axial</td></tr>
+    <tr><td>Rib socket depth</td><td>5mm either side of rib face</td></tr>
+    <tr><td>Bond method</td><td>Epoxy in socket, 5mm engagement</td></tr>
+  </table>
+</div>
+</div>
+
+<div class="sec">4. D-BOX AND RIB SPECIFICATION</div>
+<div class="grid2">
+<div class="panel">
+  <div class="subsec">D-BOX STRUCTURE (0–65% CHORD)</div>
+  <table class="spec">
+    <tr><td>Coverage</td><td class="vb">0 to 65%c = 0 to 78mm from LE</td></tr>
+    <tr><td>Upper skin</td><td>1× 100gsm 2×2 twill CF woven, 0.12mm</td></tr>
+    <tr><td>Lower skin</td><td>1× 100gsm 2×2 twill CF woven, 0.12mm</td></tr>
+    <tr><td>Ply orientation</td><td>0°/90° (warp along chord)</td></tr>
+    <tr><td>Rear wall at 65%c</td><td>Full rib element 78mm from LE</td></tr>
+    <tr><td>Interior infill</td><td class="vg">Gyroid lattice 12% density LW-PLA</td></tr>
+    <tr><td>Cure</td><td>Room temp 24h + 60°C post-cure 2h</td></tr>
+    <tr><td>Inner face</td><td>Peel ply for rib bond surface</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">RIB GEOMETRY</div>
+  <table class="spec">
+    <tr><td>Rib material</td><td class="vg">LW-PLA, gyroid 12% in slicer</td></tr>
+    <tr><td>Standard rib thickness</td><td class="vg">1.2mm</td></tr>
+    <tr><td>Root rib</td><td>3.0mm solid (no holes)</td></tr>
+    <tr><td>Tip rib</td><td>2.0mm solid (membrane anchor)</td></tr>
+    <tr><td>Rib spacing</td><td>20mm along span</td></tr>
+    <tr><td>Lightening holes</td><td>2× oval 35×9mm between spar and 65%c rear wall</td></tr>
+    <tr><td>Min wall at holes</td><td>1.0mm from hole edge to airfoil surface</td></tr>
+    <tr><td>Spar zone clearance</td><td>No holes within 5mm of spar centreline</td></tr>
+  </table>
+</div>
+</div>
+
+<div class="sec">5. PRINT SETTINGS, MEMBRANE, AND MASS BUDGET</div>
+<div class="grid3">
+<div class="panel">
+  <div class="subsec">LW-PLA PRINT SETTINGS</div>
+  <table class="spec">
+    <tr><td>Nozzle temp</td><td class="vg">240–250°C (foaming range)</td></tr>
+    <tr><td>Bed temp</td><td>60°C PEI sheet</td></tr>
+    <tr><td>Flow rate</td><td>40–50% (LW-PLA ~2× volume expansion)</td></tr>
+    <tr><td>Layer height</td><td>0.15mm</td></tr>
+    <tr><td>Print speed</td><td>30mm/s perimeters · 40mm/s infill</td></tr>
+    <tr><td>Perimeters</td><td>2 walls all faces</td></tr>
+    <tr><td>Top/bottom</td><td>0 solid layers (CF skin applied externally)</td></tr>
+    <tr><td>Infill D-box zone</td><td class="vg">12% gyroid</td></tr>
+    <tr><td>Infill root/tip</td><td>100% rectilinear (solid)</td></tr>
+    <tr><td>Spar hole region</td><td>Solid 3mm radius around hole</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">MEMBRANE (65–100% CHORD)</div>
+  <table class="spec">
+    <tr><td>Material</td><td class="vg">Ripstop nylon, 40 denier</td></tr>
+    <tr><td>Areal mass</td><td>~25 g/m²</td></tr>
+    <tr><td>Attachment</td><td>Sewn to rib TE tab + root + tip ribs</td></tr>
+    <tr><td>Pre-tension</td><td>Light tension (taut, not baggy)</td></tr>
+    <tr><td>TE edge</td><td>Sewn hem over 0.3mm CF rod at TE</td></tr>
+    <tr><td>Colour</td><td>Translucent or hi-vis orange</td></tr>
+    <tr><td>Anti-warp CF strip</td><td>2× CF tow spanwise at 15%c and 60%c lower surface</td></tr>
+    <tr><td>LE CF tape</td><td>0.5mm CF tape LE to 5%c both surfaces</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">MASS BUDGET PER WING</div>
+  <table class="spec">
+    <tr><td>W1 target mass</td><td class="vg">25.1g</td></tr>
+    <tr><td>W2 target mass</td><td class="vg">23.2g</td></tr>
+    <tr><td>W3 target mass</td><td class="vg">24.6g</td></tr>
+    <tr><td>W4 target mass</td><td class="vg">21.0g</td></tr>
+    <tr><td>8-wing total</td><td class="vy">~188g</td></tr>
+    <tr><td>Std rib (LW-PLA)</td><td>~0.6–0.8g each</td></tr>
+    <tr><td>CF skin per 20mm bay</td><td>~0.8g</td></tr>
+    <tr><td>Spar per 100mm span</td><td>~0.15g (2.0mm tube)</td></tr>
+    <tr><td>Nat. freq. target</td><td class="vy">2.0Hz (accept 1.8–2.2Hz)</td></tr>
+  </table>
+</div>
+</div>
+
+<div class="sec">6. CONFIRMED DECISIONS · DEFERRED OPTIONS · SOLIDWORKS NOTES</div>
+<div class="grid2">
+<div class="panel">
+  <div class="subsec">CONFIRMED — MCO-1D FIRST ITERATION</div>
+  <table class="spec">
+    <tr><td>Airfoil</td><td class="vg">Selig S1223 all 8 wings</td></tr>
+    <tr><td>Chord</td><td class="vg">120mm universal — single rib mould</td></tr>
+    <tr><td>Main spar position</td><td class="vg">20%c = 24mm from LE</td></tr>
+    <tr><td>D-box coverage</td><td class="vg">0 to 65%c (0–78mm)</td></tr>
+    <tr><td>W1/W2/W4 spar</td><td class="vg">2.0mm OD / 1.5mm ID CF</td></tr>
+    <tr><td>W3 spar</td><td class="vg">2.5mm OD / 1.5mm ID CF</td></tr>
+    <tr><td>Rib infill</td><td class="vg">LW-PLA gyroid 12%</td></tr>
+    <tr><td>Rib thickness</td><td class="vg">1.2mm std · 3.0mm root · 2.0mm tip</td></tr>
+    <tr><td>Membrane</td><td class="vg">Ripstop nylon 40D, TE region</td></tr>
+    <tr><td>D-box skin</td><td class="vg">1× 100gsm CF woven each surface</td></tr>
+    <tr><td>Nat. freq. target</td><td class="vg">2.0Hz (1.8–2.2Hz accept)</td></tr>
+    <tr><td>Flap DoF</td><td class="vg">±80° flap, −5°→+50° pitch, +30°→−110° sweep</td></tr>
+    <tr><td>Base freq.</td><td class="vg">1.0Hz · Sprint 1.80Hz · RCP 2nd harmonic</td></tr>
+  </table>
+</div>
+<div class="panel">
+  <div class="subsec">DEFERRED — FUTURE ITERATION</div>
+  <table class="spec">
+    <tr><td>Chord</td><td class="vy">105mm (proportional reduction)</td></tr>
+    <tr><td>Nat. freq. with 105mm</td><td class="vy">~2.9Hz — eliminates 2nd harmonic resonance</td></tr>
+    <tr><td>Thrust impact</td><td class="vy">−12.5% → restore by +14% freq (to 1.14Hz)</td></tr>
+    <tr><td>Trigger</td><td>Post first-iteration flight test</td></tr>
+    <tr><td>LE mass balance</td><td>Not needed at drone scale/speed</td></tr>
+    <tr><td>CFRP aeroelastic layup</td><td>Not needed — flutter >> max speed</td></tr>
+  </table>
+  <div class="subsec" style="margin-top:12px">SOLIDWORKS BUILD ORDER</div>
+  <table class="spec">
+    <tr><td>1</td><td>Reference planes at x=24mm (20%c) and x=78mm (65%c)</td></tr>
+    <tr><td>2</td><td>Spar centreline sketch at 20%c parallel to span axis</td></tr>
+    <tr><td>3</td><td>Circular cut for spar hole: ø2.2mm at spar centreline</td></tr>
+    <tr><td>4</td><td>Extruded surface at 65%c = D-box rear wall</td></tr>
+    <tr><td>5</td><td>Oval cuts for lightening holes between spar and rear wall</td></tr>
+    <tr><td>6</td><td>TE membrane tab: 1mm flange at trailing edge</td></tr>
+    <tr><td>7</td><td>Root rib: 3mm solid copy, add root attachment bosses</td></tr>
+    <tr><td>8</td><td>Tip rib: 2mm solid copy, add membrane peg</td></tr>
+    <tr><td>9</td><td>Linear pattern at 20mm pitch along span</td></tr>
+    <tr><td>10</td><td>Gyroid 12% = slicer parameter only — hollow shell in SW</td></tr>
+  </table>
+  <p class="note warn" style="margin-top:8px">Do NOT model gyroid in SolidWorks — specify in slicer only. Model rib as hollow shell with 1.2mm walls.</p>
+</div>
+</div>
+
+<!-- Footer -->
+<div class="panel" style="border-color:var(--teal-dim);margin-top:4px;">
+  <p style="font-size:8px;color:var(--muted);line-height:1.8;">
+  <span style="color:var(--teal)">AIRFOIL DATA:</span>
+  Exact coordinates from UIUC Airfoil Coordinates Database (m-selig.ae.illinois.edu/ads/coord/s1223.dat).
+  65 coordinate pairs, Selig format, TE→LE upper, LE→TE lower.
+  Scale: multiply normalised x,y by 120 for 120mm chord.
+  Note: lower surface positive (above chord line) from ~17%c to TE — this is correct for S1223.
+  &nbsp;|&nbsp;
+  <span style="color:var(--teal)">PROJECT RECORD:</span>
+  MCO Wave Parameter Library Rev A, Addendum D. DWG: MCO-1D-WING-001 Rev A. May 2026.
+  </p>
+</div>
+
+</div>
+</body>
+</html>

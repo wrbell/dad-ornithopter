@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCO-1A — Three-View Schematic (Heterogeneous Cascade)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#0a0f1a;color:#c8dce8;font-family:'Share Tech Mono',monospace;min-height:100vh;padding:0;}
+  .page{width:1200px;margin:0 auto;background:#0d1520;border:1px solid #1e3a4a;min-height:100vh;}
+  .doc-header{background:#071018;border-bottom:2px solid #004d38;padding:12px 24px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;}
+  .doc-title{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:#4af0c4;letter-spacing:3px;}
+  .doc-sub{font-size:10px;color:#5a8a9a;margin-top:2px;letter-spacing:2px;}
+  .doc-meta{text-align:right;font-size:10px;color:#4a7a8a;line-height:1.6;}
+  .doc-badge{background:#4a0020;border:1px solid #ff6644;color:#ff9988;font-size:10px;padding:3px 10px;letter-spacing:2px;margin:0 auto;}
+  .schematic-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:1px;background:#1a3040;border-bottom:1px solid #1a3040;}
+  .view-panel{background:#0a1018;position:relative;padding:8px;}
+  .view-label{font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:600;color:#4af0c4;letter-spacing:3px;margin-bottom:4px;padding:4px 8px;background:#071018;border-left:3px solid #4af0c4;display:inline-block;}
+  svg{display:block;width:100%;}
+  .specs-panel{background:#071018;border-top:1px solid #1a3040;padding:10px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .spec-group h4{font-family:'Rajdhani',sans-serif;font-size:10px;color:#4af0c4;letter-spacing:2px;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid #004d38;}
+  .spec-row{display:flex;justify-content:space-between;font-size:9px;color:#7ababa;padding:1px 0;}
+  .spec-val{color:#c8dce8;}
+  .spec-warn{color:#ff9966;}
+  .hetero-panel{background:#0a0510;border-top:1px solid #3a1030;padding:8px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .hetero-col h4{font-family:'Rajdhani',sans-serif;font-size:11px;letter-spacing:2px;margin-bottom:6px;padding-bottom:3px;}
+  .h-slow{color:#4af0c4;border-bottom:1px solid #004d38;}
+  .h-fast{color:#ff9944;border-bottom:1px solid #7a3000;}
+  .hetero-row{font-size:9px;color:#7ababa;padding:2px 0;display:flex;justify-content:space-between;}
+  .hetero-val-slow{color:#4af0c4;}
+  .hetero-val-fast{color:#ff9944;}
+  .doc-footer{background:#071018;border-top:2px solid #004d38;padding:6px 24px;display:grid;grid-template-columns:repeat(5,1fr);gap:1px;}
+  .footer-cell{padding:3px 8px;border-right:1px solid #1a3040;font-size:9px;color:#4a7a8a;line-height:1.6;}
+  .footer-cell:last-child{border-right:none;}
+  .footer-key{color:#3a6a7a;font-size:8px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<div class="doc-header">
+  <div>
+    <div class="doc-title">MCO-1A — HETEROGENEOUS CASCADE REVISION</div>
+    <div class="doc-sub">W1+W2 SLOW WINGS UNCHANGED &nbsp;·&nbsp; W3+W4 REDESIGNED AS HIGH-SPEED PROPULSORS &nbsp;·&nbsp; RCP AT 1.20 Hz</div>
+  </div>
+  <div class="doc-badge">REV B — HETERO CASCADE</div>
+  <div class="doc-meta">DWG: MCO-1A-0001 REV B<br>MTOW: 297 kg<br>HETERO CASCADE<br>RCP: 1.20 Hz DETUNED</div>
+</div>
+
+<!-- SCHEMATICS GRID -->
+<div class="schematic-grid">
+
+<!-- SIDE VIEW -->
+<div class="view-panel">
+  <div class="view-label">SIDE VIEW — PORT — HETERO CRUISE CONFIG</div>
+  <svg viewBox="0 0 580 340" xmlns="http://www.w3.org/2000/svg">
+    <defs><pattern id="g1" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M20 0L0 0 0 20" fill="none" stroke="#0f1f2a" stroke-width="0.4"/></pattern></defs>
+    <rect width="580" height="340" fill="url(#g1)"/>
+    <!-- CL -->
+    <line x1="30" y1="170" x2="550" y2="170" stroke="#ffaa44" stroke-width="0.8" stroke-dasharray="6,3"/>
+    <text x="536" y="165" fill="#ffaa44" font-size="7" font-family="monospace">CL</text>
+    <!-- Fuselage — sailplane tadpole form -->
+    <!-- Forward pod -->
+    <path d="M 70,155 Q 100,140 160,137 L 280,137 Q 320,138 340,148 Q 355,155 355,163 Q 355,171 340,178 Q 320,188 280,189 L 160,189 Q 100,186 70,171 Z"
+          fill="#0d1a28" stroke="#4af0c4" stroke-width="1.8"/>
+    <!-- Tail boom -->
+    <path d="M 340,158 L 530,164 L 530,172 L 340,178 Z"
+          fill="#071520" stroke="#4af0c4" stroke-width="1.2"/>
+    <!-- Nose -->
+    <path d="M 70,155 Q 42,158 28,163 Q 42,168 70,171" fill="#0d1a28" stroke="#4af0c4" stroke-width="1.5"/>
+    <!-- Canopy -->
+    <path d="M 185,137 Q 215,112 255,106 Q 295,102 320,110 Q 338,118 340,137 Z"
+          fill="#071828" stroke="#4af0c4" stroke-width="1.0"/>
+    <!-- Pilot hint -->
+    <ellipse cx="262" cy="122" rx="11" ry="9" fill="#0a1828" stroke="#1a4a5a" stroke-width="0.6"/>
+    <!-- Spine rail -->
+    <line x1="90" y1="150" x2="520" y2="162" stroke="#2a8a7a" stroke-width="1.2"/>
+
+    <!-- CASCADE ROOT POSITIONS — staggered -->
+    <!-- W1 root -->
+    <circle cx="210" cy="150" r="6" fill="#4af0c4" stroke="#4af0c4"/>
+    <text x="196" y="141" fill="#4af0c4" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="600">W1</text>
+    <text x="185" y="131" fill="#4af0c4" font-size="7" font-family="monospace">SLOW WING</text>
+    <!-- W2 root -->
+    <circle cx="222" cy="158" r="5" fill="#3aaa8a" stroke="#3aaa8a"/>
+    <text x="228" y="157" fill="#3aaa8a" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="600">W2</text>
+    <!-- W3 root — FAST WING marker -->
+    <circle cx="234" cy="166" r="5" fill="#ff9944" stroke="#ff9944"/>
+    <text x="240" y="165" fill="#ff9944" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="600">W3</text>
+    <text x="258" y="158" fill="#ff9944" font-size="7" font-family="monospace">FAST WING</text>
+    <!-- W4 root — FAST WING marker -->
+    <circle cx="246" cy="174" r="5" fill="#ff6622" stroke="#ff6622"/>
+    <text x="252" y="173" fill="#ff6622" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="600">W4</text>
+
+    <!-- Stagger line -->
+    <path d="M 210,150 L 246,174" stroke="#ff6644" stroke-width="0.8" stroke-dasharray="3,2"/>
+
+    <!-- W1 in forward sweep position (HETERO-CRUISE config) -->
+    <!-- W1 at +30° forward sweep shown as forward-angled line -->
+    <line x1="210" y1="150" x2="165" y2="28" stroke="#4af0c4" stroke-width="2.5"/>
+    <line x1="155" y1="28" x2="175" y2="28" stroke="#4af0c4" stroke-width="1.5"/>
+    <text x="148" y="22" fill="#4af0c4" font-size="7.5" font-family="monospace">W1 +30° fwd sweep</text>
+    <!-- Sweep angle arc -->
+    <path d="M 210,140 A 20,20 0 0,0 200,150" fill="none" stroke="#4af0c4" stroke-width="0.8" stroke-dasharray="2,2"/>
+    <text x="190" y="137" fill="#4af0c4" font-size="7" font-family="monospace">30°</text>
+
+    <!-- W3 as fixed wing (HETERO-SPRINT) -->
+    <line x1="234" y1="166" x2="234" y2="36" stroke="#ff9944" stroke-width="2.2"/>
+    <line x1="225" y1="36" x2="243" y2="36" stroke="#ff9944" stroke-width="1.2"/>
+    <text x="246" y="40" fill="#ff9944" font-size="7.5" font-family="monospace">W3 FIXED 4° AoA</text>
+    <text x="246" y="50" fill="#ff9944" font-size="7" font-family="monospace">lift surface</text>
+
+    <!-- W4 showing flap arc (fast wing) -->
+    <path d="M 246,174 Q 226,100 238,62 Q 252,28 258,32"
+          stroke="#ff6622" stroke-width="1.0" fill="none" stroke-dasharray="5,2"/>
+    <text x="262" y="36" fill="#ff6622" font-size="7" font-family="monospace">W4 flap arc (fast)</text>
+
+    <!-- Dorsal fin -->
+    <path d="M 400,137 L 390,98 L 428,137 Z" fill="#0d2535" stroke="#4af0c4" stroke-width="1.2"/>
+    <text x="432" y="110" fill="#4af0c4" font-size="7" font-family="monospace">DORSAL FIN</text>
+    <text x="432" y="120" fill="#3a7a8a" font-size="7" font-family="monospace">CNβ=+0.08</text>
+
+    <!-- Tricycle gear -->
+    <line x1="110" y1="189" x2="110" y2="216" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="110" cy="222" rx="10" ry="10" fill="#0a1820" stroke="#6abaaa" stroke-width="1.2"/>
+    <line x1="300" y1="189" x2="300" y2="218" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="300" cy="225" rx="12" ry="12" fill="#0a1820" stroke="#6abaaa" stroke-width="1.2"/>
+    <!-- Ground line -->
+    <line x1="20" y1="237" x2="545" y2="237" stroke="#2a5a6a" stroke-width="1.5"/>
+    <path d="M 20,237 L 545,237" stroke="#1a4a5a" stroke-width="3" stroke-dasharray="6,6"/>
+
+    <!-- Dimension: fuselage -->
+    <line x1="28" y1="256" x2="532" y2="256" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="28" y1="252" x2="28" y2="260" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="532" y1="252" x2="532" y2="260" stroke="#3a6a7a" stroke-width="0.6"/>
+    <text x="280" y="265" fill="#5a9aaa" font-size="8" font-family="monospace" text-anchor="middle">FUSELAGE: 5.8m — SAILPLANE TADPOLE + TAIL BOOM</text>
+
+    <!-- Speed annotation -->
+    <rect x="360" y="195" width="185" height="36" fill="#071018" stroke="#2a4a3a" stroke-width="0.8"/>
+    <text x="367" y="208" fill="#4af0c4" font-size="8" font-family="'Rajdhani',sans-serif" font-weight="600" letter-spacing="1">HETERO SPRINT SPEEDS</text>
+    <text x="367" y="219" fill="#ff9944" font-size="8" font-family="monospace">Sustained: 200-250 km/h</text>
+    <text x="367" y="228" fill="#ff6622" font-size="8" font-family="monospace">RCP burst: 407-424 km/h</text>
+  </svg>
+</div>
+
+<!-- TOP VIEW -->
+<div class="view-panel">
+  <div class="view-label">TOP VIEW — HETERO CRUISE: W1+W2 FWD SWEEP + W3+W4 FLAPPING</div>
+  <svg viewBox="0 0 580 340" xmlns="http://www.w3.org/2000/svg">
+    <rect width="580" height="340" fill="url(#g1)"/>
+    <line x1="290" y1="10" x2="290" y2="330" stroke="#ffaa44" stroke-width="0.8" stroke-dasharray="6,3"/>
+
+    <!-- Fuselage top view — tadpole shape -->
+    <path d="M 290,22 Q 315,24 342,30 Q 368,38 375,52 L 375,280 Q 368,292 342,296 Q 315,300 290,301"
+          fill="#0d1a28" stroke="#4af0c4" stroke-width="1.5"/>
+    <path d="M 290,22 Q 265,24 238,30 Q 212,38 205,52 L 205,280 Q 212,292 238,296 Q 265,300 290,301"
+          fill="#0d1a28" stroke="#4af0c4" stroke-width="1.5"/>
+    <!-- Tail boom narrowing -->
+    <path d="M 260,240 L 260,295 Q 275,301 290,301 Q 305,301 320,295 L 320,240"
+          fill="#071018" stroke="#2a6a5a" stroke-width="0.8"/>
+    <!-- Cockpit -->
+    <ellipse cx="290" cy="108" rx="33" ry="52" fill="#071018" stroke="#2a7a8a" stroke-width="1.0"/>
+    <text x="290" y="110" fill="#3a9a8a" font-size="7" font-family="monospace" text-anchor="middle">COCKPIT</text>
+
+    <!-- W1 PORT — forward swept (+30°) — shown swept forward -->
+    <!-- Root at y≈130, sweeping forward (upward in top view) -->
+    <path d="M 205,125 L 18,72 L 10,95 L 205,142 Z" fill="#0a2030" stroke="#4af0c4" stroke-width="2.0"/>
+    <text x="58" y="80" fill="#4af0c4" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="700">W1</text>
+    <text x="42" y="92" fill="#4af0c4" font-size="7" font-family="monospace">SLOW+FWD SWEEP</text>
+    <text x="42" y="102" fill="#3a8a7a" font-size="7" font-family="monospace">+30° / 1-2° AoA</text>
+
+    <!-- W2 PORT — forward swept -->
+    <path d="M 205,144 L 22,97 L 14,118 L 205,158 Z"
+          fill="#091a28" stroke="#3aaa8a" stroke-width="1.5"/>
+    <text x="60" y="108" fill="#3aaa8a" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="600">W2</text>
+    <text x="45" y="118" fill="#2a8a6a" font-size="7" font-family="monospace">fwd swept</text>
+
+    <!-- W3 PORT — FAST WING — narrow chord, shown as thin planform -->
+    <path d="M 205,160 L 30,132 L 26,148 L 205,170 Z"
+          fill="#1a0a00" stroke="#ff9944" stroke-width="1.8"/>
+    <text x="68" y="140" fill="#ff9944" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="700">W3</text>
+    <text x="52" y="150" fill="#ff7722" font-size="7" font-family="monospace">FAST WING</text>
+    <text x="52" y="160" fill="#ff7722" font-size="7" font-family="monospace">380mm chord</text>
+
+    <!-- W4 PORT — FAST WING — narrowest -->
+    <path d="M 205,172 L 35,151 L 31,165 L 205,180 Z"
+          fill="#150800" stroke="#ff6622" stroke-width="1.5"/>
+    <text x="70" y="160" fill="#ff6622" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W4</text>
+    <text x="55" y="170" fill="#ff5500" font-size="7" font-family="monospace">FAST WING</text>
+
+    <!-- STBD mirrors -->
+    <path d="M 375,125 L 562,72 L 570,95 L 375,142 Z" fill="#0a2030" stroke="#4af0c4" stroke-width="2.0"/>
+    <text x="472" y="80" fill="#4af0c4" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="700">W1</text>
+    <path d="M 375,144 L 558,97 L 566,118 L 375,158 Z" fill="#091a28" stroke="#3aaa8a" stroke-width="1.5"/>
+    <path d="M 375,160 L 550,132 L 554,148 L 375,170 Z" fill="#1a0a00" stroke="#ff9944" stroke-width="1.8"/>
+    <text x="472" y="142" fill="#ff9944" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="700">W3</text>
+    <path d="M 375,172 L 545,151 L 549,165 L 375,180 Z" fill="#150800" stroke="#ff6622" stroke-width="1.5"/>
+
+    <!-- Chord comparison annotation -->
+    <line x1="30" y1="188" x2="30" y2="200" stroke="#4af0c4" stroke-width="1.0"/>
+    <line x1="30" y1="188" x2="85" y2="188" stroke="#4af0c4" stroke-width="1.0"/>
+    <text x="88" y="192" fill="#4af0c4" font-size="7" font-family="monospace">W1 632mm chord</text>
+    <line x1="30" y1="205" x2="30" y2="217" stroke="#ff9944" stroke-width="1.0"/>
+    <line x1="30" y1="205" x2="60" y2="205" stroke="#ff9944" stroke-width="1.0"/>
+    <text x="63" y="209" fill="#ff9944" font-size="7" font-family="monospace">W3/W4 380mm chord</text>
+    <text x="30" y="228" fill="#5a9aaa" font-size="7" font-family="monospace">Chord ratio 380/632 = 0.60 (optimal cascade ratio)</text>
+
+    <!-- Span dimensions -->
+    <line x1="10" y1="60" x2="570" y2="60" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="10" y1="56" x2="10" y2="64" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="570" y1="56" x2="570" y2="64" stroke="#3a6a7a" stroke-width="0.6"/>
+    <text x="290" y="57" fill="#5a9aaa" font-size="8" font-family="monospace" text-anchor="middle">W1 TIP-TO-TIP: 9.0m</text>
+
+    <!-- W3 span -->
+    <line x1="26" y1="250" x2="554" y2="250" stroke="#ff6622" stroke-width="0.6"/>
+    <line x1="26" y1="246" x2="26" y2="254" stroke="#ff6622" stroke-width="0.6"/>
+    <line x1="554" y1="246" x2="554" y2="254" stroke="#ff6622" stroke-width="0.6"/>
+    <text x="290" y="262" fill="#ff7722" font-size="8" font-family="monospace" text-anchor="middle">W3 TIP-TO-TIP: 7.6m  |  W4: 6.8m</text>
+
+    <!-- Undercarriage -->
+    <ellipse cx="290" cy="285" rx="6" ry="6" fill="#0a1820" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="250" cy="215" rx="7" ry="7" fill="#0a1820" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="330" cy="215" rx="7" ry="7" fill="#0a1820" stroke="#6abaaa" stroke-width="1.0"/>
+    <line x1="250" y1="215" x2="330" y2="215" stroke="#4a7a8a" stroke-width="0.8"/>
+    <text x="290" y="308" fill="#3a7a8a" font-size="7.5" font-family="monospace" text-anchor="middle">TOTAL WING AREA (8 wings): 23.0m²  |  FAST WINGS W3+W4: 5.47m²</text>
+  </svg>
+</div>
+
+<!-- FRONT VIEW -->
+<div class="view-panel">
+  <div class="view-label">FRONT VIEW — HETERO SPRINT: W3 FIXED + W4 FLAPPING</div>
+  <svg viewBox="0 0 580 300" xmlns="http://www.w3.org/2000/svg">
+    <rect width="580" height="300" fill="url(#g1)"/>
+    <line x1="290" y1="10" x2="290" y2="290" stroke="#ffaa44" stroke-width="0.8" stroke-dasharray="6,3"/>
+
+    <!-- Fuselage ellipse — sailplane form (narrower) -->
+    <ellipse cx="290" cy="155" rx="42" ry="32" fill="#0d1a28" stroke="#4af0c4" stroke-width="1.8"/>
+    <!-- Canopy -->
+    <ellipse cx="290" cy="138" rx="27" ry="22" fill="#071018" stroke="#4af0c4" stroke-width="1.0"/>
+    <text x="290" y="141" fill="#3a9a8a" font-size="7" font-family="monospace" text-anchor="middle">COCKPIT</text>
+    <!-- Dorsal fin -->
+    <path d="M 285,118" />
+    <rect x="285" y="95" width="10" height="25" fill="#0d2535" stroke="#4af0c4" stroke-width="1.0"/>
+    <text x="302" y="106" fill="#4af0c4" font-size="7.5" font-family="'Rajdhani',sans-serif" font-weight="600">DORSAL FIN</text>
+
+    <!-- W1 and W2 (STOWED in HETERO-SPRINT — shown as dashed lines) -->
+    <line x1="248" y1="148" x2="8" y2="136" stroke="#2a6a5a" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <line x1="248" y1="156" x2="8" y2="148" stroke="#1a5a4a" stroke-width="1.2" stroke-dasharray="4,3"/>
+    <text x="5" y="128" fill="#2a6a5a" font-size="8" font-family="'Rajdhani',sans-serif">W1</text>
+    <text x="5" y="140" fill="#1a5a4a" font-size="8" font-family="'Rajdhani',sans-serif">W2</text>
+    <text x="5" y="150" fill="#2a5a4a" font-size="7" font-family="monospace">STOWED</text>
+
+    <line x1="332" y1="148" x2="572" y2="136" stroke="#2a6a5a" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <line x1="332" y1="156" x2="572" y2="148" stroke="#1a5a4a" stroke-width="1.2" stroke-dasharray="4,3"/>
+
+    <!-- W3 FAST WING — fixed, narrower chord, shown as thin line -->
+    <line x1="248" y1="162" x2="8" y2="152" stroke="#ff9944" stroke-width="2.5"/>
+    <text x="5" y="147" fill="#ff9944" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W3</text>
+    <text x="5" y="157" fill="#ff7722" font-size="7" font-family="monospace">FIXED 4°</text>
+    <text x="5" y="166" fill="#ff7722" font-size="7" font-family="monospace">380mm chord</text>
+    <!-- W3 chord end-on (very thin) -->
+    <rect x="2" y="148" width="3" height="6" fill="#ff9944" opacity="0.8"/>
+    <line x1="332" y1="162" x2="572" y2="152" stroke="#ff9944" stroke-width="2.5"/>
+    <rect x="575" y="148" width="3" height="6" fill="#ff9944" opacity="0.8"/>
+
+    <!-- W4 FAST WING — flapping, showing stroke arc -->
+    <line x1="248" y1="170" x2="8" y2="162" stroke="#ff6622" stroke-width="2.2"/>
+    <text x="5" y="175" fill="#ff6622" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W4</text>
+    <text x="5" y="185" fill="#ff5500" font-size="7" font-family="monospace">FLAPPING UTR</text>
+    <text x="5" y="194" fill="#ff5500" font-size="7" font-family="monospace">0.65 Hz / 1.20 Hz RCP</text>
+    <!-- W4 stroke arc -->
+    <path d="M 8,115 A 162,162 0 0,1 8,215" fill="none" stroke="#ff6622" stroke-width="0.8" stroke-dasharray="3,3"/>
+    <text x="12" y="220" fill="#ff6622" font-size="7" font-family="monospace">±80° stroke</text>
+    <line x1="332" y1="170" x2="572" y2="162" stroke="#ff6622" stroke-width="2.2"/>
+    <path d="M 572,115 A 162,162 0 0,0 572,215" fill="none" stroke="#ff6622" stroke-width="0.8" stroke-dasharray="3,3"/>
+
+    <!-- Stagger offset annotation -->
+    <line x1="246" y1="148" x2="246" y2="172" stroke="#ff6644" stroke-width="0.8" stroke-dasharray="2,2"/>
+    <text x="218" y="162" fill="#ff6644" font-size="7" font-family="monospace">97mm</text>
+
+    <!-- Ground line and gear -->
+    <line x1="20" y1="248" x2="560" y2="248" stroke="#2a5a6a" stroke-width="1.5"/>
+    <path d="M 20,248 L 560,248" stroke="#1a4a5a" stroke-width="3" stroke-dasharray="6,6"/>
+    <line x1="290" y1="187" x2="290" y2="238" stroke="#6abaaa" stroke-width="1.2"/>
+    <ellipse cx="290" cy="244" rx="10" ry="10" fill="#0a1820" stroke="#6abaaa" stroke-width="1.2"/>
+    <line x1="240" y1="187" x2="218" y2="236" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="213" cy="242" rx="12" ry="12" fill="#0a1820" stroke="#6abaaa" stroke-width="1.2"/>
+    <line x1="340" y1="187" x2="362" y2="236" stroke="#6abaaa" stroke-width="1.0"/>
+    <ellipse cx="367" cy="242" rx="12" ry="12" fill="#0a1820" stroke="#6abaaa" stroke-width="1.2"/>
+    <line x1="213" y1="260" x2="367" y2="260" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="213" y1="256" x2="213" y2="264" stroke="#3a6a7a" stroke-width="0.6"/>
+    <line x1="367" y1="256" x2="367" y2="264" stroke="#3a6a7a" stroke-width="0.6"/>
+    <text x="290" y="273" fill="#5a9aaa" font-size="8" font-family="monospace" text-anchor="middle">300mm TRACK</text>
+  </svg>
+</div>
+
+<!-- ISOMETRIC + DETAIL -->
+<div class="view-panel">
+  <div class="view-label">ISOMETRIC VIEW + RCP DETUNING DETAIL</div>
+  <svg viewBox="0 0 580 300" xmlns="http://www.w3.org/2000/svg">
+    <rect width="580" height="300" fill="url(#g1)"/>
+
+    <!-- Isometric fuselage -->
+    <g transform="translate(30,40)">
+      <!-- Tadpole pod top -->
+      <path d="M 0,38 L 75,0 L 195,0 L 195,14 L 75,52 L 0,52 Z" fill="#0d2030" stroke="#4af0c4" stroke-width="1.0"/>
+      <!-- Pod right face -->
+      <path d="M 195,0 L 232,18 L 232,76 L 195,58 Z" fill="#071820" stroke="#4af0c4" stroke-width="1.0"/>
+      <!-- Pod front face -->
+      <path d="M 0,38 L 36,56 L 36,110 L 0,92 Z" fill="#091820" stroke="#3aaa8a" stroke-width="0.8"/>
+      <!-- Tail boom -->
+      <path d="M 195,6 L 310,12 L 310,20 L 195,14 Z" fill="#071018" stroke="#2a7a6a" stroke-width="0.8"/>
+      <path d="M 310,12 L 335,22 L 335,30 L 310,20 Z" fill="#051018" stroke="#1a5a4a" stroke-width="0.6"/>
+      <!-- Canopy -->
+      <path d="M 55,3 L 92,-18 L 138,-18 L 158,-8 L 120,14 L 78,14 Z" fill="#071828" stroke="#4af0c4" stroke-width="0.8"/>
+      <!-- Dorsal fin -->
+      <path d="M 155,-2 L 147,-30 L 176,-2 Z" fill="#0d2535" stroke="#4af0c4" stroke-width="1.0"/>
+
+      <!-- W1 SLOW WING — port, forward swept -->
+      <path d="M 36,50 L -130,8 L -135,22 L 32,62 Z" fill="#0a2030" stroke="#4af0c4" stroke-width="2.0"/>
+      <text x="-115" y="14" fill="#4af0c4" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W1</text>
+      <text x="-115" y="24" fill="#3a8a7a" font-size="7" font-family="monospace">SLOW</text>
+
+      <!-- W2 SLOW WING -->
+      <path d="M 50,58 L -108,22 L -113,34 L 46,68 Z" fill="#091a28" stroke="#3aaa8a" stroke-width="1.5"/>
+      <text x="-95" y="28" fill="#3aaa8a" font-size="8" font-family="'Rajdhani',sans-serif" font-weight="600">W2</text>
+
+      <!-- W3 FAST WING — narrow chord, orange -->
+      <path d="M 63,65 L -75,40 L -78,50 L 60,74 Z" fill="#1a0800" stroke="#ff9944" stroke-width="2.0"/>
+      <text x="-62" y="44" fill="#ff9944" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W3</text>
+      <text x="-62" y="54" fill="#ff7722" font-size="7" font-family="monospace">FAST 380mm</text>
+
+      <!-- W4 FAST WING — narrowest chord -->
+      <path d="M 75,72 L -58,52 L -60,61 L 73,80 Z" fill="#150600" stroke="#ff6622" stroke-width="1.8"/>
+      <text x="-46" y="56" fill="#ff6622" font-size="9" font-family="'Rajdhani',sans-serif" font-weight="700">W4</text>
+
+      <!-- Gear -->
+      <line x1="36" y1="110" x2="36" y2="135" stroke="#6abaaa" stroke-width="1.0"/>
+      <ellipse cx="36" cy="140" rx="7" ry="4" fill="#0a1820" stroke="#6abaaa" stroke-width="1.0"/>
+      <line x1="120" y1="122" x2="115" y2="147" stroke="#6abaaa" stroke-width="1.0"/>
+      <ellipse cx="112" cy="151" rx="7" ry="4" fill="#0a1820" stroke="#6abaaa" stroke-width="1.0"/>
+    </g>
+
+    <!-- RCP DETUNING DIAGRAM -->
+    <g transform="translate(335,15)">
+      <rect x="0" y="0" width="235" height="270" fill="#071018" stroke="#2a4a3a" stroke-width="0.8"/>
+      <text x="117" y="15" fill="#ff9944" font-size="10" font-family="'Rajdhani',sans-serif" font-weight="700"
+            text-anchor="middle" letter-spacing="1">RCP HARMONIC DETUNING</text>
+      <text x="117" y="25" fill="#5a8a7a" font-size="7.5" font-family="monospace" text-anchor="middle">W3+W4 fast wings — MCO-1A only</text>
+      <line x1="8" y1="30" x2="227" y2="30" stroke="#2a4a3a" stroke-width="0.5"/>
+
+      <!-- Frequency axis -->
+      <line x1="15" y1="220" x2="225" y2="220" stroke="#3a6a7a" stroke-width="1.0"/>
+      <text x="120" y="234" fill="#3a6a7a" font-size="8" font-family="monospace" text-anchor="middle">Frequency (Hz)</text>
+
+      <!-- Scale marks -->
+      <!-- 0 to 5 Hz shown -->
+      <!-- scale: 210px / 5Hz = 42px/Hz -->
+      <!-- x = 15 + freq*42 -->
+      <line x1="15" y1="218" x2="15" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="15" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">0</text>
+      <line x1="57" y1="218" x2="57" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="57" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">1</text>
+      <line x1="99" y1="218" x2="99" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="99" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">2</text>
+      <line x1="141" y1="218" x2="141" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="141" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">3</text>
+      <line x1="183" y1="218" x2="183" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="183" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">4</text>
+      <line x1="225" y1="218" x2="225" y2="222" stroke="#3a6a7a" stroke-width="0.8"/>
+      <text x="225" y="228" fill="#3a6a7a" font-size="7" font-family="monospace" text-anchor="middle">5</text>
+
+      <!-- Torsional natural frequency > 4.62 Hz (designed) -->
+      <!-- x = 15 + 4.62*42 = 208.0 -->
+      <line x1="209" y1="40" x2="209" y2="220" stroke="#4af0c4" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <text x="209" y="38" fill="#4af0c4" font-size="7" font-family="monospace" text-anchor="middle">ω_θ</text>
+      <text x="209" y="46" fill="#4af0c4" font-size="7" font-family="monospace" text-anchor="middle">>4.62Hz</text>
+
+      <!-- DANGER ZONES shown as red bands -->
+      <!-- OLD 1.1 Hz: 2nd harmonic 2.2 Hz ± 30% = 1.54 to 2.86 Hz -->
+      <!-- x_low = 15+1.54*42=79.7, x_high=15+2.86*42=135.1 -->
+      <rect x="80" y="55" width="55" height="155" fill="#3a0000" opacity="0.6"/>
+      <text x="107" y="68" fill="#ff4444" font-size="7" font-family="monospace" text-anchor="middle">DANGER</text>
+      <text x="107" y="77" fill="#ff4444" font-size="7" font-family="monospace" text-anchor="middle">ZONE</text>
+      <text x="107" y="86" fill="#ff4444" font-size="6.5" font-family="monospace" text-anchor="middle">2nd harm.</text>
+      <text x="107" y="95" fill="#ff4444" font-size="6.5" font-family="monospace" text-anchor="middle">@1.10 Hz</text>
+
+      <!-- OLD RCP 1.1 Hz line -->
+      <!-- x = 15 + 1.1*42 = 61.2 -->
+      <line x1="61" y1="50" x2="61" y2="220" stroke="#ff4444" stroke-width="2.0" stroke-dasharray="3,2"/>
+      <text x="61" y="46" fill="#ff4444" font-size="7" font-family="monospace" text-anchor="middle">1.10Hz</text>
+      <text x="61" y="38" fill="#ff4444" font-size="6.5" font-family="monospace" text-anchor="middle">OLD RCP</text>
+      <!-- 2nd harmonic of 1.1: 2.2 Hz line (inside danger zone) -->
+      <!-- x = 15 + 2.2*42 = 107.4 -->
+      <line x1="107" y1="50" x2="107" y2="220" stroke="#ff4444" stroke-width="1.2" stroke-dasharray="2,3"/>
+      <text x="107" y="46" fill="#ff4444" font-size="6.5" font-family="monospace" text-anchor="middle">2.20</text>
+      <text x="107" y="38" fill="#ff4444" font-size="6.5" font-family="monospace" text-anchor="middle">2nd harm</text>
+
+      <!-- NEW RCP 1.2 Hz line — green/safe -->
+      <!-- x = 15 + 1.2*42 = 65.4 -->
+      <line x1="65" y1="50" x2="65" y2="220" stroke="#44ff88" stroke-width="2.5"/>
+      <text x="65" y="46" fill="#44ff88" font-size="7" font-family="monospace" text-anchor="middle">1.20Hz</text>
+      <text x="65" y="38" fill="#44ff88" font-size="6.5" font-family="monospace" text-anchor="middle">NEW RCP</text>
+      <!-- 2nd harmonic of 1.2: 2.4 Hz — outside danger zone -->
+      <!-- x = 15 + 2.4*42 = 115.8 -->
+      <line x1="116" y1="50" x2="116" y2="220" stroke="#44ff88" stroke-width="1.2" stroke-dasharray="3,2"/>
+      <text x="116" y="46" fill="#44ff88" font-size="6.5" font-family="monospace" text-anchor="middle">2.40</text>
+      <text x="116" y="38" fill="#44ff88" font-size="6.5" font-family="monospace" text-anchor="middle">2nd harm</text>
+
+      <!-- Gap arrow showing 2.2→2.4 improvement -->
+      <path d="M 107,115 L 116,115" stroke="#ffffff" stroke-width="1.2"/>
+      <path d="M 113,112 L 116,115 L 113,118" fill="none" stroke="#ffffff" stroke-width="0.8"/>
+      <text x="111" y="111" fill="#ffffff" font-size="6" font-family="monospace">+0.2Hz</text>
+
+      <!-- Summary stats -->
+      <text x="12" y="248" fill="#44ff88" font-size="8" font-family="monospace">1.20 Hz: 2nd harm = 2.40 Hz ✓ SAFE</text>
+      <text x="12" y="258" fill="#ff4444" font-size="8" font-family="monospace">1.10 Hz: 2nd harm = 2.20 Hz ✗ RISK</text>
+      <text x="12" y="268" fill="#ff9944" font-size="8" font-family="monospace">Speed ceiling: 407-424 km/h</text>
+    </g>
+
+  </svg>
+</div>
+</div><!-- end schematic-grid -->
+
+<!-- HETERO CASCADE WING COMPARISON -->
+<div class="hetero-panel">
+  <div class="hetero-col">
+    <h4 class="h-slow">W1 + W2 — SLOW WINGS (UNCHANGED)</h4>
+    <div class="hetero-row"><span>Airfoil</span><span class="hetero-val-slow">FX63-137 full specification</span></div>
+    <div class="hetero-row"><span>Mean chord</span><span class="hetero-val-slow">632mm</span></div>
+    <div class="hetero-row"><span>Spans</span><span class="hetero-val-slow">W1: 4.5m / W2: 4.0m per side</span></div>
+    <div class="hetero-row"><span>CL max</span><span class="hetero-val-slow">~2.4 (VGs + film flaps)</span></div>
+    <div class="hetero-row"><span>Operating frequency</span><span class="hetero-val-slow">0.20 Hz</span></div>
+    <div class="hetero-row"><span>RCP frequency</span><span class="hetero-val-slow">0.38 Hz (unchanged)</span></div>
+    <div class="hetero-row"><span>Role</span><span class="hetero-val-slow">VTOL / slow flight / hover transition</span></div>
+    <div class="hetero-row"><span>Min speed (W1+W2 active)</span><span class="hetero-val-slow">33 km/h</span></div>
+  </div>
+  <div class="hetero-col">
+    <h4 class="h-fast">W3 + W4 — FAST WINGS (REDESIGNED)</h4>
+    <div class="hetero-row"><span>Airfoil</span><span class="hetero-val-fast">Half-camber modified, 8% thick</span></div>
+    <div class="hetero-row"><span>Mean chord</span><span class="hetero-val-fast">380mm (0.60 × slow wing chord)</span></div>
+    <div class="hetero-row"><span>Spans</span><span class="hetero-val-fast">W3: 3.8m / W4: 3.4m per side</span></div>
+    <div class="hetero-row"><span>Torsional nat. freq.</span><span class="hetero-val-fast">Designed &gt; 4.62 Hz</span></div>
+    <div class="hetero-row"><span>D-box chord extent</span><span class="hetero-val-fast">55% (up from 40%)</span></div>
+    <div class="hetero-row"><span>LE mass balance</span><span class="hetero-val-fast">Tungsten plugs — CG to elastic axis</span></div>
+    <div class="hetero-row"><span>Operating frequency</span><span class="hetero-val-fast">W3: 0.55 Hz / W4: 0.65 Hz</span></div>
+    <div class="hetero-row"><span>RCP frequency</span><span class="hetero-val-fast">1.20 Hz DETUNED (not 1.10 Hz)</span></div>
+    <div class="hetero-row"><span>Role</span><span class="hetero-val-fast">High-speed propulsion / CPTV thrust</span></div>
+    <div class="hetero-row"><span>Sprint ceiling</span><span class="hetero-val-fast">407-424 km/h (structural flutter limit)</span></div>
+  </div>
+</div>
+
+<!-- SPECS PANEL -->
+<div class="specs-panel">
+  <div class="spec-group">
+    <h4>MASS &amp; GEOMETRY</h4>
+    <div class="spec-row"><span>MTOW</span><span class="spec-val">297 kg</span></div>
+    <div class="spec-row"><span>W1+W2 area (pair each)</span><span class="spec-val">5.69 / 5.06 m²</span></div>
+    <div class="spec-row"><span>W3+W4 area (pair each)</span><span class="spec-val">2.89 / 2.58 m²</span></div>
+    <div class="spec-row"><span>Fuselage</span><span class="spec-val">Sailplane tadpole Al+nylon</span></div>
+    <div class="spec-row"><span>Fuselage CD0</span><span class="spec-val">0.012 (vs 0.030 original)</span></div>
+    <div class="spec-row"><span>Cruise power @ 80 km/h</span><span class="spec-val">6.1 kW (vs 17 kW original)</span></div>
+  </div>
+  <div class="spec-group">
+    <h4>SLOW FLIGHT (W1+W2)</h4>
+    <div class="spec-row"><span>Min speed HOVER-8</span><span class="spec-val">33 km/h</span></div>
+    <div class="spec-row"><span>Efficient cruise</span><span class="spec-val">60-80 km/h</span></div>
+    <div class="spec-row"><span>Clap-and-fling</span><span class="spec-val">+12-15% @ Re 31-49k</span></div>
+    <div class="spec-row"><span>VTOL burst</span><span class="spec-val">W1+W2 explosive takeoff</span></div>
+    <div class="spec-row"><span>Cruise range</span><span class="spec-val">245 km @ 80 km/h</span></div>
+    <div class="spec-row"><span>Glide-dominant range</span><span class="spec-val">499 km</span></div>
+  </div>
+  <div class="spec-group">
+    <h4>FAST FLIGHT (W3+W4)</h4>
+    <div class="spec-row"><span>HETERO-CRUISE</span><span class="spec-val">130-155 km/h sustained</span></div>
+    <div class="spec-row"><span>HETERO-SPRINT sustained</span><span class="spec-val">200-250 km/h</span></div>
+    <div class="spec-row"><span>Min speed HETERO-SPRINT</span><span class="spec-warn">188 km/h (W3 only)</span></div>
+    <div class="spec-row"><span>PA-28 cruise equivalent</span><span class="spec-val">232 km/h ✓ achieved</span></div>
+    <div class="spec-row"><span>RCP sprint ceiling</span><span class="spec-val">407-424 km/h</span></div>
+    <div class="spec-row"><span>Cirrus RCP comparison</span><span class="spec-val">333 km/h within range</span></div>
+  </div>
+  <div class="spec-group">
+    <h4>RCP DETUNING KEY FACTS</h4>
+    <div class="spec-row"><span>Old RCP frequency</span><span class="spec-warn">1.10 Hz — harmonic risk</span></div>
+    <div class="spec-row"><span>New RCP frequency</span><span class="spec-val">1.20 Hz — detuned safe</span></div>
+    <div class="spec-row"><span>2nd harmonic old</span><span class="spec-warn">2.20 Hz — in danger zone</span></div>
+    <div class="spec-row"><span>2nd harmonic new</span><span class="spec-val">2.40 Hz — 35% clear</span></div>
+    <div class="spec-row"><span>Tip velocity change</span><span class="spec-val">+9%</span></div>
+    <div class="spec-row"><span>Thrust change</span><span class="spec-val">+19%</span></div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="doc-footer">
+  <div class="footer-cell"><div class="footer-key">DRAWING NO.</div>MCO-1A-0001 REV B</div>
+  <div class="footer-cell"><div class="footer-key">REVISION</div>HETERO CASCADE<br>+ RCP DETUNE</div>
+  <div class="footer-cell"><div class="footer-key">DRONE MCO-1D</div>UNCHANGED<br>IDENTICAL WINGS</div>
+  <div class="footer-cell"><div class="footer-key">AIRCRAFT MCO-1A</div>W3+W4 FAST WINGS<br>RCP 1.20 Hz</div>
+  <div class="footer-cell"><div class="footer-key">STATUS</div>DESIGN STAGE<br>NOT FOR MANUFACTURE</div>
+</div>
+
+</div>
+</body>
+</html>

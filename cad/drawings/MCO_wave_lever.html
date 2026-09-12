@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCO-1A Wave Lever</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#0a0f1a;font-family:'Share Tech Mono',monospace;color:#c8dce8;padding:20px;}
+  .page{width:1100px;margin:0 auto;background:#0d1520;border:1px solid #1e3a4a;padding:20px;}
+  .doc-header{background:#071018;border-bottom:2px solid #004d38;padding:12px 20px;
+    display:flex;justify-content:space-between;align-items:center;
+    margin:-20px -20px 20px -20px;}
+  .doc-title{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;
+    color:#4af0c4;letter-spacing:3px;}
+  .doc-sub{font-size:10px;color:#5a8a9a;margin-top:2px;letter-spacing:2px;}
+  .doc-meta{text-align:right;font-size:10px;color:#4a7a8a;line-height:1.6;}
+  .diagram-area{background:#071018;border:1px solid #1a3040;padding:16px;margin-bottom:16px;}
+  .spec-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px;}
+  .spec-col{background:#071018;border:1px solid #1a3040;padding:10px;}
+  .spec-col h4{font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:2px;
+    margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid;}
+  .s-air h4{color:#ff6644;border-color:#ff6644;}
+  .s-pre h4{color:#4af0c4;border-color:#004d38;}
+  .s-sli h4{color:#ffdd44;border-color:#7a6600;}
+  .s-agg h4{color:#ff9944;border-color:#7a4400;}
+  .s-fwd h4{color:#44aaff;border-color:#004488;}
+  .spec-row{display:flex;justify-content:space-between;font-size:9px;color:#7ababa;padding:1.5px 0;}
+  .spec-val{color:#c8dce8;text-align:right;}
+  .sv1{color:#4af0c4;}.sv2{color:#ffdd44;}.sv3{color:#ff6644;}
+  .sw-row{background:#071018;border:1px solid #1a3040;padding:10px 16px;
+    display:flex;gap:20px;align-items:center;flex-wrap:wrap;}
+  .sw-row h4{font-family:'Rajdhani',sans-serif;font-size:11px;color:#4af0c4;
+    letter-spacing:2px;white-space:nowrap;}
+  .sw-item{display:flex;align-items:center;gap:8px;font-size:9px;color:#7ababa;}
+  .sw-box{width:32px;height:16px;border:1px solid #4af0c4;border-radius:2px;
+    display:flex;align-items:center;justify-content:center;font-size:8px;
+    color:#4af0c4;letter-spacing:1px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="doc-header">
+  <div>
+    <div class="doc-title">MCO-1A — WAVE LEVER CONTROL LAYOUT</div>
+    <div class="doc-sub">Z-GATE GEOMETRY &nbsp;·&nbsp; PLAN VIEW FROM ABOVE (TOP DOWN) &nbsp;·&nbsp; LEFT ARMREST SIDE STICK &nbsp;·&nbsp; NOT TO SCALE</div>
+  </div>
+  <div class="doc-meta">DWG: MCO-1A-CTL-001 REV C<br>DESIGN STAGE</div>
+</div>
+
+<div class="diagram-area">
+<svg viewBox="0 0 1060 540" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">
+  <defs>
+    <pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M20 0L0 0 0 20" fill="none" stroke="#0f1f2a" stroke-width="0.4"/>
+    </pattern>
+    <marker id="a-c" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#4af0c4"/></marker>
+    <marker id="a-r" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff6644"/></marker>
+    <marker id="a-b" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#44aaff"/></marker>
+    <marker id="a-y" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ffdd44"/></marker>
+    <marker id="a-o" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ff9944"/></marker>
+  </defs>
+
+  <rect width="1060" height="540" fill="url(#g)"/>
+
+  <!-- ═══════════════════════════════════════
+       ORIENTATION LABELS
+       Top of diagram = BACK (pull toward pilot)
+       Bottom of diagram = FRONT (push away from pilot)
+       Left = pilot's left
+       Right = pilot's right
+  ═══════════════════════════════════════ -->
+
+  <text x="530" y="16" fill="#ffaa44" font-size="9" font-family="monospace"
+        text-anchor="middle" letter-spacing="2">PLAN VIEW — LOOKING DOWN AT LEFT ARMREST</text>
+
+  <!-- PULL / PUSH labels on vertical axis -->
+  <text x="30" y="85" fill="#ff6644" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700">◄ PULL BACK</text>
+  <text x="30" y="98" fill="#8a4a3a" font-size="8" font-family="monospace">(toward pilot)</text>
+  <text x="30" y="455" fill="#44aaff" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700">► PUSH FWD</text>
+  <text x="30" y="468" fill="#2a4a8a" font-size="8" font-family="monospace">(away from pilot)</text>
+
+  <!-- LEFT / RIGHT labels -->
+  <text x="200" y="30" fill="#ffdd44" font-size="9" font-family="monospace"
+        text-anchor="middle">PILOT'S RIGHT</text>
+  <text x="700" y="30" fill="#ffdd44" font-size="9" font-family="monospace"
+        text-anchor="middle">PILOT'S LEFT</text>
+
+  <!-- ═══════════════════════════════════════
+       Z-GATE PATH LAYOUT:
+
+       BRAKE RUN: runs fore-aft on the RIGHT side
+         Right column: x=220, from y=100 (PULL/FULL BRAKE) to y=290 (neutral/gate)
+
+       CROSSBAR: runs left-right at y=290 (neutral)
+         From x=220 (right/brake-side) to x=680 (left/thrust-side)
+         Three hover detents within crossbar
+
+       THRUST RUN: runs fore-aft on the LEFT side
+         Left column: x=680, from y=290 (neutral/gate) to y=470 (PUSH/MAX THRUST)
+  ═══════════════════════════════════════ -->
+
+  <!-- ─── BRAKE RUN (right column, top section) ─── -->
+  <rect x="202" y="98" width="36" height="196" rx="6"
+        fill="#1a0808" stroke="#ff6644" stroke-width="2.0"/>
+
+  <!-- Hard stop at top (full pull / max brake) -->
+  <rect x="198" y="92" width="44" height="9" rx="3" fill="#ff6644"/>
+  <text x="220" y="90" fill="#ff6644" font-size="8" font-family="monospace"
+        text-anchor="middle">FULL PULL · MAX BRAKE</text>
+
+  <!-- Direction arrow inside brake column -->
+  <line x1="220" y1="115" x2="220" y2="268" stroke="#ff6644" stroke-width="1.0"
+        stroke-dasharray="8,5" marker-end="url(#a-r)"/>
+
+  <!-- Graduation marks on brake column -->
+  <line x1="202" y1="130" x2="238" y2="130" stroke="#aa3322" stroke-width="1.0"/>
+  <line x1="202" y1="165" x2="238" y2="165" stroke="#aa3322" stroke-width="1.0"/>
+  <line x1="202" y1="200" x2="238" y2="200" stroke="#aa3322" stroke-width="1.0"/>
+  <line x1="202" y1="240" x2="238" y2="240" stroke="#aa3322" stroke-width="1.0"/>
+  <text x="248" y="133" fill="#7a3a2a" font-size="7.5" font-family="monospace">EMERGENCY</text>
+  <text x="248" y="168" fill="#7a3a2a" font-size="7.5" font-family="monospace">HEAVY</text>
+  <text x="248" y="203" fill="#7a3a2a" font-size="7.5" font-family="monospace">MEDIUM</text>
+  <text x="248" y="243" fill="#7a3a2a" font-size="7.5" font-family="monospace">LIGHT</text>
+
+  <!-- Airbrake zone label (right of column) -->
+  <text x="155" y="200" fill="#ff6644" font-size="13" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle" letter-spacing="2"
+        transform="rotate(-90,155,200)">AIRBRAKE</text>
+
+  <!-- Airbrake annotation box -->
+  <rect x="300" y="95" width="260" height="86" rx="3"
+        fill="#0d0808" stroke="#3a1a10" stroke-width="0.8"/>
+  <text x="430" y="111" fill="#ff6644" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle" letter-spacing="1">AIRBRAKE PHASE</text>
+  <line x1="308" y1="115" x2="552" y2="115" stroke="#3a1a10" stroke-width="0.5"/>
+  <text x="310" y="128" fill="#8a4a3a" font-size="8" font-family="monospace">Pull back = braking force (proportional)</text>
+  <text x="310" y="140" fill="#8a4a3a" font-size="8" font-family="monospace">Further pull = harder stop</text>
+  <text x="310" y="152" fill="#8a4a3a" font-size="8" font-family="monospace">Stick: pitch attitude ONLY</text>
+  <text x="310" y="164" fill="#6a3a2a" font-size="8" font-family="monospace">Speed from lever drag + gravity only</text>
+  <text x="310" y="176" fill="#6a3a2a" font-size="7.5" font-family="monospace">Snap pull = emergency stop (S3)</text>
+
+  <!-- ─── JOG CORNER 1: BRAKE RUN → CROSSBAR ─── -->
+  <!-- Rounded corner at bottom of brake column, turning left into crossbar -->
+  <path d="M 202,289 Q 202,305 218,305 L 235,305"
+        fill="none" stroke="#ffdd44" stroke-width="2.5"/>
+  <!-- Hard stop marker -->
+  <rect x="198" y="282" width="44" height="9" rx="3" fill="#ffdd44"/>
+  <text x="220" y="280" fill="#ffdd44" font-size="8" font-family="monospace"
+        text-anchor="middle">NEUTRAL · JOG LEFT →</text>
+  <!-- Jog direction arrow -->
+  <line x1="242" y1="305" x2="268" y2="305" stroke="#ffdd44" stroke-width="1.5"
+        stroke-dasharray="4,3" marker-end="url(#a-y)"/>
+
+  <!-- ─── CROSSBAR — HOVER SEGMENT ─── -->
+  <!-- Channel running left-right at y=295 to y=320 -->
+  <rect x="238" y="293" width="445" height="36" rx="6"
+        fill="#0a1820" stroke="#4af0c4" stroke-width="2.5"/>
+
+  <!-- HOVER SEGMENT label above crossbar -->
+  <text x="460" y="286" fill="#4af0c4" font-size="12" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle" letter-spacing="3">HOVER SEGMENT</text>
+  <text x="460" y="276" fill="#2a6a5a" font-size="8" font-family="monospace"
+        text-anchor="middle">Slide LEFT through this bar to reach forward flight</text>
+
+  <!-- Three detent positions in crossbar -->
+  <!-- PRECISION HOVER — right end of crossbar (first position entered from brake side) -->
+  <line x1="310" y1="291" x2="310" y2="331" stroke="#4af0c4" stroke-width="2.0"/>
+  <circle cx="310" cy="311" r="9" fill="#4af0c4" stroke="#0a1820" stroke-width="2.0"/>
+  <circle cx="310" cy="311" r="3" fill="#071018"/>
+
+  <!-- SLIDE — centre of crossbar -->
+  <line x1="460" y1="291" x2="460" y2="331" stroke="#ffdd44" stroke-width="2.0"/>
+  <circle cx="460" cy="311" r="9" fill="#ffdd44" stroke="#0a1820" stroke-width="2.0"/>
+  <circle cx="460" cy="311" r="3" fill="#071018"/>
+
+  <!-- AGGRESSIVE HOVER — left end of crossbar (closest to thrust run exit) -->
+  <line x1="610" y1="291" x2="610" y2="331" stroke="#ff9944" stroke-width="2.0"/>
+  <circle cx="610" cy="311" r="9" fill="#ff9944" stroke="#0a1820" stroke-width="2.0"/>
+  <circle cx="610" cy="311" r="3" fill="#071018"/>
+
+  <!-- ~1cm spacing arrows between detents -->
+  <!-- PRECISION ← SLIDE arrow -->
+  <line x1="438" y1="311" x2="324" y2="311" stroke="#4af0c4" stroke-width="0.8"
+        stroke-dasharray="3,2" marker-end="url(#a-c)"/>
+  <text x="381" y="303" fill="#3a7a6a" font-size="7" font-family="monospace"
+        text-anchor="middle">~1 cm</text>
+
+  <!-- SLIDE → AGGRESSIVE arrow -->
+  <line x1="482" y1="311" x2="596" y2="311" stroke="#ff9944" stroke-width="0.8"
+        stroke-dasharray="3,2" marker-end="url(#a-o)"/>
+  <text x="539" y="303" fill="#7a4a1a" font-size="7" font-family="monospace"
+        text-anchor="middle">~1 cm</text>
+
+  <!-- Labels below crossbar -->
+  <!-- PRECISION HOVER — rightmost -->
+  <text x="310" y="347" fill="#4af0c4" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">PRECISION</text>
+  <text x="310" y="359" fill="#4af0c4" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">HOVER</text>
+  <text x="310" y="373" fill="#3a7a6a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">0.40 Hz · sinusoidal</text>
+  <text x="310" y="384" fill="#3a7a6a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">S1 · tight hold</text>
+  <text x="310" y="396" fill="#2a5a4a" font-size="7" font-family="monospace"
+        text-anchor="middle">← enter from brake side</text>
+
+  <!-- SLIDE — centre -->
+  <text x="460" y="347" fill="#ffdd44" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">SLIDE</text>
+  <text x="460" y="359" fill="#ffdd44" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">MODE</text>
+  <text x="460" y="373" fill="#7a6a2a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">altitude hold only</text>
+  <text x="460" y="384" fill="#7a6a2a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">S1-S2 · momentum coasts</text>
+  <text x="460" y="396" fill="#5a5020" font-size="7" font-family="monospace"
+        text-anchor="middle">default / centre detent</text>
+
+  <!-- AGGRESSIVE HOVER — leftmost -->
+  <text x="610" y="347" fill="#ff9944" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">AGGRESSIVE</text>
+  <text x="610" y="359" fill="#ff9944" font-size="10" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle">HOVER</text>
+  <text x="610" y="373" fill="#7a4a1a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">0.43 Hz · HOVER-MAX</text>
+  <text x="610" y="384" fill="#7a4a1a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">S2-S3 · full authority</text>
+  <text x="610" y="396" fill="#5a3010" font-size="7" font-family="monospace"
+        text-anchor="middle">exit to thrust side →</text>
+
+  <!-- TWIST GRIP annotation box (above crossbar, centre) -->
+  <rect x="340" y="235" width="240" height="36" rx="3"
+        fill="#071828" stroke="#2a5a4a" stroke-width="0.8"/>
+  <text x="460" y="250" fill="#4af0c4" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle" letter-spacing="1">TWIST GRIP — ALL HOVER POSITIONS</text>
+  <text x="460" y="263" fill="#7ababa" font-size="8" font-family="monospace"
+        text-anchor="middle">Up = climb · Neutral wrist = hold altitude · Down = descend</text>
+  <!-- leader to crossbar -->
+  <line x1="460" y1="271" x2="460" y2="288" stroke="#2a5a4a" stroke-width="0.8"
+        stroke-dasharray="3,2" marker-end="url(#a-c)"/>
+
+  <!-- ─── JOG CORNER 2: CROSSBAR → THRUST RUN ─── -->
+  <path d="M 683,303 Q 683,288 698,288 L 696,288"
+        fill="none" stroke="#44aaff" stroke-width="2.5"/>
+  <!-- Hard stop marker -->
+  <rect x="679" y="289" width="9" height="36" rx="3" fill="#44aaff"/>
+  <text x="700" y="305" fill="#44aaff" font-size="8" font-family="monospace">HARD STOP</text>
+  <text x="700" y="316" fill="#44aaff" font-size="8" font-family="monospace">JOG FWD ↓</text>
+  <!-- Jog direction arrow -->
+  <line x1="698" y1="330" x2="698" y2="358" stroke="#44aaff" stroke-width="1.5"
+        stroke-dasharray="4,3" marker-end="url(#a-b)"/>
+
+  <!-- ─── THRUST RUN (left column, bottom section) ─── -->
+  <rect x="680" y="348" width="36" height="214" rx="6"
+        fill="#081828" stroke="#44aaff" stroke-width="2.0"/>
+
+  <!-- Entry note at top of thrust column -->
+  <text x="698" y="366" fill="#44aaff" font-size="7.5" font-family="monospace"
+        text-anchor="middle">very low</text>
+  <text x="698" y="377" fill="#44aaff" font-size="7.5" font-family="monospace"
+        text-anchor="middle">thrust</text>
+
+  <!-- Direction arrow inside thrust column -->
+  <line x1="698" y1="388" x2="698" y2="528" stroke="#44aaff" stroke-width="1.0"
+        stroke-dasharray="8,5" marker-end="url(#a-b)"/>
+
+  <!-- Hard stop at bottom (full push / max thrust) -->
+  <rect x="676" y="559" width="44" height="9" rx="3" fill="#44aaff"/>
+  <text x="698" y="578" fill="#44aaff" font-size="8" font-family="monospace"
+        text-anchor="middle">FULL PUSH · MAX THRUST</text>
+
+  <!-- Graduation marks on thrust column -->
+  <line x1="680" y1="395" x2="716" y2="395" stroke="#224488" stroke-width="1.0"/>
+  <line x1="680" y1="430" x2="716" y2="430" stroke="#224488" stroke-width="1.0"/>
+  <line x1="680" y1="466" x2="716" y2="466" stroke="#224488" stroke-width="1.0"/>
+  <line x1="680" y1="502" x2="716" y2="502" stroke="#224488" stroke-width="1.0"/>
+  <line x1="680" y1="535" x2="716" y2="535" stroke="#224488" stroke-width="1.0"/>
+  <text x="726" y="398" fill="#2a4a8a" font-size="7.5" font-family="monospace">CREEP ~40 km/h</text>
+  <text x="726" y="433" fill="#2a4a8a" font-size="7.5" font-family="monospace">CRUISE 80 km/h</text>
+  <text x="726" y="469" fill="#2a4a8a" font-size="7.5" font-family="monospace">HETERO 140 km/h</text>
+  <text x="726" y="505" fill="#2a4a8a" font-size="7.5" font-family="monospace">SPRINT 220 km/h</text>
+  <text x="726" y="538" fill="#ff4444" font-size="7.5" font-family="monospace">RCP ▼ GUARD 400+ km/h</text>
+  <!-- RCP guard bar -->
+  <rect x="678" y="528" width="40" height="4" fill="#ff4444" rx="1" opacity="0.7"/>
+
+  <!-- FORWARD FLIGHT label -->
+  <text x="620" y="462" fill="#44aaff" font-size="13" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle" letter-spacing="2"
+        transform="rotate(-90,620,462)">FORWARD FLIGHT</text>
+
+  <!-- Forward flight annotation box -->
+  <rect x="300" y="415" width="300" height="120" rx="3"
+        fill="#080d18" stroke="#1a2a4a" stroke-width="0.8"/>
+  <text x="450" y="431" fill="#44aaff" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle" letter-spacing="1">FORWARD FLIGHT PHASE</text>
+  <line x1="308" y1="435" x2="592" y2="435" stroke="#1a2a4a" stroke-width="0.5"/>
+  <text x="310" y="448" fill="#2a4a8a" font-size="8" font-family="monospace">Push forward = more thrust</text>
+  <text x="310" y="460" fill="#2a4a8a" font-size="8" font-family="monospace">Stick: pitch + roll (decoupled)</text>
+  <text x="310" y="472" fill="#2a4a8a" font-size="8" font-family="monospace">Pedals: yaw (decoupled)</text>
+  <text x="310" y="484" fill="#2a4a8a" font-size="8" font-family="monospace">Twist grip: fine trim ±10 km/h</text>
+  <text x="310" y="496" fill="#ff4444" font-size="8" font-family="monospace">RCP zone: flip guard before entering</text>
+  <text x="310" y="508" fill="#aa2222" font-size="7.5" font-family="monospace">30-second burst limit — thermal governed</text>
+  <text x="310" y="522" fill="#2a4a8a" font-size="7.5" font-family="monospace">Slow push = smooth transition · Fast = snap rate</text>
+
+  <!-- ─── LEVER KNOB shown at SLIDE position ─── -->
+  <circle cx="460" cy="311" r="18" fill="#1a3a2a" stroke="#4af0c4" stroke-width="2.5"/>
+  <circle cx="460" cy="311" r="7" fill="#4af0c4"/>
+  <!-- Twist grip cylinder on top of knob -->
+  <rect x="446" y="291" width="28" height="10" rx="5"
+        fill="#1a4a3a" stroke="#4af0c4" stroke-width="1.0"/>
+  <text x="460" y="299" fill="#4af0c4" font-size="6.5" font-family="monospace"
+        text-anchor="middle">TWIST</text>
+
+  <!-- ─── LEVER POSITION ANNOTATION ─── -->
+  <text x="460" y="217" fill="#4af0c4" font-size="8" font-family="monospace"
+        text-anchor="middle">LEVER SHOWN HERE</text>
+  <text x="460" y="228" fill="#ffdd44" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle">SLIDE MODE (default entry)</text>
+
+  <!-- ─── ROLL/YAW COUPLING SWITCH ─── -->
+  <rect x="760" y="95" width="270" height="90" rx="4"
+        fill="#071828" stroke="#2a5a4a" stroke-width="1.0"/>
+  <text x="895" y="112" fill="#4af0c4" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle" letter-spacing="1">ROLL / YAW COUPLING</text>
+  <line x1="768" y1="116" x2="1022" y2="116" stroke="#1a3a2a" stroke-width="0.5"/>
+  <rect x="856" y="122" width="80" height="18" rx="9"
+        fill="#0a1820" stroke="#4af0c4" stroke-width="1.0"/>
+  <circle cx="884" cy="131" r="8" fill="#4af0c4"/>
+  <text x="880" y="135" fill="#071018" font-size="7" font-family="monospace"
+        font-weight="600">DC</text>
+  <text x="904" y="135" fill="#3a7a6a" font-size="7" font-family="monospace">CP</text>
+  <text x="768" y="135" fill="#7ababa" font-size="8" font-family="monospace">DECOUPLE</text>
+  <text x="952" y="135" fill="#7ababa" font-size="8" font-family="monospace">COUPLE</text>
+  <text x="895" y="154" fill="#5a8a7a" font-size="8" font-family="monospace"
+        text-anchor="middle">Left = decouple · Right = couple</text>
+  <text x="895" y="166" fill="#3a6a5a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">Default: DECOUPLE · Tactile toggle</text>
+
+  <!-- ─── Z-PATH SUMMARY (right side panel) ─── -->
+  <rect x="760" y="210" width="270" height="350" rx="4"
+        fill="#071018" stroke="#1a3040" stroke-width="0.8"/>
+  <text x="895" y="226" fill="#ffaa44" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle" letter-spacing="1">Z-GATE TRAVEL SEQUENCE</text>
+  <line x1="768" y1="230" x2="1022" y2="230" stroke="#1a3040" stroke-width="0.5"/>
+
+  <text x="895" y="250" fill="#ff6644" font-size="9" font-family="monospace" text-anchor="middle">1. PULL BACK</text>
+  <text x="895" y="262" fill="#8a4a3a" font-size="7.5" font-family="monospace" text-anchor="middle">airbrake · proportional</text>
+
+  <line x1="790" y1="274" x2="1000" y2="274" stroke="#2a2a20" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <text x="895" y="292" fill="#ff6644" font-size="9" font-family="monospace" text-anchor="middle">further pull = harder stop</text>
+  <text x="895" y="304" fill="#8a4a3a" font-size="7.5" font-family="monospace" text-anchor="middle">snap pull = emergency</text>
+
+  <line x1="790" y1="316" x2="1000" y2="316" stroke="#2a2a20" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <text x="895" y="334" fill="#ffdd44" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle">2. NEUTRAL · JOG LEFT</text>
+  <text x="895" y="346" fill="#7a6a2a" font-size="7.5" font-family="monospace" text-anchor="middle">hard stop · enter hover</text>
+
+  <line x1="790" y1="358" x2="1000" y2="358" stroke="#2a2a20" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <text x="895" y="376" fill="#4af0c4" font-size="8" font-family="monospace" text-anchor="middle">3. RIGHT = PRECISION</text>
+  <text x="895" y="388" fill="#ffdd44" font-size="8" font-family="monospace" text-anchor="middle">   CENTRE = SLIDE</text>
+  <text x="895" y="400" fill="#ff9944" font-size="8" font-family="monospace" text-anchor="middle">   LEFT = AGGRESSIVE</text>
+  <text x="895" y="412" fill="#3a6a5a" font-size="7" font-family="monospace" text-anchor="middle">twist grip = altitude</text>
+
+  <line x1="790" y1="424" x2="1000" y2="424" stroke="#1a2a2a" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <text x="895" y="442" fill="#44aaff" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="600" text-anchor="middle">4. HARD STOP · JOG FWD</text>
+  <text x="895" y="454" fill="#2a4a8a" font-size="7.5" font-family="monospace" text-anchor="middle">exit hover · enter thrust</text>
+
+  <line x1="790" y1="466" x2="1000" y2="466" stroke="#1a2a2a" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <text x="895" y="484" fill="#44aaff" font-size="9" font-family="monospace" text-anchor="middle">5. PUSH FORWARD</text>
+  <text x="895" y="496" fill="#2a4a8a" font-size="7.5" font-family="monospace" text-anchor="middle">thrust · forward flight</text>
+  <text x="895" y="508" fill="#2a4a8a" font-size="7.5" font-family="monospace" text-anchor="middle">further = faster</text>
+
+  <line x1="790" y1="520" x2="1000" y2="520" stroke="#1a2a2a" stroke-width="0.5" stroke-dasharray="3,3"/>
+
+  <!-- Three word summary -->
+  <text x="895" y="538" fill="#ffaa44" font-size="9" font-family="'Rajdhani',sans-serif"
+        font-weight="700" text-anchor="middle" letter-spacing="1">PULL · JOG · PUSH</text>
+  <text x="895" y="550" fill="#7a6a3a" font-size="7.5" font-family="monospace"
+        text-anchor="middle">brake · hover · fly</text>
+
+  <!-- ─── COLOUR ZONE BANDS alongside columns ─── -->
+  <!-- Brake zone band -->
+  <rect x="185" y="98" width="8" height="196" rx="3" fill="#ff6644" opacity="0.4"/>
+  <!-- Hover zone band -->
+  <rect x="238" y="291" width="445" height="8" rx="3" fill="#4af0c4" opacity="0.4"/>
+  <!-- Thrust zone band -->
+  <rect x="726" y="348" width="8" height="214" rx="3" fill="#44aaff" opacity="0.4"/>
+
+</svg>
+</div>
+
+<!-- SPEC PANELS -->
+<div class="spec-grid">
+  <div class="spec-col s-air">
+    <h4>AIRBRAKE</h4>
+    <div class="spec-row"><span>Input</span><span class="spec-val">Pull BACK from neutral</span></div>
+    <div class="spec-row"><span>Magnitude</span><span class="spec-val">Proportional to pull</span></div>
+    <div class="spec-row"><span>Stick fwd/aft</span><span class="spec-val">Pitch attitude only</span></div>
+    <div class="spec-row"><span>Stick L/R</span><span class="spec-val">Roll only</span></div>
+    <div class="spec-row"><span>Speed change</span><span class="spec-val">Drag + gravity only</span></div>
+    <div class="spec-row"><span>Twist grip</span><span class="spec-val">Inactive</span></div>
+    <div class="spec-row"><span>Slow pull</span><span class="spec-val">Gradual decel</span></div>
+    <div class="spec-row"><span>Snap pull</span><span class="spec-val sv3">Emergency stop S3</span></div>
+  </div>
+  <div class="spec-col s-pre">
+    <h4>PRECISION HOVER</h4>
+    <div class="spec-row"><span>Position</span><span class="spec-val">Right end of crossbar</span></div>
+    <div class="spec-row"><span>Frequency</span><span class="spec-val">0.40 Hz</span></div>
+    <div class="spec-row"><span>Waveform</span><span class="spec-val">Sinusoidal</span></div>
+    <div class="spec-row"><span>Recovery AoA</span><span class="spec-val">32°</span></div>
+    <div class="spec-row"><span>Altitude</span><span class="spec-val sv1">Twist grip rate</span></div>
+    <div class="spec-row"><span>Stick</span><span class="spec-val">Horiz. translation</span></div>
+    <div class="spec-row"><span>Pedals</span><span class="spec-val">Yaw / heading</span></div>
+    <div class="spec-row"><span>S-rating</span><span class="spec-val sv1">S1 — smooth</span></div>
+  </div>
+  <div class="spec-col s-sli">
+    <h4>SLIDE MODE</h4>
+    <div class="spec-row"><span>Position</span><span class="spec-val">Centre of crossbar</span></div>
+    <div class="spec-row"><span>FCC</span><span class="spec-val">Altitude hold only</span></div>
+    <div class="spec-row"><span>Thrust</span><span class="spec-val">Zero — drag bleeds spd</span></div>
+    <div class="spec-row"><span>Altitude</span><span class="spec-val sv1">Twist grip rate</span></div>
+    <div class="spec-row"><span>Stick</span><span class="spec-val">Pitch + roll</span></div>
+    <div class="spec-row"><span>Duration</span><span class="spec-val">~60 sec @ 140 km/h</span></div>
+    <div class="spec-row"><span>Vs alert</span><span class="spec-val sv2">Lever buzz @ 1.2×Vs</span></div>
+    <div class="spec-row"><span>S-rating</span><span class="spec-val sv1">S1-S2</span></div>
+  </div>
+  <div class="spec-col s-agg">
+    <h4>AGGRESSIVE HOVER</h4>
+    <div class="spec-row"><span>Position</span><span class="spec-val">Left end of crossbar</span></div>
+    <div class="spec-row"><span>Frequency</span><span class="spec-val">0.43 Hz</span></div>
+    <div class="spec-row"><span>Recovery AoA</span><span class="spec-val">42° (maximised)</span></div>
+    <div class="spec-row"><span>Phase</span><span class="spec-val">0/45/90/135</span></div>
+    <div class="spec-row"><span>Altitude</span><span class="spec-val sv1">Twist grip rate</span></div>
+    <div class="spec-row"><span>Lift margin</span><span class="spec-val sv1">59% above req.</span></div>
+    <div class="spec-row"><span>SAR capable</span><span class="spec-val sv1">Yes — 4,000m OGE</span></div>
+    <div class="spec-row"><span>S-rating</span><span class="spec-val sv3">S2-S3</span></div>
+  </div>
+  <div class="spec-col s-fwd">
+    <h4>FORWARD FLIGHT</h4>
+    <div class="spec-row"><span>Entry</span><span class="spec-val">Very low thrust</span></div>
+    <div class="spec-row"><span>Thrust</span><span class="spec-val">Proportional to push</span></div>
+    <div class="spec-row"><span>Stick</span><span class="spec-val">Pitch + roll decoupled</span></div>
+    <div class="spec-row"><span>Pedals</span><span class="spec-val">Yaw decoupled</span></div>
+    <div class="spec-row"><span>Twist grip</span><span class="spec-val">Fine trim ±10 km/h</span></div>
+    <div class="spec-row"><span>RCP zone</span><span class="spec-val sv3">Guarded — last 5%</span></div>
+    <div class="spec-row"><span>Max speed</span><span class="spec-val">407-424 km/h RCP</span></div>
+    <div class="spec-row"><span>S-rating</span><span class="spec-val sv1">S1-S2 · S3 RCP</span></div>
+  </div>
+</div>
+
+<!-- SWITCH PANEL -->
+<div class="sw-row">
+  <h4>LEFT ARMREST SWITCHES</h4>
+  <div class="sw-item">
+    <div class="sw-box">R/Y</div>
+    <div>Roll / Yaw coupling<br><span style="color:#4af0c4;font-size:8px;">Toggle · Left=decouple · Right=couple · Default: decouple</span></div>
+  </div>
+  <div class="sw-item">
+    <div class="sw-box">HLD</div>
+    <div>Hover position lock<br><span style="color:#4af0c4;font-size:8px;">GPS + baro + LiDAR · Press to engage / release</span></div>
+  </div>
+  <div class="sw-item">
+    <div class="sw-box" style="border-color:#ff4444;color:#ff4444;">EMG</div>
+    <div>Emergency descent (guarded)<br><span style="color:#ff4444;font-size:8px;">Flip cover · Press · Max rate descent · Any mode</span></div>
+  </div>
+  <div class="sw-item">
+    <div class="sw-box" style="border-color:#ffdd44;color:#ffdd44;">PAT</div>
+    <div>Patient lock indicator<br><span style="color:#ffdd44;font-size:8px;">Lit = S3 locked · Two-step override only</span></div>
+  </div>
+  <div class="sw-item" style="margin-left:auto;font-size:9px;color:#3a6a5a;line-height:1.8;text-align:right;">
+    <span style="color:#ff6644;font-weight:bold;">PULL BACK</span> = brake &nbsp;·&nbsp;
+    <span style="color:#ffdd44;font-weight:bold;">JOG LEFT</span> = hover &nbsp;·&nbsp;
+    <span style="color:#44aaff;font-weight:bold;">PUSH FORWARD</span> = fly
+  </div>
+</div>
+
+</div>
+</body>
+</html>

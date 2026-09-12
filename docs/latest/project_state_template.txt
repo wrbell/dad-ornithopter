@@ -1,0 +1,58 @@
+MCO-1D PROJECT STATE
+====================
+Last updated: 2026-06-07
+Maintained by: [your name]
+
+CURRENT SOFTWARE
+  wave_library.py version : Rev-H-A-B-C-D-E-F-G-H-I  2026-06-07
+  main.py version         : v4 final (intent control + unified lever)
+  intent control          : mco_intent_control.py v1
+
+FLIGHT COUNT
+  Total flights    : 0
+  Last flight date : not yet flown
+
+UNIFIED LEVER CONFIGURATION (Rev I)
+  Full forward  (0%)   : SPRINT  — 3.0 Hz, 135° sweep, −8° anhedral
+  Fwd-mid      (25%)   : POWERED CRUISE — 2.0 Hz, 112° sweep
+  Mid-fwd      (38%)   : STD CRUISE — 1.1 Hz, 76° sweep
+  Mid detent   (50%)   : TRIM — 0.3 Hz, 60° sweep (hold altitude)
+  Mid-aft      (60%)   : CLEAN GLIDE — 0.1 Hz, 60°, +4° dihedral
+  Aft-mid      (70%)   : APPROACH — 0.3 Hz, 60°, +13° dihedral
+  Far aft      (80%)   : STEEP DESCENT — 0.4 Hz, 75°, +26° dihedral
+  Full aft     (100%)  : MAX AIRBRAKE — 1.0 Hz, 135°, +55° dihedral
+
+VALIDATION TEST STATUS
+  T1  Metachronal 90° cruise          : PENDING
+  T2  Unified lever sweep/freq/dih    : PENDING
+  T3  Lever detent hysteresis         : PENDING
+  T4  Sprint zone (0–15%)             : PENDING
+  T5  Clean glide (55–65%)            : PENDING
+  T6  Approach zone (65–75%)          : PENDING
+  T7  Steep descent (75–85%)          : PENDING
+  T8  Max airbrake (95–100%)          : PENDING
+  T9  CF-1 clap-and-fling             : PENDING
+  T10 Stoop macro — Boyd pullout      : PENDING
+  T11 Manoeuvre modes MT-1 through MT-4: PENDING
+  T12 Mountain mode                   : PENDING
+  T13 Partial stow GS-1 cruise glide  : PENDING
+  T14 Intent layer — mode transitions : PENDING
+
+CONFIRMED PARAMETER CHANGES FROM TESTING
+  (none yet — add lines here as validated)
+  Example: PHASE_OFFSET_DEG: 90 → 82  (Flight 7, smoother cascade)
+
+OPEN ITEMS
+  O-C1: implement run_cf1_clap_fling() in wave_library.py
+  O-C2: STOOP priority interrupt to FCC (safety critical)
+  O-D7: GPS terrain trigger for mountain mode
+  O-D8: T-MT1 mountain mode validation
+  O-F1: MCO-1A clamshell fairing design
+
+HOW TO USE THIS FILE
+  Update after every flight session.
+  At start of each Claude conversation:
+    1. Paste this file
+    2. Upload current wave_library.py
+    3. Upload most recent flight summary .txt files
+    4. Describe what you want help with
