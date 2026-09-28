@@ -3,7 +3,7 @@
 scripts/generate_3dprint_wing_system.py
 =======================================
 Parametrically models and exports the 3D-printable Selig S1223 Starboard Wing System
-with aggressive weight-reduction internal architecture, Warren-Truss rib webbing,
+with aggressive weight-reduction internal architecture, calibrated oval rib lightening holes,
 30% chord D-box cutoff, 0.40mm ultra-thin skin, and a reinforced 3.0 mm skeletonized trailing edge:
 
   1. Starboard Airfoil Mount with weight-relief coring pockets, 3x ⌀2.40mm spar bores,
@@ -11,9 +11,9 @@ with aggressive weight-reduction internal architecture, Warren-Truss rib webbing
   2. 25 cm (250 mm) Wing Segment with 30% chord D-box (0.40mm single perimeter skin),
      inboard male alignment lip (Z=0 to +4.50mm), outboard female stepped socket
      (Z=-250mm, depth 5.0mm), 3x ⌀2.40mm spar bores, and open aft bays featuring
-     Warren-truss internal rib webbing.
+     calibrated oval lightening holes on all 6 ribs (inboard, intermediate, and outboard).
   3. Bilateral Aerodynamic Wingtips (True Starboard and Port) with inboard male lip
-     (Z=0 to +4.50mm), 30% chord hollow D-box, Warren-truss rib webbing, 100% flat bed contact,
+     (Z=0 to +4.50mm), 30% chord hollow D-box, calibrated rib lightening ovals, 100% flat bed contact,
      and a reinforced 3.0 mm skeletonized trailing edge (minimum 3.0mm chordwise rail width
      and minimum 3.0mm vertical thickness).
   4. Quick-Print Joint Coupler spline with 3x ⌀2.40mm bores.
@@ -196,11 +196,11 @@ def generate_wing_system():
 
     # 2E. Open bays in back 70%: hollowing from X = 49.5 mm to X = (143.66 - TE_LAND) mm (leaving intact 3.0mm trailing edge)
     bay_intervals = [
-        (-5.0, -49.3),
-        (-50.7, -99.3),
-        (-100.7, -149.3),
-        (-150.7, -199.3),
-        (-200.7, -245.0),
+        (-5.0, -49.1),
+        (-50.9, -99.1),
+        (-100.9, -149.1),
+        (-150.9, -199.1),
+        (-200.9, -245.0),
     ]
     x_seg_te_cut = 143.659 - TE_LAND
     for z_start, z_end in bay_intervals:
@@ -210,34 +210,14 @@ def generate_wing_system():
             .box(x_seg_te_cut - 49.5, 40.0, z_len).val()
         seg_solid = seg_solid.cut(bay_cutter)
 
-    # 2E-ii. Warren-Truss Internal Rib Webbing (midlines Z = -50, -100, -150, -200 mm)
-    truss_triangles = [
-        [(51.5, 'top', -0.9), (61.5, 'top', -0.9), (56.5, 'bot', 1.0)],
-        [(58.0, 'bot', 1.0), (68.5, 'bot', 1.0), (63.5, 'top', -0.9)],
-        [(65.5, 'top', -0.9), (75.0, 'top', -0.9), (70.5, 'bot', 1.0)],
-        [(72.5, 'bot', 1.0), (82.0, 'bot', 1.0), (77.0, 'top', -0.9)],
-        [(79.0, 'top', -0.9), (87.0, 'top', -0.9), (84.5, 'bot', 1.0)],
-        [(94.5, 'top', -0.8), (105.0, 'top', -0.8), (99.5, 'bot', 0.9)],
-        [(102.0, 'bot', 0.9), (113.0, 'bot', 0.9), (107.5, 'top', -0.8)],
-        [(110.0, 'top', -0.8), (121.0, 'top', -0.8), (115.5, 'bot', 0.8)],
-        [(118.0, 'bot', 0.8), (132.0, 'bot', 0.7), (125.0, 'top', -0.7)],
-    ]
-    for z_rib in [-50.0, -100.0, -150.0, -200.0]:
-        for tri in truss_triangles:
-            pts_tri = []
-            for x, ref, off in tri:
-                ybot, ytop = get_y_bounds(x, poly_outer)
-                y = (ytop + off) if ref == 'top' else (ybot + off)
-                pts_tri.append((x, y))
-            pts_tri.append(pts_tri[0])
-            w_tri = cq.Wire.makePolygon([cq.Vector(p[0], p[1], z_rib - 2.0) for p in pts_tri])
-            cutter = cq.Workplane('XY').add(cq.Face.makeFromWires(w_tri)).extrude(4.0).val()
-            seg_solid = seg_solid.cut(cutter)
-
-    # 2E-iii. Cut Root Rib Ovals on Inboard (Z=0) and Outboard (Z=-SPAN_SEG) Connector Ribs
-    for z_conn in [0.0, -SPAN_SEG]:
+    # 2E-ii. Cut Calibrated Oval Lightening Holes on ALL Ribs
+    # (Inboard connector Z=0, Intermediate ribs Z=-50, -100, -150, -200 mm, and Outboard connector Z=-SPAN_SEG)
+    # Replaces small fragile struts with robust continuous-flange oval lightening holes,
+    # identical in architecture to the mount and wingtip ribs to guarantee survival during support removal.
+    rib_stations = [0.0, -50.0, -100.0, -150.0, -200.0, -SPAN_SEG]
+    for z_rib in rib_stations:
         for hx, hy, rx, ry in ROOT_RIB_OVALS:
-            cutter = cq.Workplane('XY').transformed(offset=(hx, hy, z_conn - 6.0)).ellipse(rx, ry).extrude(12.0).val()
+            cutter = cq.Workplane('XY').transformed(offset=(hx, hy, z_rib - 6.0)).ellipse(rx, ry).extrude(12.0).val()
             seg_solid = seg_solid.cut(cutter)
 
     # 2F. Bore 3x spar through-holes (Mid spar ⌀10.50mm, Fwd & Aft ⌀2.40mm)
