@@ -38,7 +38,15 @@ class PixhawkBridge:
         self.roll_deg     = 0.0
         self.pitch_deg    = 0.0
         self.rc_channels  = [1500]*8
+        self.payload_release_cmd = False
+        self.gripper_state = 'closed'
+        self.comfort_mode = False
+        self.sensitive_cargo = False
+        self.dragonfly_launch_cmd = False
+        self.pigeon_climb_cmd = False
+        self.climb_angle_target = 80.0
         self._running     = False
+
 
         if MAV_AVAILABLE:
             try:
@@ -62,6 +70,7 @@ class PixhawkBridge:
                 if mt == "VFR_HUD":
                     self.airspeed_ms = msg.airspeed
                 elif mt == "ATTITUDE":
+                    import math
                     self.roll_deg  = math.degrees(msg.roll)
                     self.pitch_deg = math.degrees(msg.pitch)
                 elif mt == "HEARTBEAT":
@@ -73,6 +82,15 @@ class PixhawkBridge:
                         msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
                         msg.chan7_raw, msg.chan8_raw,
                     ]
+                elif mt == "COMMAND_LONG":
+                    # MAV_CMD_DO_GRIPPER = 211
+                    if getattr(msg, 'command', 0) in (211, getattr(mavutil.mavlink, 'MAV_CMD_DO_GRIPPER', 211)):
+                        # param2: 0 = release, 1 = grab
+                        if getattr(msg, 'param2', 0) == 0:
+                            self.payload_release_cmd = True
+                            self.gripper_state = 'released'
+                        else:
+                            self.gripper_state = 'grabbed'
 
     def send_heartbeat(self):
         if self._conn:
@@ -87,17 +105,76 @@ class PixhawkBridge:
             text_bytes = text[:50].encode().ljust(50, b"\0")
             self._conn.mav.statustext_send(severity, text_bytes)
 
+    def send_payload_status(self, payload_kg, delta_cg_mm, n_limit_g):
+        """Broadcast payload weight and structural G-limit via MAVLink status text."""
+        msg_str = f"CARGO:{payload_kg:.2f}kg CG:{delta_cg_mm:+.1f}mm Nlim:{n_limit_g:.1f}g"
+        self.send_statustext(msg_str, severity=6)
+
+    def send_energy_stewardship(self, cot, wh_per_km, carsons_speed_ms):
+        """Broadcast energy stewardship and Carson's speed via MAVLink status text."""
+        msg_str = f"ECO:CoT {cot:.2f} {wh_per_km:.0f}Wh/km Vbr:{carsons_speed_ms:.1f}m/s"
+        self.send_statustext(msg_str, severity=6)
+
+    def send_ride_comfort_status(self, active, vib_red_pct, cabin_rms_g, residual_my_Nm):
+        """Broadcast ride comfort and active heave/pitch damping status via MAVLink."""
+        act_str = "ON" if active else "OFF"
+        msg_str = f"RIDE:{act_str} VibRed:{vib_red_pct:.0f}% RMS:{cabin_rms_g:.3f}g My:{residual_my_Nm:+.2f}Nm"
+        self.send_statustext(msg_str, severity=6)
+
+    def set_comfort_mode(self, enabled=True):
+        """Enable or disable passenger comfort mode."""
+        with self._lock:
+            self.comfort_mode = bool(enabled)
+
+    def set_sensitive_cargo(self, enabled=True):
+        """Enable or disable sensitive/fragile cargo protection mode."""
+        with self._lock:
+            self.sensitive_cargo = bool(enabled)
+
+    def trigger_cargo_release(self):
+        """Trigger local cargo release hook pulse."""
+        with self._lock:
+            self.payload_release_cmd = True
+            self.gripper_state = 'released'
+
+    def trigger_dragonfly_launch(self):
+        """Trigger H-LA-1 Dragonfly 0° in-phase super-lift launch burst."""
+        with self._lock:
+            self.dragonfly_launch_cmd = True
+
+    def trigger_pigeon_climb(self, angle_deg=80.0):
+        """Trigger H-LA-3 Pigeon clap-and-peel steep climb corridor."""
+        with self._lock:
+            self.pigeon_climb_cmd = True
+            self.climb_angle_target = float(angle_deg)
+
     def get_state(self):
         with self._lock:
+            cmd = self.payload_release_cmd
+            df_cmd = self.dragonfly_launch_cmd
+            pg_cmd = self.pigeon_climb_cmd
+            angle_tgt = self.climb_angle_target
+            # Reset edge-triggered drop/burst commands upon read
+            self.payload_release_cmd = False
+            self.dragonfly_launch_cmd = False
+            self.pigeon_climb_cmd = False
             return {
-                "airspeed_ms":  self.airspeed_ms,
-                "armed":        self.armed,
-                "roll_deg":     self.roll_deg,
-                "pitch_deg":    self.pitch_deg,
-                "rc_channels":  list(self.rc_channels),
+                "airspeed_ms":          self.airspeed_ms,
+                "armed":                self.armed,
+                "roll_deg":             self.roll_deg,
+                "pitch_deg":            self.pitch_deg,
+                "rc_channels":          list(self.rc_channels),
+                "payload_release_cmd":  cmd,
+                "dragonfly_launch_cmd": df_cmd,
+                "pigeon_climb_cmd":     pg_cmd,
+                "climb_angle_target":   angle_tgt,
+                "gripper_state":        self.gripper_state,
+                "comfort_mode":         self.comfort_mode,
+                "sensitive_cargo":      self.sensitive_cargo,
             }
 
     def close(self):
         self._running = False
+
         if self._conn:
             self._conn.close()

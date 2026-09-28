@@ -25,19 +25,25 @@ import asyncio
 import json
 import os
 import sys
-import anthropic
-from aiohttp import web
+try:
+    import anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    anthropic = None
+    HAS_ANTHROPIC = False
+
+try:
+    from aiohttp import web
+    HAS_AIOHTTP = True
+except ImportError:
+    web = None
+    HAS_AIOHTTP = False
 
 API_KEY   = os.environ.get('ANTHROPIC_API_KEY', '')
 PROXY_PORT= 5759
 CORS_ORIGIN = '*'   # restrict to localhost in production
 
-if not API_KEY:
-    print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
-    print("  export ANTHROPIC_API_KEY=sk-ant-...")
-    sys.exit(1)
-
-client = anthropic.Anthropic(api_key=API_KEY)
+client = anthropic.Anthropic(api_key=API_KEY) if (HAS_ANTHROPIC and API_KEY) else None
 
 
 async def handle_anthropic(request):
@@ -95,6 +101,16 @@ async def handle_options(request):
 
 
 async def main():
+    global client
+    if not HAS_ANTHROPIC or not HAS_AIOHTTP:
+        print("ERROR: anthropic or aiohttp not installed. Run: pip install aiohttp anthropic")
+        sys.exit(1)
+    if not API_KEY:
+        print("ERROR: ANTHROPIC_API_KEY environment variable not set.")
+        print("  export ANTHROPIC_API_KEY=sk-ant-...")
+        sys.exit(1)
+    if client is None:
+        client = anthropic.Anthropic(api_key=API_KEY)
     app = web.Application()
     app.router.add_post('/api/anthropic', handle_anthropic)
     app.router.add_options('/api/anthropic', handle_options)

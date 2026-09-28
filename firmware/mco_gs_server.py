@@ -110,11 +110,9 @@ class MCOGSServer:
                     if not line:
                         break
                     msg = json.loads(line.decode().strip())
-                    if msg.get('type') == 'cmd':
-                        cmd = msg.get('cmd', '')
-                        if cmd:
-                            with self._cmd_lock:
-                                self._cmd_queue.append(cmd)
+                    if isinstance(msg, dict) and msg.get('type') == 'cmd':
+                        with self._cmd_lock:
+                            self._cmd_queue.append(msg)
                 except asyncio.TimeoutError:
                     continue
                 except json.JSONDecodeError:

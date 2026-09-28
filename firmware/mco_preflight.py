@@ -42,12 +42,18 @@ import time, math, os, sys
 import mco_wave_library as wl
 
 try:
-    from odrive_interface    import ODriveInterface
-    from servo_interface     import ServoInterface
-    from mavlink_bridge      import PixhawkBridge
+    from mco_odrive_interface import ODriveInterface
+    from mco_servo_interface  import ServoInterface
+    from mco_mavlink_bridge   import PixhawkBridge
     HW_AVAILABLE = True
 except ImportError:
-    HW_AVAILABLE = False
+    try:
+        from odrive_interface import ODriveInterface
+        from servo_interface  import ServoInterface
+        from mavlink_bridge   import PixhawkBridge
+        HW_AVAILABLE = True
+    except ImportError:
+        HW_AVAILABLE = False
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -87,11 +93,11 @@ class PowerUpBIT:
     """
 
     REQUIRED_FILES = [
-        "/home/pi/mco/wave_library.py",
-        "/home/pi/mco/mco_flight_recorder.py",
-        "/home/pi/mco/mco_performance_model.py",
-        "/home/pi/mco/mco_optimiser.py",
-        "/home/pi/mco/main.py",
+        "mco_wave_library.py",
+        "mco_flight_recorder.py",
+        "mco_performance_model.py",
+        "mco_optimiser.py",
+        "mco_main.py",
     ]
 
     REQUIRED_PARAMS = [
@@ -146,10 +152,19 @@ class PowerUpBIT:
 
     def _check_file(self, fpath):
         name = os.path.basename(fpath)
-        if os.path.exists(fpath):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            fpath,
+            os.path.join(script_dir, name),
+            os.path.join(script_dir, name.replace("mco_", "")),
+            os.path.join("/home/pi/mco", name),
+            os.path.join("/home/pi/mco", name.replace("mco_", "")),
+            os.path.join("/home/pi", name),
+        ]
+        if any(os.path.exists(c) for c in candidates):
             return CheckResult(f"File: {name}", PASS)
         return CheckResult(f"File: {name}", FAIL,
-                           f"not found at {fpath}")
+                           f"not found at {fpath} or local directories")
 
     def _check_wave_library_params(self):
         missing = []

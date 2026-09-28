@@ -28,21 +28,21 @@ WAVE_LIB        = os.path.join(os.path.dirname(__file__), 'mco_wave_library.py')
 
 # Expected ranges for sanity checking (min, max, unit, description)
 EXPECTED = {
-    'chord_mm':        (140,  190,  'mm',  'Wing chord (leading to trailing edge)'),
-    'span_W1_mm':      (700,  850,  'mm',  'W1 pair full span (port tip to stbd tip)'),
-    'span_W2_mm':      (680,  820,  'mm',  'W2 pair full span'),
-    'span_W3_mm':      (660,  800,  'mm',  'W3 pair full span'),
-    'span_W4_mm':      (640,  780,  'mm',  'W4 pair full span'),
-    'mtow_g':          (2800, 4200, 'g',   'All-up weight with battery (grams)'),
-    'cg_from_nose_mm': (150,  350,  'mm',  'CG distance aft of fuselage nose'),
-    'fuselage_length_mm': (400, 700, 'mm', 'Total fuselage length nose to tail'),
-    'w1_pos_from_nose_mm': (50, 200, 'mm', 'W1 pair pivot aft of nose'),
-    'w4_pos_from_nose_mm': (250, 550, 'mm', 'W4 pair pivot aft of nose'),
-    'sector_arc_deg':  (90,   110,  '°',   'Sector wheel arc (mechanical stop to stop)'),
+    'chord_mm':        (130,  170,  'mm',  'Wing chord (leading to trailing edge)'),
+    'span_W1_mm':      (2200, 2500, 'mm',  'W1 pair full span (port tip to stbd tip)'),
+    'span_W2_mm':      (2200, 2500, 'mm',  'W2 pair full span'),
+    'span_W3_mm':      (2200, 2500, 'mm',  'W3 pair full span'),
+    'span_W4_mm':      (2200, 2500, 'mm',  'W4 pair full span'),
+    'mtow_g':          (5000, 7500, 'g',   'All-up weight with battery (grams)'),
+    'cg_from_nose_mm': (430,  510,  'mm',  'CG distance aft of fuselage nose'),
+    'fuselage_length_mm': (950, 1050, 'mm', 'Total fuselage length nose to tail'),
+    'w1_pos_from_nose_mm': (50, 150, 'mm', 'W1 pair pivot aft of nose'),
+    'w4_pos_from_nose_mm': (800, 900, 'mm', 'W4 pair pivot aft of nose'),
+    'sector_arc_deg':  (180,  210,  '°',   'Sector wheel arc (mechanical stop to stop)'),
     'gear_ratio':      (6.5,  7.5,  ':1',  'Motor turns per sector wheel turn'),
-    'sweep_range_deg': (40,   120,  '°',   'Full sweep servo travel (min to max position)'),
-    'sweep_neutral_deg': (50,  80,  '°',   'Sweep servo neutral position'),
-    'sweep_stow_deg':  (80,   100,  '°',   'Maximum aft sweep (fuselage stow position)'),
+    'sweep_range_deg': (40,   175,  '°',   'Full sweep servo travel (min to max position)'),
+    'sweep_neutral_deg': (50,  70,  '°',   'Sweep servo neutral position'),
+    'sweep_stow_deg':  (150,  180,  '°',   'Maximum aft sweep (fuselage stow position)'),
     'motor_to_sck_mm': (0,    100,  'mm',  'W1 motor shaft to W1 sector wheel axle distance'),
 }
 
@@ -62,7 +62,7 @@ SECTIONS = [
     ('MASS AND CG', [
         ('mtow_g',             'Weigh the complete aircraft with flight battery installed (grams)'),
         ('cg_from_nose_mm',    'Balance point (CG): distance aft of nose in mm\n'
-                               '    (balance on two fingers under each wing of W2 pair)'),
+                               '    (balance under fuselage between W2 and W3 pairs)'),
     ]),
     ('MECHANICAL DRIVE', [
         ('sector_arc_deg',     'Sector wheel arc in degrees (mechanical stop to stop).\n'
@@ -77,7 +77,7 @@ SECTIONS = [
                                '    Command max forward, command max aft, measure angle change with protractor'),
         ('sweep_neutral_deg',  'Sweep angle at software neutral position (60° commanded).\n'
                                '    Measure actual angle at that position'),
-        ('sweep_stow_deg',     'Sweep angle at maximum aft position (95° commanded).\n'
+        ('sweep_stow_deg',     'Sweep angle at maximum aft position (170° commanded).\n'
                                '    Measure whether wing actually reaches near-fuselage position'),
     ]),
 ]

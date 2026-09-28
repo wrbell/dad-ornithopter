@@ -35,9 +35,18 @@ import queue
 import glob
 
 
-LOG_DIR      = '/home/pi/logs'
-MAX_LOG_FILES= 50     # keep last 50 sessions (each ~35 MB at 50Hz/1hr)
-QUEUE_MAXSIZE= 5000   # buffer ~100 seconds of data if disk is slow
+def _get_log_dir():
+    try:
+        if os.path.exists('/home/pi') and os.access('/home/pi', os.W_OK):
+            return '/home/pi/logs'
+    except Exception:
+        pass
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, 'logs')
+
+LOG_DIR       = _get_log_dir()
+MAX_LOG_FILES = 50     # keep last 50 sessions (each ~35 MB at 50Hz/1hr)
+QUEUE_MAXSIZE = 5000   # buffer ~100 seconds of data if disk is slow
 
 
 class MCOLogger:
@@ -94,18 +103,25 @@ class MCOLogger:
         'ph_engaged', 'ph_pos_err_m',
         'vh_active', 'tc_active', 'tc_sideslip_g',
         'ash_engaged', 'ash_speed_err', 'cc_margin',
+        # Dart control
+        'dart_active', 'dart_authority', 'dart_urgency',
+        # Surface classifier + flap-glide
+        'surface_type', 'surface_conf', 'fg_active', 'fg_phase', 'fg_glide_ratio',
+        # WIG floor
+        'wf_active', 'wf_floor_m', 'wf_margin_m', 'wf_aoa_boost',
     ]
 
     def __init__(self):
         self._queue   = queue.Queue(maxsize=QUEUE_MAXSIZE)
-        self._alive   = False
-        self._thread  = None
-        self._file    = None
-        self._writer  = None
-        self._start_t = None
-        self.filepath  = None
-        self.n_records = 0
-        self.n_dropped = 0
+        self.filepath   = None
+        self._file      = None
+        self._writer    = None
+        self._thread    = None
+        self._alive     = False
+        self._lock      = threading.Lock()
+        self.n_records  = 0
+        self.n_dropped  = 0
+        self._start_t   = time.monotonic()
 
     def _next_filepath(self):
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -134,7 +150,7 @@ class MCOLogger:
         self._alive    = True
 
         self._file     = open(self.filepath, 'w', newline='', buffering=8192)
-        self._writer   = csv.DictWriter(self._file, fieldnames=self.FIELDS)
+        self._writer   = csv.DictWriter(self._file, fieldnames=self.FIELDS, extrasaction='ignore')
         self._writer.writeheader()
 
         self._thread   = threading.Thread(target=self._run, daemon=True,
@@ -164,7 +180,7 @@ class MCOLogger:
 
         row = {
             'timestamp_s':      round(now, 4),
-            'elapsed_s':        round(now - self._start_t, 3),
+            'elapsed_s':        round(now - (self._start_t if self._start_t is not None else now), 3),
             'ground_state':     result.get('ground_state', ''),
             'h_agl_m':          sensors.get('h_agl_m', 0),
             'V_ms':             sensors.get('V_ms', 0),

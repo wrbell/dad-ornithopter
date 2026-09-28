@@ -114,7 +114,7 @@ def check_wave_library(result: CheckResult):
         n_hyps = len(w.BIOMIMETIC_HYPOTHESES)
         n_cmds = len(w._GS_ALLOWED_CMDS)
         c.status  = PASS
-        c.message = f"{len(open('mco_wave_library.py').read().splitlines()):,} lines, {n_hyps} hypotheses, {n_cmds} GS commands"
+        c.message = f"{len(open(w.__file__, encoding='utf-8').read().splitlines()):,} lines, {n_hyps} hypotheses, {n_cmds} GS commands"
     except ImportError as e:
         c.status  = FAIL
         c.message = f"Import failed: {e}"
@@ -151,7 +151,8 @@ def check_build_measurements(result: CheckResult):
 def check_sd_space(result: CheckResult):
     c = Check('SD card space')
     try:
-        stat  = os.statvfs('/home/pi')
+        path = '/home/pi' if os.path.exists('/home/pi') else os.path.expanduser('~')
+        stat  = os.statvfs(path)
         free_mb = stat.f_bavail * stat.f_frsize / 1_048_576
         if free_mb >= 500:
             c.status  = PASS
@@ -257,8 +258,14 @@ def check_sweep_adc(result: CheckResult):
     return result.add(c)
 
 
-def check_imu(result: CheckResult):
-    c = Check('IMU (MPU-6050 at 0x68)')
+def check_imu(result: CheckResult, sensors: dict = None):
+    c = Check('IMU (MPU-6050 / Telemetry)')
+    if sensors and sensors.get('imu_ok'):
+        c.status  = PASS
+        az_g = sensors.get('accel_z_g', 1.0)
+        c.message = f"IMU healthy via flight controller telemetry (az={az_g:.3f}g ✓)"
+        return result.add(c)
+
     try:
         import smbus
         bus = smbus.SMBus(1)
@@ -290,8 +297,14 @@ def check_imu(result: CheckResult):
     return result.add(c)
 
 
-def check_barometer(result: CheckResult):
-    c = Check('Barometer (BMP280 at 0x76)')
+def check_barometer(result: CheckResult, sensors: dict = None):
+    c = Check('Barometer (BMP280 / Telemetry)')
+    if sensors and sensors.get('baro_ok'):
+        c.status  = PASS
+        alt_m = sensors.get('h_baro_m', sensors.get('h_agl_m', 0.0))
+        c.message = f"Barometer healthy via flight controller telemetry (alt={alt_m:.1f}m ✓)"
+        return result.add(c)
+
     try:
         import smbus
         bus = smbus.SMBus(1)
@@ -309,14 +322,19 @@ def check_barometer(result: CheckResult):
     return result.add(c)
 
 
-def check_oat_sensor(result: CheckResult):
-    c = Check('OAT sensor (DS18B20 GPIO4)')
+def check_oat_sensor(result: CheckResult, sensors: dict = None):
+    c = Check('OAT sensor (DS18B20 / Telemetry)')
+    if sensors and 'oat_c' in sensors:
+        c.status  = PASS
+        c.message = f"OAT {sensors['oat_c']:.1f}°C via telemetry ✓"
+        return result.add(c)
+
     try:
         w1_dir = '/sys/bus/w1/devices/'
-        devices = [d for d in os.listdir(w1_dir) if d.startswith('28-')]
+        devices = [d for d in os.listdir(w1_dir) if d.startswith('28-')] if os.path.exists(w1_dir) else []
         if not devices:
             c.status  = WARN
-            c.message = "No DS18B20 found. Check GPIO4 and dtoverlay=w1-gpio,gpiopin=4"
+            c.message = "No DS18B20 found. Note: GPIO4 is dedicated to W1 sweep servo — avoid w1-gpio on GPIO4."
         else:
             dev_path = os.path.join(w1_dir, devices[0], 'w1_slave')
             with open(dev_path) as f:
@@ -334,7 +352,7 @@ def check_oat_sensor(result: CheckResult):
                 c.message = "CRC failed — sensor noise or bad connection"
     except FileNotFoundError:
         c.status  = WARN
-        c.message = "1-Wire bus not found. Add dtoverlay=w1-gpio,gpiopin=4 to /boot/config.txt"
+        c.message = "1-Wire bus not configured. (GPIO4 reserved for W1 sweep servo; use I2C baro temp if unpopulated)"
     except Exception as e:
         c.status  = WARN
         c.message = str(e)
@@ -373,24 +391,30 @@ def check_battery_voltage(result: CheckResult, sensors: dict,
     bus_v   = sensors.get('bus_voltage_v', 0.0)
     servo_v = sensors.get('servo_voltage_v', 0.0)
 
-    # 4S LiPo: 16.8V full, 14.0V nominal, 13.2V low
     if bus_v < 5.0:
         c.status  = FAIL
         c.message = "Main battery not reading — check ODrive CAN connection"
         return result.add(c)
 
-    # Estimate charge level (4S: 16.8V = 100%, 13.2V = 0%)
-    pct = max(0, min(100, (bus_v - 13.2) / (16.8 - 13.2) * 100))
+    # Detect 4S vs 6S battery configuration
+    # 6S LiPo: 25.2V full, 22.2V nominal, 19.8V low (3.3V/cell cutoff)
+    # 4S LiPo: 16.8V full, 14.8V nominal, 13.2V low (3.3V/cell cutoff)
+    is_6s = bus_v > 18.0
+    cell_type = "6S" if is_6s else "4S"
+    v_empty = 19.8 if is_6s else 13.2
+    v_full  = 25.2 if is_6s else 16.8
+
+    pct = max(0, min(100, (bus_v - v_empty) / (v_full - v_empty) * 100))
 
     if pct >= min_pct_for_tc:
         c.status  = PASS
-        c.message = f"Main {bus_v:.1f}V (~{pct:.0f}%)  Servo {servo_v:.1f}V"
+        c.message = f"Main ({cell_type}) {bus_v:.1f}V (~{pct:.0f}%)  Servo {servo_v:.1f}V"
     elif pct >= 30:
         c.status  = WARN
-        c.message = f"Main {bus_v:.1f}V (~{pct:.0f}%) — charge before TC runs"
+        c.message = f"Main ({cell_type}) {bus_v:.1f}V (~{pct:.0f}%) — charge before TC runs"
     else:
         c.status  = FAIL
-        c.message = f"Main {bus_v:.1f}V (~{pct:.0f}%) — CHARGE BATTERY"
+        c.message = f"Main ({cell_type}) {bus_v:.1f}V (~{pct:.0f}%) — CHARGE BATTERY"
     return result.add(c)
 
 
@@ -435,7 +459,7 @@ def check_odrive_vel_limit(result: CheckResult):
         responding = sum(1 for s in states if s.get('responding'))
         if responding == N_WINGS:
             c.status  = PASS
-            c.message = f'All {N_WINGS} S1 nodes responding. Verify vel_limit=150 via odrivetool.'
+            c.message = f'All {N_WINGS} S1 nodes responding. Verify vel_limit=40.0 turns/s via odrivetool.'
         elif responding > 0:
             c.status  = WARN
             c.message = f'Only {responding}/{N_WINGS} S1 nodes responding.'
@@ -530,9 +554,9 @@ def run_all_checks(sensors: dict = None, bench_mode=False,
         check_pitch_adc(result)
         check_sweep_adc(result)
 
-    check_imu(result)
-    check_barometer(result)
-    check_oat_sensor(result)
+    check_imu(result, sensors)
+    check_barometer(result, sensors)
+    check_oat_sensor(result, sensors)
 
     if sensors:
         check_rc_signal(result, sensors)

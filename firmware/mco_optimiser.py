@@ -208,8 +208,10 @@ class ParameterState:
     """
 
     def __init__(self):
-        # Import wave library defaults
-        import wave_library as wl
+        try:
+            import mco_wave_library as wl
+        except ImportError:
+            import wave_library as wl
 
         self.phase_offset    = 90.0    # degrees
         self.freq_scale      = 1.0     # multiplier
@@ -253,7 +255,10 @@ class ParameterState:
         using the optimiser's live values for the breakpoints
         it controls, and wave_library values for the rest.
         """
-        import wave_library as wl
+        try:
+            import mco_wave_library as wl
+        except ImportError:
+            import wave_library as wl
         if sweep_deg <= 70:
             return self.amp_60deg
         elif sweep_deg <= 100:
@@ -266,13 +271,19 @@ class ParameterState:
             return wl.get_flap_amplitude(sweep_deg)
 
     def get_dihedral_bias(self, sweep_deg):
-        import wave_library as wl
+        try:
+            import mco_wave_library as wl
+        except ImportError:
+            import wave_library as wl
         if abs(sweep_deg - 140) < 15:
             return self.dihedral_140deg
         return wl.get_dihedral_bias(sweep_deg)
 
     def get_pitch_trim(self, sweep_deg):
-        import wave_library as wl
+        try:
+            import mco_wave_library as wl
+        except ImportError:
+            import wave_library as wl
         if abs(sweep_deg - 90) < 20:
             return self.pitch_trim_90
         return wl.get_pitch_trim(sweep_deg)

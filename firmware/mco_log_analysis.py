@@ -267,7 +267,11 @@ def extract_tc01_thrust(rows):
                 'n':      len(forces),
             }
 
-    MTOW_N = 3.448 * 9.807
+    try:
+        from mco_wave_library import MTOW_KG
+        MTOW_N = MTOW_KG * 9.807
+    except Exception:
+        MTOW_N = 5.687 * 9.807
     max_thrust = max((v['mean_N'] for v in thrust_curve.values()), default=0)
     hover_freq = None
     for freq in sorted(thrust_curve.keys()):

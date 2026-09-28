@@ -68,9 +68,13 @@ def _load_actual_mtow():
                 print(f"  TC: Using actual MTOW from build measurements: "
                       f"{actual_mass_kg:.3f} kg ({actual_mass_kg*9.807:.1f} N)")
                 return actual_mass_kg * 9.807
-        except Exception as e:
-            print(f"  TC: Could not read build_measurements.json: {e}")
-    design_N = 3.448 * 9.807
+        except Exception:
+            pass
+    try:
+        from mco_wave_library import MTOW_KG
+        design_N = MTOW_KG * 9.807
+    except Exception:
+        design_N = 5.687 * 9.807
     print(f"  TC: No build measurements found — using design MTOW "
           f"{design_N:.1f} N. Run mco_build_measurements.py first.")
     return design_N

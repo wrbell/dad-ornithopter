@@ -33,8 +33,20 @@ from collections import Counter
 import statistics
 from datetime import datetime
 
-CERT_DIR = '/home/pi/knowledge/certification'
-os.makedirs(CERT_DIR, exist_ok=True)
+def _get_cert_dir():
+    try:
+        if os.path.exists('/home/pi') and os.access('/home/pi', os.W_OK):
+            return '/home/pi/knowledge/certification'
+    except Exception:
+        pass
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, 'knowledge', 'certification')
+
+CERT_DIR = _get_cert_dir()
+try:
+    os.makedirs(CERT_DIR, exist_ok=True)
+except Exception:
+    pass
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. FMEA GENERATOR

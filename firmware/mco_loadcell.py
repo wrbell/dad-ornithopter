@@ -485,7 +485,11 @@ def _cli_thrust_sweep(reader):
     best_freq = [f for f, r in results.items()
                  if r['mean_lift_N'] == best_lift['mean_lift_N']][0]
     print(f"  Max lift:        {best_lift['mean_lift_N']:.2f} N at {best_freq:.2f} Hz")
-    MTOW_N = 3.448 * 9.807
+    try:
+        from mco_wave_library import MTOW_KG
+        MTOW_N = MTOW_KG * 9.807
+    except Exception:
+        MTOW_N = 5.687 * 9.807
     print(f"  MTOW:            {MTOW_N:.2f} N")
     print(f"  TC-01 PASS:      {'YES' if best_lift['mean_lift_N'] >= MTOW_N else 'NO'}")
 

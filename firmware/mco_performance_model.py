@@ -38,23 +38,24 @@ import datetime
 # ─────────────────────────────────────────────────────────────────
 # PHYSICAL CONSTANTS  (unchanged from original)
 # ─────────────────────────────────────────────────────────────────
-RHO      = 1.225
-G        = 9.81
-MTOW_KG  = 3.448
+RHO          = 1.225
+G            = 9.81
+MTOW_KG      = 5.687
 
 CHORD_M      = 0.165
-SEMI_SPANS_M = {1: 0.772, 2: 0.749, 3: 0.735, 4: 0.712}
-AR           = 4.5
-E_OSWALD     = 0.78
-S_TOTAL_M2   = 0.979
-CL_MAX       = 2.40
-CD0          = 0.030
+SEMI_SPANS_M = {1: 1.000, 2: 1.000, 3: 1.000, 4: 1.000}
+AR           = 12.12
+E_OSWALD     = 0.92
+S_TOTAL_M2   = 1.320
+CL_MAX       = 1.60
+CD0          = 0.022
 
-REDUCER_RATIO = 7
-KV            = 360.0
-KT            = 60 / (2 * math.pi * KV)
-RI            = 0.10
-VBUS          = 22.2
+REDUCER_RATIO = 10
+KV           = 200.0
+KT           = 60 / (2 * math.pi * KV)
+RI           = 0.10
+VBUS         = 22.2
+I_WING       = 0.0240  # kg*m^2 (1.0m wing panel + tip moment of inertia)
 
 # ─────────────────────────────────────────────────────────────────
 # BOYD CONSTANTS
@@ -148,9 +149,13 @@ class PerformanceModel:
         rpm_motor = freq_hz * 60 * REDUCER_RATIO
         omega     = rpm_motor * 2 * math.pi / 60
         BEMF      = KT * omega
-        T_crank   = (self.W / 8) * (b_mean * 0.55)
-        T_motor   = T_crank / REDUCER_RATIO
-        I_motor   = max(0.0, min(T_motor / KT, 20.0))
+        # Combined root torque: static aerodynamic lift + reciprocating wing inertia
+        T_aero    = (self.W / 8) * (b_mean * 0.55)
+        omega_osc = 2.0 * math.pi * freq_hz
+        T_inert   = I_WING * amp_rad * (omega_osc ** 2)
+        T_root    = math.sqrt(T_aero**2 + (0.707 * T_inert)**2)
+        T_motor   = T_root / REDUCER_RATIO
+        I_motor   = max(0.0, min(T_motor / KT, 30.0))
         P_elec_all= VBUS * I_motor * 8
 
         result['motor_rpm']       = round(rpm_motor, 0)
@@ -171,6 +176,16 @@ class PerformanceModel:
         result['Ps'] = specific_excess_power(
             T_pred, D_total, self.W, V_ms)
         result['Ps_status'] = ps_status(result['Ps'])
+
+        # ── ENERGY STEWARDSHIP: Cost of Transport & Carson's Speed ──
+        cot = cost_of_transport(P_elec_all, self.W, V_ms)
+        v_carson = carsons_speed(self.W)
+        wh_km = (P_elec_all / (3.6 * V_ms)) if V_ms > 0.5 else 999.0
+        j_per_m = (P_elec_all / V_ms) if V_ms > 0.5 else 999.0
+        result['cost_of_transport'] = round(cot, 4)
+        result['carsons_speed_ms']  = round(v_carson, 2)
+        result['wh_per_km']         = round(wh_km, 2)
+        result['joules_per_meter']  = round(j_per_m, 2)
 
         return result
 
@@ -254,6 +269,34 @@ def ps_pullout_recommended(Ps, agl_m, V_ms, stall_margin_ms):
     if Ps >= PS_STOOP_PULLOUT and V_ms > 6.0:
         return True, f"Ps={Ps:.2f} m/s at V={V_ms:.1f}m/s — Ps zero crossing reached"
     return False, f"Ps={Ps:.2f} m/s — continue"
+
+
+def cost_of_transport(power_W, weight_N, V_ms):
+    """
+    Dimensionless Cost of Transport (CoT):
+      CoT = P_elec / (W * V)
+    Measures Joules expended per Newton of weight per meter of flight.
+    Lower values indicate greater aerodynamic and electrical efficiency.
+    """
+    if weight_N <= 0 or V_ms < 0.2:
+        return 99.0
+    return max(0.0, power_W / (weight_N * V_ms))
+
+
+def carsons_speed(weight_N=None, altitude_m=0.0):
+    """
+    Carson's Speed (Best Range Speed, B.H. Carson 1980):
+      V_br = 3^(1/4) * V_md ≈ 1.31607 * V_md
+    Maximises forward velocity per unit power, giving maximum distance
+    per battery Watt-hour (km/Wh) in cruise.
+    """
+    w = weight_N if (weight_N is not None and weight_N > 0) else (MTOW_KG * G)
+    rho = RHO * math.exp(-altitude_m / 8500.0) if altitude_m > 0 else RHO
+    denom = math.sqrt(math.pi * AR * E_OSWALD * CD0)
+    if denom <= 0:
+        return 10.0
+    v_md = math.sqrt(2.0 * w / (rho * S_TOTAL_M2 * denom))
+    return round((3.0 ** 0.25) * v_md, 2)
 
 
 # ─────────────────────────────────────────────────────────────────

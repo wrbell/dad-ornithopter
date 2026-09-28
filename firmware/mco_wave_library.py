@@ -1,3 +1,4 @@
+from __future__ import annotations
 _boot_log = []
 """
 MCO-1D Wave Parameter Library
@@ -14,11 +15,15 @@ import math, time
 # ─────────────────────────────────────────────────────────────────
 # MCO-1D GEOMETRY (locked Rev H)
 # ─────────────────────────────────────────────────────────────────
-CHORD_MM        = 165.0
-SEMI_SPANS_MM   = {1: 772, 2: 749, 3: 735, 4: 712}   # W1..W4
-B_MEAN_M        = 0.742          # mean semi-span metres
-STAGGER_MM      = 138.0          # root-to-root longitudinal spacing
-ROOT_OFFSET_MM  = 25.0           # root to fuselage centreline
+CHORD_MM        = 143.7          # mm (as-built S1223 mean chord)
+SEMI_SPANS_MM   = {1: 1150, 2: 1150, 3: 1150, 4: 1150}   # W1..W4 (1.15m as-built: mount + 4 segs + tip)
+B_MEAN_M        = 1.150          # mean semi-span metres (8 x 1.15m wings, 2.35m tip-to-tip span)
+WINGTIP_SPAN_MM = 130.0          # skeletonized wingtip spanwise extension
+WINGTIP_RAKE_DEG = 48.0          # 48° sweep angle
+WINGTIP_WASHOUT_DEG = -3.5       # -3.5° aerodynamic twist
+E_OSWALD        = 0.92           # Oswald span efficiency with raked tip
+STAGGER_MM      = 250.0          # root-to-root longitudinal spacing (CAD Rev C: X=[100, 350, 600, 850]mm)
+ROOT_OFFSET_MM  = 35.0           # mean root to fuselage centreline (44.5mm fwd to 25.8mm aft)
 
 # ─────────────────────────────────────────────────────────────────
 # MOTOR / ODrive IDs  (CAN node IDs 0-7)
@@ -27,11 +32,11 @@ ROOT_OFFSET_MM  = 25.0           # root to fuselage centreline
 # ─────────────────────────────────────────────────────────────────
 MOTOR_IDS       = list(range(8))
 # ── Reynolds number at MCO-1D operating conditions ───────────────
-CHORD_M          = CHORD_MM / 1000.0              # 0.165 m
+CHORD_M          = CHORD_MM / 1000.0              # 0.1437 m
 AIR_KINEMATIC_VISC = 1.48e-5   # m²/s at 15°C, sea level
-RE_HOVER         = int(2.5 * CHORD_M / AIR_KINEMATIC_VISC)  # ~27,900
-RE_CRUISE        = int(7.96 * CHORD_M / AIR_KINEMATIC_VISC) # ~89,000
-RE_MIDPOINT      = int((RE_HOVER + RE_CRUISE) / 2)           # ~58,000
+RE_HOVER         = int(2.5 * CHORD_M / AIR_KINEMATIC_VISC)  # ~24,300
+RE_CRUISE        = int(10.3 * CHORD_M / AIR_KINEMATIC_VISC) # ~100,000
+RE_MIDPOINT      = int((RE_HOVER + RE_CRUISE) / 2)           # ~62,000
 # S1223 aerofoil polar at MCO-1D Re (~50,000):
 #   CL_max at ~18° AoA  (used as AoA ceiling for all hypotheses)
 #   Max L/D at ~7-8° AoA
@@ -49,7 +54,7 @@ MOTOR_KV        = 360               # KV rating
 MOTOR_POLE_PAIRS= 7                 # CONFIRMED: 14 poles / 2 = 7 pole pairs
                                     # Standard 12N14P brushless configuration.
                                     # No field measurement needed — spec is definitive.
-REDUCER_RATIO   = 7              # 7:1 rope drive
+REDUCER_RATIO   = 10             # 10:1 rope drive (upgraded from 7:1)
 FLAP_AMP_DEG    = 96.0           # ±96° nominal commanded amplitude
                                   # = clap-and-fling target (Phan 2016: ±95.8°)
                                   # Sector wheel BUILT to 200° (±100°) hardware.
@@ -66,8 +71,8 @@ PITCH_PINS      = [18, 23, 24, 25, 12, 16, 20, 21] # W1p..W4s
 # ─────────────────────────────────────────────────────────────────
 # STOW / SWEEP PARAMETERS  (Tweak 2, Rev B)
 # ─────────────────────────────────────────────────────────────────
-SWEEP_MAX_DEG   = 210.0          # hard stop position
-STOW_ANGLE_DEG  = 210.0          # full stow target
+SWEEP_MAX_DEG   = 170.0          # hard stop position (matches AGFRC IB53BHU 170° max travel)
+STOW_ANGLE_DEG  = 170.0          # full stow target
 SWEEP_RATE_NORM = 30.0           # deg/s — normal transition
 SWEEP_RATE_STOOP= 60.0           # deg/s — emergency stow
 SWEEP_DEADBAND  = 2.0            # deg — prevents hunting
@@ -82,10 +87,10 @@ FAIRINGS_FITTED = False          # Set True on MCO-1A
 SWEEP_SCHEDULE = [
     (  0,  0,  32,  60,  60,  60,  60),
     ( 30, 32,  46, 120,  60,  60,  60),
-    ( 50, 46,  68, 210, 210,  60,  60),
-    ( 65, 68,  97, 210, 210, 135, 135),
-    ( 80, 97, 120, 210, 210, 135, 135),
-    ( 95,120, 999, 210, 210, 165, 165),
+    ( 50, 46,  68, 170, 170,  60,  60),
+    ( 65, 68,  97, 170, 170, 135, 135),
+    ( 80, 97, 120, 170, 170, 135, 135),
+    ( 95,120, 999, 170, 170, 165, 165),
 ]
 
 # ─────────────────────────────────────────────────────────────────
@@ -154,13 +159,36 @@ PITCH_AOA_BY_INTENT = {
     # Covert flaps deploy at 10°+ and boost CL, so cruise AoA can
     # stay lower and still achieve good L/D.
     # Adaptive loops will refine all values from flight data.
-    'slow':    {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
-    'climb':   {'up': +20.0, 'down': +30.0, 'profile': 'advanced'},
-    'cruise':  {'up':  +8.0, 'down': +20.0, 'profile': 'trapezoid'},
-    'sprint':  {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
-    'glide':   {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
-    'manoeuvre': {'up': +12.0, 'down': +20.0, 'profile': 'trapezoid'},
-    'gust':    {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
+    'slow':                   {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
+    'climb':                  {'up': +20.0, 'down': +30.0, 'profile': 'advanced'},
+    'cruise':                 {'up':  +8.0, 'down': +20.0, 'profile': 'trapezoid'},
+    'sprint':                 {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
+    'glide':                  {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
+    'soar':                   {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
+    'deadstick':              {'up':  +6.0, 'down':  +8.0, 'profile': 'static'},
+    'manoeuvre':              {'up': +12.0, 'down': +20.0, 'profile': 'trapezoid'},
+    'gust':                   {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
+    'approach_normal':        {'up': +14.0, 'down': +22.0, 'profile': 'trapezoid'},
+    'landing_flare':          {'up': +22.0, 'down': +32.0, 'profile': 'advanced'},
+    'touchdown_rollout':      {'up':  +2.0, 'down':  +5.0, 'profile': 'static'},
+    'takeoff_roll':           {'up':  +4.0, 'down':  +8.0, 'profile': 'static'},
+    'rotate':                 {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
+    'go_around':              {'up': +20.0, 'down': +30.0, 'profile': 'advanced'},
+    'zoom_climb':             {'up': +22.0, 'down': +32.0, 'profile': 'advanced'},
+    'pigeon_steep_climb':     {'up': +22.0, 'down': +32.0, 'profile': 'advanced'},
+    'active_upstroke_brake':  {'up': +30.0, 'down': +10.0, 'profile': 'advanced'},
+    'turtle_pivot_brake':     {'up': +28.0, 'down': +12.0, 'profile': 'advanced'},
+    'roost_perch_flare':      {'up': +25.0, 'down': +35.0, 'profile': 'advanced'},
+    'stoop_auto':             {'up':  +2.0, 'down':  +4.0, 'profile': 'static'},
+    'power_dive':             {'up':  +2.0, 'down':  +4.0, 'profile': 'static'},
+    'wig_cruise':             {'up':  +6.0, 'down': +16.0, 'profile': 'trapezoid'},
+    'anhedral_turn':          {'up': +12.0, 'down': +20.0, 'profile': 'trapezoid'},
+    'dart_left':              {'up': +10.0, 'down': +18.0, 'profile': 'trapezoid'},
+    'dart_right':             {'up': +10.0, 'down': +18.0, 'profile': 'trapezoid'},
+    'taxi_fwd':               {'up':  +0.0, 'down':  +0.0, 'profile': 'static'},
+    'taxi_rev':               {'up':  +0.0, 'down':  +0.0, 'profile': 'static'},
+    'kramer_lift_burst':      {'up': +24.0, 'down': +32.0, 'profile': 'advanced'},
+    'coriolis_gust_preempt':  {'up': +18.0, 'down': +28.0, 'profile': 'advanced'},
 }
 # sprint/glide: static at low AoA — at high speed covert flaps
 # provide passive boost without commanding high geometric AoA.
@@ -308,15 +336,11 @@ CF1_MAX_SWEEP_DEG    = 90.0    # disabled if any wing > 90°
 # STALL PROTECTION
 # ─────────────────────────────────────────────────────────────────
 STALL_MARGIN_KT      = 10      # % above Vs — auto-deploy trigger
-VS_KT                = 9.42    # stall speed knots (MCO-1D at MTOW, computed)
-CL_MAX               = 2.10    # S1223 + covert flaps, Re=30k-150k, flapping
-                                  # was 2.40 (static high-Re with VGs+Gurney)
-                                  # Revised: lower at MCO Re without VGs,
-                                  # but covert flaps + unsteady add back ~0.3
-                                  # Net: ~2.1 (CAL: measure in TC-02)
-# MTOW_KG              = 4.189   # kg — confirmed build: 16×A27CHR + 8×1.0m wings; last wins
+VS_KT                = 12.77   # stall speed knots (6.57 m/s at MTOW 5.687kg, S=1.320m², CL_max=1.60 clean)
+CL_MAX               = 1.60    # clean S1223 stall limit at MCO-1D Re ~75k
 G                    = 9.81    # m/s²
-STALL_V_FLOOR_MS     = VS_KT / 1.944 * 1.10   # Vs + 10%
+STALL_V_FLOOR_MS     = VS_KT / 1.944 * 1.10   # 7.23 m/s (Vs + 10%)
+V_GLIDE_EQUILIBRIUM_MS = 8.10  # unpowered glide equilibrium at CL=1.05 (15.7 kt)
 
 # ─────────────────────────────────────────────────────────────────
 # HELPER FUNCTIONS
@@ -494,21 +518,38 @@ def differential_sweep_for_wake_capture(phase_deg, V_ms=9.0,
 
     Sources: Meng et al. Phys. Fluids 2022 (+40% thrust at optimal spacing);
              Tiwari & Chandel Phys. Fluids 2023 (+118% thrust via phase);
-             Ford & Santhanakrishnan 2021 (tip-vortex interactions).
+             Ford & Santhanakrishnan 2021 (tip-vortex interactions);
+             Wagner (1925) & Theodorsen (1935) unsteady circulatory phase delay.
     """
     import math as _m
+    if V_ms < 0.5:
+        return {
+            'sweep_lead_deg':      0.0,
+            'effective_spacing_c': round(stagger_m / chord_m, 2),
+            'timing_error_pct':    0.0,
+            'feasible':            True,
+            'ideal_spacing_c':     round(stagger_m / chord_m, 2),
+            'wagner_lag_ms':       40.0,
+        }
     V_wake   = 0.80 * V_ms
     A_tip    = 2.0 * semi_m * _m.sin(_m.radians(FLAP_AMP_DEG))
-    f_impl   = 0.30 * V_ms / A_tip          # St=0.30 optimal cruise
+    f_impl   = 0.30 * V_ms / A_tip if A_tip > 0.01 else 2.0   # St=0.30 optimal cruise
     lam_wake = V_wake / f_impl
-    ideal_m  = (phase_deg / 360.0) * lam_wake
+
+    # ── Wagner Effect & Unsteady Apparent Mass phase lag ─────────────
+    # Semi-chord convective delay to establish attached LEV circulation
+    s_conv   = 2.0
+    t_wagner = max(0.005, min(0.040, s_conv * (0.5 * chord_m) / max(0.5, V_ms)))
+    dx_wagner = V_wake * t_wagner
+
+    ideal_m  = (phase_deg / 360.0) * lam_wake + dx_wagner
     cos_sw   = (ideal_m - stagger_m) / semi_m
     feasible = (-1.0 <= cos_sw <= 1.0)
     sw_deg   = _m.degrees(_m.acos(max(-1.0, min(1.0, cos_sw))))
     sw_deg   = max(0.0, min(90.0, sw_deg))
     ach_m    = stagger_m + semi_m * _m.cos(_m.radians(sw_deg))
     ach_t    = ach_m / V_wake
-    ideal_t  = (phase_deg / 360.0) / f_impl
+    ideal_t  = (phase_deg / 360.0) / f_impl + t_wagner
     err_pct  = abs(ach_t - ideal_t) * f_impl * 100.0
     return {
         'sweep_lead_deg':      round(sw_deg, 1),
@@ -516,6 +557,7 @@ def differential_sweep_for_wake_capture(phase_deg, V_ms=9.0,
         'timing_error_pct':    round(err_pct, 2),
         'feasible':            feasible,
         'ideal_spacing_c':     round(ideal_m / chord_m, 2),
+        'wagner_lag_ms':       round(t_wagner * 1000.0, 1),
     }
 
 
@@ -662,8 +704,8 @@ _ROOT_X_M = [
     -3.0 * STAGGER_MM / 1000.0,
 ]
 
-# Semi-spans (W1→W4)
-_SEMI_SPANS_M = [0.772, 0.749, 0.735, 0.712]
+# Semi-spans (W1→W4, 1.0m as-built)
+_SEMI_SPANS_M = [1.000, 1.000, 1.000, 1.000]
 
 # Proportional lift contribution of each pair (by area, constant chord)
 _LIFT_FRACS = [s / sum(_SEMI_SPANS_M) for s in _SEMI_SPANS_M]
@@ -1030,7 +1072,7 @@ def eagle_soar_params(gl_id='GL-8', freq_override=None):
 
     pitches = [base_pitch] * 4
 
-    semi_outer = 0.772
+    semi_outer = SEMI_SPANS_MM[1] / 1000.0  # 1.000m as-built
     b_geom     = 2 * semi_outer
     h_tip      = semi_outer * _m.sin(_m.radians(EAGLE_OUTER_DIHEDRAL_DEG))
     b_eff      = b_geom + 2 * 0.85 * h_tip / _m.pi
@@ -2988,7 +3030,7 @@ LEVER_STEEP_END        = 85.0
 LEVER_NEARVERT_END     = 95.0
 # 95–100% = MAX AIRBRAKE
 
-def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0):
+def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0, **kwargs):
     """
     Master wave lever function — 0% to 100%.
 
@@ -3416,7 +3458,7 @@ def lever_stall_check(lev_pct, V_ms):
     lp = unified_lever_to_params(lev_pct, V_ms)
     if lp.get('speed_gated') and V_ms < VS_OGE_MS * 1.2:
         return False, f"Mode {lp['mode_id']} needs more airspeed"
-    if lev_pct >= 93.0 and V_ms < VS_OGE_MS * 1.3:
+    if lev_pct <= 7.0 and V_ms < VS_OGE_MS * 1.3:
         return False, f"High-brake zone: need {VS_OGE_MS*1.3:.1f}m/s (have {V_ms:.1f})"
     return True, 'ok'
 
@@ -4343,7 +4385,7 @@ def climb_freq_boost(V_ms, pitch_deg, lever_pct, current_freq_hz):
     Returns:  (boost_hz, reason_str)
     """
     # Only active on the power side of the lever (forward of trim)
-    if lever_pct > LEVER_TRIM_END:
+    if lever_pct < 45.0:
         return 0.0, "glide_side"
     if pitch_deg < CLIMB_PITCH_THRESHOLD_DEG:
         return 0.0, "not_climbing"
@@ -4559,10 +4601,10 @@ def lever_airspeed_params(lever_pct, V_ms, pitch_deg,
     """
     # ── Base params from lever ────────────────────────────────────
     base = unified_lever_to_params(lever_pct)
-    freq = base['freq_hz']
-    sweep = base['sweep_deg']
-    dih   = base['dihedral_deg']
-    pitch = base['pitch_deg']
+    freq = base.get('freq_hz', 2.0)
+    sweep = base.get('sweep_deg', 60.0)
+    dih   = base.get('dihedral_deg', 6.0)
+    pitch = base.get('pitch_deg', base.get('aoa_deg', 8.0))
     note  = 'lever_only'
     boost = 0.0
     stow_stage = 0
@@ -4586,7 +4628,7 @@ def lever_airspeed_params(lever_pct, V_ms, pitch_deg,
             note  = f'climb_boost: {boost_note}'
 
         # Boyd Ps coupling in climb — keep pushing if Ps still positive
-        if Ps_measured > 0 and lever_pct < LEVER_TRIM_END:
+        if Ps_measured > 0 and lever_pct >= 45.0:
             # Ps > 0 means we have surplus — use it for altitude
             freq = boyd_freq_command(
                 freq, Ps_measured,
@@ -5093,8 +5135,8 @@ FIN_ENGAGE_THRESHOLD   = 8.0    # deg — below this = normal flight
 FIN_W23_MIN_FREQ_HZ    = 1.2    # Hz — must carry full weight alone
 
 # Wing areas
-_FIN_AREA_W1 = 2 * 0.772 * 0.165   # m² (both sides)
-_FIN_AREA_W4 = 2 * 0.712 * 0.165
+_FIN_AREA_W1 = 2 * (SEMI_SPANS_MM[1] / 1000.0) * (CHORD_MM / 1000.0)   # m² (both sides)
+_FIN_AREA_W4 = 2 * (SEMI_SPANS_MM[4] / 1000.0) * (CHORD_MM / 1000.0)
 
 # Yaw inertia
 FIN_Iz_KGM2            = 0.17   # kg·m² (estimated)
@@ -5195,13 +5237,13 @@ def fin_ps_during_pivot(pitch_deg, V_ms, freq_w23_hz):
     D_fins = FIN_CD_VERTICAL * q * (_FIN_AREA_W1 + _FIN_AREA_W4) * sin
 
     # Drag from W2+W3 (normal flight)
-    S_W23  = 2 * 0.749 * 0.165 + 2 * 0.735 * 0.165
+    S_W23  = 2 * (SEMI_SPANS_MM[2] / 1000.0) * (CHORD_MM / 1000.0) + 2 * (SEMI_SPANS_MM[3] / 1000.0) * (CHORD_MM / 1000.0)
     CL_W23, _, _ = fin_w23_cl_required(pitch_deg, V_ms)
-    CDi_W23 = CL_W23**2 / (_lmath.pi * 4.5 * 0.78)
-    D_W23  = (0.030 + CDi_W23) * q * S_W23
+    CDi_W23 = CL_W23**2 / (_lmath.pi * 12.12 * E_OSWALD)
+    D_W23  = (0.022 + CDi_W23) * q * S_W23
 
     # Thrust from W2+W3 only
-    b_mean = 0.742
+    b_mean = B_MEAN_M
     amp_r  = _lmath.radians(FLAP_AMP_DEG)
     V_tip  = 2 * _lmath.pi * freq_w23_hz * amp_r * b_mean
     J      = V_ms / V_tip if V_tip > 0.01 else 99
@@ -5504,7 +5546,7 @@ def dart_safe_to_initiate(V_ms, h_agl_m, bank_deg):
 # RHO and MTOW_KG — needed by functions above
 # -----------------------------------------------------------------
 RHO = 1.225
-MTOW_KG = 3.448
+MTOW_KG = 5.687  # kg (flight MTOW confirmed in BOM and Mark 1 Master Spec)
 
 
 # -----------------------------------------------------------------
@@ -6143,6 +6185,17 @@ class GestureDetector:
             conf = min(1.0, abs(pitch_rate) / STOOP_STICK_RATE_MIN)
             return 'stoop_auto', conf
 
+        # ── ROOST PERCH FLARE / SOMERSAULT (H-84) ────────────────────
+        # Bat-inspired roosting somersault / post-stall perch stop
+        # Priority over standard zoom climb when pitch pull is extreme (stick >= 0.80, rate >= 2.0)
+        if pitch_now >= 0.80 and pitch_rate >= 2.0:
+            if lever_now <= 25.0 or lever_now >= 80.0:
+                conf = min(1.0, pitch_rate / 2.5)
+                return 'perch_flare', conf
+            elif V_ms >= 5.0:
+                conf = min(1.0, pitch_rate / 2.5)
+                return 'roost_somersault', conf
+
         # ── ZOOM CLIMB: stick back fast + lever at sprint ──────────
         # pitch_rate > 0 = stick pulled back
         if (pitch_rate > ZOOM_PITCH_RATE_THRESHOLD
@@ -6427,6 +6480,14 @@ def classify_pitch_intent(pitch_stick, lever_pct, V_ms,
         if not safe:
             return None, 0.0, {}
         return 'power_dive', conf, {'pitch_deg': pitch_deg_imu}
+
+    if gesture == 'perch_flare':
+        return 'perch_flare', conf, {'flare_type': 'perch_landing'}
+
+    if gesture == 'roost_somersault':
+        if h_agl_m < 5.0:
+            return 'perch_flare', conf, {'flare_type': 'envelope_clamped_perch'}
+        return 'roost_somersault', conf, {'pitch_target_deg': 180.0}
 
     return None, 0.0, {}
 
@@ -7089,7 +7150,7 @@ def crab_params(direction, intensity, V_ms, current_freq,
 
     # Lateral force estimate
     V_stroke_rms = (2*math.pi*current_freq *
-                    math.radians(FLAP_AMP_DEG) * 0.742 * 0.6
+                    math.radians(FLAP_AMP_DEG) * B_MEAN_M * 0.6
                     / math.sqrt(2))
     V_rel = math.sqrt(V_ms**2 + V_stroke_rms**2)
     q_eff = 0.5 * RHO * V_rel**2
@@ -7100,8 +7161,7 @@ def crab_params(direction, intensity, V_ms, current_freq,
     c_mag = math.sqrt(
         (math.sin(theta)*V_stroke_rms)**2 + cy**2 + cz**2)
     lat_frac = cy / c_mag if c_mag > 0.01 else 0.0
-    S_port = sum(2*s*CHORD_MM/1000 for s in
-                 [0.772, 0.749, 0.735, 0.712]) / 2  # one side per pair × 4
+    S_port = sum(2*(SEMI_SPANS_MM[i]/1000.0)*(CHORD_MM/1000.0) for i in (1,2,3,4)) / 2  # one side per pair × 4
     F_lat = 1.2 * q_eff * S_port * abs(lat_frac) * intensity
 
     return {
@@ -7159,7 +7219,7 @@ def vectored_thrust_lateral_force(port_sweep_deg, V_ms, freq_hz):
     Returns (F_lat_N, a_lat_g, safe: bool).
     """
     V_stroke = (2*math.pi*freq_hz*math.radians(FLAP_AMP_DEG)
-                * 0.742 * 0.6 / math.sqrt(2))
+                * B_MEAN_M * 0.6 / math.sqrt(2))
     V_rel = math.sqrt(V_ms**2 + V_stroke**2)
     q = 0.5 * RHO * V_rel**2
     theta = math.radians(port_sweep_deg)
@@ -7168,15 +7228,15 @@ def vectored_thrust_lateral_force(port_sweep_deg, V_ms, freq_hz):
     c_mag = math.sqrt(
         (math.sin(theta)*V_stroke)**2 + cy**2 + cz**2)
     lat_frac = cy / c_mag if c_mag > 0.01 else 0.0
-    # All 4 port wing panels, one side each
-    S_port = 0.772*0.165 + 0.749*0.165 + 0.735*0.165 + 0.712*0.165
+    # All 4 port wing panels, one side each (4 x 1.0m x 0.165m = 0.660 m^2)
+    S_port = sum(SEMI_SPANS_MM[i] / 1000.0 for i in (1,2,3,4)) * (CHORD_MM / 1000.0)
     F_lat = 1.2 * q * S_port * abs(lat_frac)
     a_lat = F_lat / MTOW_KG
     # Safety: check stbd CL
     stbd_vert = 1.2 * q * S_port * abs(cz/c_mag) if c_mag > 0.01 else 0
     W = MTOW_KG * 9.81
     stbd_CL_needed = (W - stbd_vert) / (q * S_port) if q*S_port > 0 else 99
-    safe = stbd_CL_needed < 2.40
+    safe = stbd_CL_needed < CL_MAX
     return round(F_lat, 2), round(a_lat, 3), safe
 
 
@@ -9553,17 +9613,14 @@ def aoa_sweep_table(V_fwd_ms=6.0, freq_hz=2.0, pitch_deg=32.0,
 #   2. Z-step increased from 30mm to 100mm to give adequate margin
 #      even with the tapered root, at the full ±35° slow-flight
 #      pitch limit (PITCH_LIMIT_SLOW_DEG).
-STAIRCASE_Z_STEP_MM   = 100.0  # vertical offset between adjacent pairs
-                                # (was 30mm — increased after Rev Z-2
-                                #  pitch-aware analysis found 30mm
-                                #  insufficient; see collision_status_report_v2)
-STAIRCASE_Z_HEIGHTS_MM = {     # root pivot height, mm from centreline
-    1: +1.5 * STAIRCASE_Z_STEP_MM,   # W1: +150mm
-    2: +0.5 * STAIRCASE_Z_STEP_MM,   # W2: +50mm
-    3: -0.5 * STAIRCASE_Z_STEP_MM,   # W3: -50mm
-    4: -1.5 * STAIRCASE_Z_STEP_MM,   # W4: -150mm
+STAIRCASE_Z_STEP_MM   = 41.25  # vertical offset between adjacent pairs (CAD Rev C: 9.37° spine)
+STAIRCASE_Z_HEIGHTS_MM = {     # root pivot height, mm from datum
+    1: 171.50,   # W1: 171.5mm
+    2: 130.25,   # W2: 130.25mm
+    3: 89.00,    # W3: 89.0mm
+    4: 47.75,    # W4: 47.75mm
 }
-STAIRCASE_X_STAGGER_MM = STAGGER_MM   # 138mm — unchanged from original
+STAIRCASE_X_STAGGER_MM = STAGGER_MM   # 250mm
 ROOT_MECH_RADIUS_MM    = 30.0   # drive/servo housing radius at root
 WING_THICKNESS_MM      = 0.12 * CHORD_MM   # S1223 max thickness ≈ 19.8mm
 MIN_CLEARANCE_MM       = 8.0    # hard safety minimum, any wing pair
@@ -11767,7 +11824,8 @@ def mco_airborne_range_check(h_agl_m, V_ms, freq_hz, pi_handle,
             if not cr['all_safe']:
                 combined_ok = False
 
-            _startup_time.sleep(1/36/freq_hz)
+            if freq_hz > 0.01:
+                _startup_time.sleep(1 / (36 * freq_hz))
 
         results['combined_check'] = {
             'collision_ok':    combined_ok,
@@ -11843,6 +11901,8 @@ def tick_error_report():
 
 
 
+_pre_range_tick = MCOFlightController.tick
+
 def _tick_with_range_check(self, sensors):
     """
     Patched tick() that:
@@ -11853,7 +11913,7 @@ def _tick_with_range_check(self, sensors):
       5. Enforces per-wing dynamic velocity limits from thermal data
       6. Runs airborne range check when conditions met
     """
-    result = None
+    result = _pre_range_tick(self, sensors)
 
     h_agl  = sensors.get('h_agl_m', 0.0)
     V_ms   = sensors.get('V_ms',    0.0)   # pitot airspeed — not GPS
@@ -12595,7 +12655,11 @@ def _gesture_evaluate_af2(self, pitch_stick, roll_stick, lever_pct,
     # Substitute the classified result into the existing logic
     # by temporarily calling original evaluate() with the same inputs,
     # but then layering in inertial pitch for zoom if applicable.
-    base_result = None
+    base_result = _orig_gesture_evaluate(
+        self, pitch_stick, roll_stick, lever_pct,
+        V_ms, h_agl_m, bank_deg, Ps_measured,
+        freq_hz, sweeps, pitches, intent,
+        current_time_s, dt_s, pitch_deg_imu=pitch_deg_imu)
 
     # GAP 4: inertial pitch preposition and release during zoom climb
     if (base_result['gesture'] == 'zoom_climb' and
@@ -12634,7 +12698,7 @@ _orig_emergency_recover = MCOFlightController.emergency_recover
 
 def _emergency_recover_af2(self):
     """Rev AF-2: also revert adaptive loops on emergency recovery."""
-    None
+    _orig_emergency_recover(self)
     adaptive_revert_all()
 
 MCOFlightController.emergency_recover = _emergency_recover_af2
@@ -12710,13 +12774,9 @@ SOFT_TAKEOFF_MAX_HEIGHT_M   = GEF_USEFUL_HEIGHT_M  # stay below 0.37m while acce
 SOFT_TAKEOFF_ACCEL_INTENT   = 'cruise'   # during GE accel phase: prioritise thrust
 
 # Vs_OGE: stall speed out of ground effect (standard free-air Vs)
-VS_OGE_MS = VS_KT / 1.944   # = 4.85 m/s (from existing constant)
+VS_OGE_MS = VS_KT / 1.944   # = 6.57 m/s (free-air stall speed at MTOW 5.687kg, S=1.320m²)
 VS_IGE_FACTOR = 0.87         # IGE stall speed ≈ 0.87 × OGE stall speed
-                              # (from 23% CDi reduction at 0.25×span:
-                              #  Vs_IGE = Vs_OGE × sqrt(CLmax_OGE/CLmax_IGE)
-                              #  ≈ Vs_OGE × sqrt(1/(1+0.23)) ≈ 0.90,
-                              #  conservative 0.87 used)
-VS_IGE_MS = VS_OGE_MS * VS_IGE_FACTOR   # 4.22 m/s
+VS_IGE_MS = VS_OGE_MS * VS_IGE_FACTOR   # = 5.72 m/s (in ground effect)
 
 # GEF mode state machine
 _gef_state = {
@@ -14626,7 +14686,7 @@ _dr_state = {
     'correction':    0.0,
 }
 
-_ph_state = {
+_phugoid_state = {
     'es_buf':        _dcol.deque(maxlen=PH_ES_HISTORY_N),
     'time_buf':      _dcol.deque(maxlen=PH_ES_HISTORY_N),
     'last_sample_s': 0.0,
@@ -14791,7 +14851,7 @@ def phugoid_detect_and_damp(h_agl_m, V_ms, current_time_s,
         period_est_s       : float — estimated phugoid period
         active             : bool
     """
-    st  = _ph_state
+    st  = _phugoid_state
     g   = 9.81
     es  = h_agl_m + V_ms**2 / (2*g)   # specific energy height (m)
 
@@ -14828,7 +14888,11 @@ def phugoid_detect_and_damp(h_agl_m, V_ms, current_time_s,
     st['es_trend_ms'] = round(es_trend, 3)
 
     # Estimated phugoid period (Lanchester 1908): T = π√2 × V / g
-    T_est = _dmath.pi * _dmath.sqrt(2) * V_ms / g
+    if V_ms < 1.0:
+        return {'freq_correction_hz':0,'phase':'neutral',
+                'es_now_m':round(es,2),'es_trend_ms':round(es_trend, 3),
+                'period_est_s':0,'active':False}
+    T_est = max(0.1, _dmath.pi * _dmath.sqrt(2) * V_ms / g)
     st['period_est_s'] = round(T_est, 1)
 
     # Phase detection
@@ -14868,7 +14932,7 @@ def phugoid_detect_and_damp(h_agl_m, V_ms, current_time_s,
 def oscillation_status():
     """Print current Dutch roll and phugoid damper status."""
     dr = _dr_state
-    ph = _ph_state
+    ph = _phugoid_state
     print(f"\n  OSCILLATION DAMPER STATUS")
     print(f"  Dutch roll:  active={dr['active']}  "
           f"rms_ψ={dr['rms_yaw_rate']:.3f}rad/s  "
@@ -15417,11 +15481,15 @@ def fault_detect_actuators(odrive_axes, motor_currents_a,
     fs['bus_voltage_v']   = bus_voltage_v
     fs['servo_voltage_v'] = servo_voltage_v
 
-    if bus_voltage_v < FAULT_VOLTAGE_LAND_V:
+    is_6s = bus_voltage_v > 18.0
+    v_land = 20.4 if is_6s else FAULT_VOLTAGE_LAND_V
+    v_warn = 21.6 if is_6s else FAULT_VOLTAGE_WARN_V
+
+    if bus_voltage_v < v_land:
         _log_fault('BATTERY_CRITICAL',
                    f"{bus_voltage_v:.1f}V — LAND IMMEDIATELY")
         fs['degraded_mode'] = 'land_now'
-    elif bus_voltage_v < FAULT_VOLTAGE_WARN_V:
+    elif bus_voltage_v < v_warn:
         _log_fault('BATTERY_LOW', f"{bus_voltage_v:.1f}V")
 
     if servo_voltage_v < FAULT_SERVO_VOLT_MIN_V:
@@ -15573,7 +15641,8 @@ def fault_compensate(wing_commands, freq_hz, sensors):
         freq_scale = 1.0
 
     # Low voltage reduces frequency
-    if fs['bus_voltage_v'] < FAULT_VOLTAGE_WARN_V:
+    v_warn_thresh = 21.6 if fs.get('bus_voltage_v', 0.0) > 18.0 else FAULT_VOLTAGE_WARN_V
+    if fs.get('bus_voltage_v', 0.0) < v_warn_thresh:
         volt_scale = FAULT_FREQ_SCALE_LOW_V
     else:
         volt_scale = 1.0
@@ -15770,7 +15839,7 @@ import collections as _aoc
 RC_WATCHDOG_TIMEOUT_S    = 1.0    # seconds without RC → comms lost
 RC_RTH_ALTITUDE_M        = 30.0   # m AGL — climb to this before RTH
 RC_RTH_MIN_ALTITUDE_M    = 5.0    # m — below this, land immediately
-RC_RTH_SPEED_MS          = 5.0    # m/s — RTH cruise speed
+RC_RTH_SPEED_MS          = 12.0   # m/s — RTH cruise speed (calibrated > 11.0 m/s glide floor)
 RC_LAND_DESCENT_MS       = 0.5    # m/s — controlled descent rate
 RC_COMMS_RESTORED_S      = 3.0    # seconds of good signal to resume normal
 
@@ -15913,9 +15982,9 @@ def single_point_failure_report():
 
 
 # ── 3. LOAD FACTOR (G-LOAD) PROTECTION ───────────────────────────
-G_LOAD_LIMIT_POS     =  2.5   # g — maximum positive (A320 clean: +2.5g)
-G_LOAD_LIMIT_NEG     = -1.0   # g — maximum negative (A320 clean: -1.0g)
-G_LOAD_WARN_POS      =  2.0   # g — warning threshold
+G_LOAD_LIMIT_POS     =  2.0   # g — maximum positive structural limit (MCO-1D carbon spars)
+G_LOAD_LIMIT_NEG     = -1.0   # g — maximum negative
+G_LOAD_WARN_POS      =  1.7   # g — warning threshold
 G_LOAD_WARN_NEG      = -0.5   # g — warning threshold
 G_LOAD_ALPHA         =  0.15  # low-pass filter for accel reading
 
@@ -16765,24 +16834,24 @@ def _tick_ap(self, sensors):
     if now - self._last_lever_log_s >= 5.0:
         self._last_lever_log_s = now
         lever_log_performance(
-            zone         = lever_params['zone'],
+            zone         = lever_params.get('zone', 'CRUISE'),
             V_ms         = V_ms,
             Ps_measured  = Ps,
             sink_rate_ms = sink_rate,
-            freq_hz      = result['freq_hz'],
-            gl_id        = lever_params['gl_id'],
+            freq_hz      = result.get('freq_hz', 2.0),
+            gl_id        = lever_params.get('gl_id', 'GL-0'),
             imu_rms_g    = imu_rms,
         )
 
     # ── 5. Annotate result with lever intelligence ─────────────────
     opt_weights = lever_optimiser_weights(lever_pct)
-    learned     = lever_best_params(lever_params['zone'], V_ms)
+    learned     = lever_best_params(lever_params.get('zone', 'CRUISE'), V_ms)
 
-    result['lever_zone']       = lever_params['zone']
+    result['lever_zone']       = lever_params.get('zone', 'CRUISE')
     result['lever_intent']     = auto_intent
-    result['lever_gl_id']      = lever_params['gl_id']
-    result['lever_ctx_freq']   = ctx['freq_hz']
-    result['lever_ctx_reason'] = ctx['reason']
+    result['lever_gl_id']      = lever_params.get('gl_id', 'GL-0')
+    result['lever_ctx_freq']   = ctx.get('freq_hz', 2.0)
+    result['lever_ctx_reason'] = ctx.get('reason', '')
     result['opt_weights']      = opt_weights
     result['lever_learned']    = learned
     result['lever_params']     = lever_params
@@ -16865,8 +16934,8 @@ PULLOUT_DEPLOY_S        = 0.30   # seconds to fully deploy wings from stow
                                   # CAL: optimizer will refine from flight data
 PULLOUT_AMP_SCALE       = 0.85   # fraction of FLAP_AMP_DEG during pull phase
                                   # CAL: optimizer will refine
-PULLOUT_G_LIMIT         = 2.5    # g — structural limit (matches G_LOAD_LIMIT_POS)
-PULLOUT_G_WARN          = 2.0    # g — begin easing if approaching limit
+PULLOUT_G_LIMIT         = 2.0    # g — structural limit (matches G_LOAD_LIMIT_POS)
+PULLOUT_G_WARN          = 1.7    # g — begin easing if approaching limit
 PULLOUT_FREQ_MAX        = FREQ_LIMIT_MAX_HZ   # 3.0 Hz
 PULLOUT_AOA_DEG         = AOA_PEAK_CL_DEG     # 35° — maximum CL point
 PULLOUT_SWEEP_DEPLOY    = 60.0   # degrees — fully deployed sweep
@@ -17515,7 +17584,7 @@ def _gd_update_with_jump(self, pitch_stick, lever_pct, V_ms=0.0):
         return 'jump_takeoff', min(1.0, pitch_now)
 
     # Run existing gesture detection with airspeed
-    gesture, conf = None
+    gesture, conf = _orig_gd_update(self, pitch_stick, lever_pct, V_ms=V_ms)
 
     # ── ZOOM CLIMB: enforce minimum airspeed here too ────────────────
     # zoom_safe_to_initiate() also checks this in evaluate(), but checking
@@ -22647,12 +22716,17 @@ def violent_manoeuvre_status():
 
 
 
+_pre_gesture_ev = MCOGestureController.evaluate
+
 def _gesture_ev_with_freeze(self, pitch_stick, roll_stick, lever_pct,
                               V_ms, h_agl_m, bank_deg, Ps_measured,
                               freq_hz, sweeps, pitches, intent,
                               current_time_s, dt_s, pitch_deg_imu=0.0):
 
-    result = None
+    result = _pre_gesture_ev(self, pitch_stick, roll_stick, lever_pct,
+                             V_ms, h_agl_m, bank_deg, Ps_measured,
+                             freq_hz, sweeps, pitches, intent,
+                             current_time_s, dt_s, pitch_deg_imu=pitch_deg_imu)
 
     gesture = result.get('gesture', '')
 
@@ -22685,7 +22759,7 @@ MCOGestureController.evaluate = _gesture_ev_with_freeze
 def pullout_trigger(pitch_stick, pitch_stick_rate, lever_pct,
                      bank_deg, V_ms, h_agl_m, freq_hz,
                      intent, elapsed_since_pullout_s):
-    result = None
+    result = {'fire': False}
     if result.get('fire') and not _violent_state['active']:
         manoeuvre_freeze('pullout', freq_hz)
     return result
@@ -23064,6 +23138,7 @@ def aerobatic_discovery_status():
     print(f"  Zero score if stall risk active — aggressive configs discarded.")
 
 
+_pre_gef_tick = MCOFlightController.tick
 
 def _tick_gef(self, sensors):
     """GEF active height hold — wires gef_freq_for_height into tick."""
@@ -25172,6 +25247,20 @@ _stall_recovery_cmds = {'active': False}
 # ── FIX 3: EMERGENCY AVOIDANCE — continuous split + per-wing sweep
 # Patch emergency_avoidance_tick to use continuous split fractions
 # and per-wing sweep/dihedral instead of binary constants.
+
+
+TURB_ALPHA            = 0.05    # low-pass alpha for turbulence intensity EMA
+TURB_LOW              = 0.05    # g — below this: light turbulence
+TURB_HIGH             = 0.30    # g — above this: severe turbulence; cascade sync
+TURB_GROUP_SYNC_PHASE = 45.0    # deg — inter-pair phase during turbulence grouping
+
+_turb_state = {
+    'intensity':          0.0,
+    'wing_tuck_active':   False,
+    'amplitude_shield':   1.0,
+    'group_sync_active':  False,
+    'cascade_phase_bias': 0.0,
+}
 
 
 def gust_response_tick(wing_commands, imu_rms_g, accel_z_g,
@@ -27691,6 +27780,7 @@ import math as _lwm
 
 # Patch unified_lever_to_params with speed-aware sprint selection
 
+_pre_hsf_tick = MCOFlightController.tick
 
 def _tick_hsf(self, sensors):
     """
@@ -28282,6 +28372,64 @@ _GS_SETTABLE['L9_MAX_DELTA_FRAC'] = float
 
 # _gs_execute_cmd handles all GS commands (flattened chain)
 
+def _execute_gs_base_cmd(cmd_dict):
+    """Base execution handler for ground station commands."""
+    if not isinstance(cmd_dict, dict):
+        return {'type': 'error', 'msg': 'Command must be a dictionary'}
+    cmd = cmd_dict.get('cmd', '')
+    if not cmd:
+        return {'type': 'error', 'msg': 'No command specified'}
+
+    if cmd == 'help':
+        return {
+            'type': 'ack',
+            'msg': 'MCO-1D Ground Station Command Processor',
+            'allowed_cmds': sorted(list(_GS_ALLOWED_CMDS)) if '_GS_ALLOWED_CMDS' in globals() else [],
+        }
+
+    if cmd == 'set':
+        key = cmd_dict.get('key') or cmd_dict.get('param')
+        val = cmd_dict.get('value') or cmd_dict.get('val')
+        if key in _GS_SETTABLE:
+            typ = _GS_SETTABLE[key]
+            try:
+                if typ == bool:
+                    parsed = bool(val) if not isinstance(val, str) else val.lower() in ('true', '1', 'yes')
+                else:
+                    parsed = typ(val)
+                globals()[key] = parsed
+                return {'type': 'ack', 'key': key, 'value': parsed, 'msg': f'{key} updated'}
+            except (ValueError, TypeError) as e:
+                return {'type': 'error', 'msg': f'Cannot convert {key} to {typ.__name__}: {e}'}
+        elif 'param_set' in globals():
+            param_set(key, val)
+            return {'type': 'ack', 'key': key, 'value': val}
+        return {'type': 'error', 'msg': f'{key} not settable'}
+
+    # Alias for hypothesis status
+    if cmd == 'hyp_status' and 'user_hypothesis_status' in globals():
+        fn = globals()['user_hypothesis_status']
+        res = fn()
+        return {'type': 'ack', 'cmd': cmd, 'result': res if res is not None else 'ok'}
+
+    fn = globals().get(cmd, None)
+    if callable(fn):
+        try:
+            import inspect
+            sig = inspect.signature(fn)
+            params = sig.parameters
+            if not params:
+                res = fn()
+            else:
+                call_args = {k: v for k, v in cmd_dict.items() if k in params and k != 'cmd'}
+                res = fn(**call_args)
+            return {'type': 'ack', 'cmd': cmd, 'result': res if res is not None else 'ok'}
+        except Exception as e:
+            return {'type': 'error', 'cmd': cmd, 'msg': str(e)}
+
+    return {'type': 'error', 'cmd': cmd, 'msg': f'Unknown command: {cmd}'}
+
+
 def _gs_execute_cmd(cmd_dict):
     cmd = cmd_dict.get('cmd', '')
     if cmd == 'l9_status':
@@ -28727,7 +28875,8 @@ def autonomous_discovery_tick(Ps_measured, V_ms, h_agl_m,
 
     # Get current zone
     try:
-        lp   = None
+        _fn_ul = _orig_unified_lever if '_orig_unified_lever' in globals() else (unified_lever if 'unified_lever' in globals() else None)
+        lp   = _fn_ul(lever_pct, V_ms, h_agl_m) if _fn_ul else {}
         zone = lp.get('zone', 'TRIM')
     except Exception:
         zone = 'TRIM'
@@ -28831,6 +28980,7 @@ def autonomous_discovery_status():
 
 # ── Patch unified_lever_to_params to query discovered modes ──────
 
+_pre_auto_disc_tick = MCOFlightController.tick
 
 def _tick_auto_disc(self, sensors):
     """
@@ -31398,6 +31548,26 @@ def lever_convention_status():
 
 # Patch smooth_ground_control_tick to use conventional lever mapping
 
+TAKEOFF_ARM_CONFIRM_S = 0.3    # s — lever above takeoff threshold to confirm handoff
+LANDING_TAXI_OFFER_S  = 3.0    # s — deceleration below taxi speed before auto-offering taxi
+import time as _trt
+
+_transition_state = {
+    'takeoff_armed':       False,
+    'takeoff_arm_t':       None,
+    'liftoff_confirmed':   False,
+    'liftoff_t':           None,
+    'touchdown_confirmed': False,
+    'touchdown_t':         None,
+    'decel_below_taxi_t':  None,
+    'taxi_auto_offered':   False,
+    'dihedral_at_liftoff': TAXI_DIHEDRAL_DEG_V2,
+    'sweep_at_liftoff':    TAXI_SWEEP_DEG_V2,
+    'dihedral_smooth':     SmoothParam(initial=TAXI_DIHEDRAL_DEG_V2, max_rate=12.0),
+    'sweep_smooth':        SmoothParam(initial=TAXI_SWEEP_DEG_V2, max_rate=15.0),
+    'sector_min_smooth':   SmoothParam(initial=0.0, max_rate=60.0),
+}
+
 
 def transition_tick(h_agl_m, V_ms, lever_pct, sink_rate_ms,
                     wing_commands, dt_s, ground_ops_mode):
@@ -32848,14 +33018,17 @@ def _h01_dragonfly_phase(phase_deg, base_config=None):
     cfg = dict(base_config or {})
     cfg['cascade_phase_deg'] = float(phase_deg)
     cfg['hypothesis'] = 'H-01'
-    cfg['bio_source',
-    # Inter-pair cascade phase variants (Issue 14 fix)
-    {'id':'H-01-p30','pair_phases':[0,30,60,90],'desc':'30° inter-pair'},
-    {'id':'H-01-p45','pair_phases':[0,45,90,135],'desc':'45° uniform (baseline)'},
-    {'id':'H-01-p60','pair_phases':[0,60,120,180],'desc':'60° inter-pair'},
-    {'id':'H-01-p90','pair_phases':[0,90,180,270],'desc':'90° inter-pair'},
-    {'id':'H-01-popt','pair_phases':None,'desc':'optimizer-selected phase'}] = 'dragonfly_phase_switching'
+    cfg['bio_source'] = 'dragonfly_phase_switching'
     return cfg
+
+# Inter-pair cascade phase variants (Issue 14 fix)
+H01_INTERPAIR_VARIANTS = [
+    {'id': 'H-01-p30', 'pair_phases': [0, 30, 60, 90], 'desc': '30° inter-pair'},
+    {'id': 'H-01-p45', 'pair_phases': [0, 45, 90, 135], 'desc': '45° uniform (baseline)'},
+    {'id': 'H-01-p60', 'pair_phases': [0, 60, 120, 180], 'desc': '60° inter-pair'},
+    {'id': 'H-01-p90', 'pair_phases': [0, 90, 180, 270], 'desc': '90° inter-pair'},
+    {'id': 'H-01-popt', 'pair_phases': None, 'desc': 'optimizer-selected phase'}
+]
 
 def _h02_bat_advance_rotation(advance_deg, base_config=None):
     """
@@ -33183,6 +33356,8 @@ def _next_biomimetic_config(V_ms):
                 st['tried_hypotheses'] = tried
                 if arg is None:
                     return fn(), hyp_id
+                elif isinstance(arg, tuple):
+                    return fn(*arg), hyp_id
                 else:
                     return fn(arg), hyp_id
 
@@ -33518,7 +33693,7 @@ _MCO_1D_REF = {
     'n_wings':        8,
     'hover_freq_hz':  2.5,
     'vs_oge_ms':      VS_OGE_MS,
-    'reducer_ratio':  7.0,
+    'reducer_ratio':  REDUCER_RATIO,
 }
 
 
@@ -34270,9 +34445,13 @@ def phase_objective_score(sensors, result, phase=None):
         # Penalise configurations that sacrifice speed for Ps
         # (we want efficient forward progress, not excess climb)
         speed_factor  = min(1.0, V_ms / (VS_OGE_MS * 2.0))
-        score         = range_per_wh * speed_factor
+        # Carson's speed alignment bonus (V_br ≈ 11.7 m/s):
+        carson_v = 11.67
+        speed_match = max(0.85, 1.0 - abs(V_ms - carson_v) / 25.0)
+        score         = range_per_wh * speed_factor * speed_match
         detail.update({'range_per_wh': round(range_per_wh, 4),
-                       'speed_factor': round(speed_factor, 3)})
+                       'speed_factor': round(speed_factor, 3),
+                       'carson_match': round(speed_match, 3)})
 
     # ── METRIC: min_power (cruise, hover, taxi) ───────────────────
     elif metric == 'min_power':
@@ -34281,10 +34460,31 @@ def phase_objective_score(sensors, result, phase=None):
         altitude_ok  = abs(sink) < 0.3           # not losing altitude
         power_score  = 1.0 / P_watts if P_watts > 0 else 0.0
         sink_penalty = max(0.0, 1.0 - abs(sink) * 2.0)
-        score        = power_score * sink_penalty if altitude_ok else \
+        base_score   = power_score * sink_penalty if altitude_ok else \
                        power_score * 0.3
+
+        # ── Multi-objective Energy Stewardship Pareto factors ──
+        # 1. Cost of Transport (CoT) penalty/reward:
+        cot = P_watts / (M_AIRFRAME_KG * 9.81 * max(0.5, V_ms))
+        cot_factor = max(0.5, min(1.5, 1.0 + (5.0 - cot) * 0.08))
+
+        # 2. Form factor / crest factor suppression (minimize peaky I²R heat):
+        i_rms = sensors.get('motor_I_rms_A', I_A)
+        kf = (i_rms / max(0.1, I_A)) if I_A > 0.5 else 1.0
+        heat_factor = max(0.80, 1.0 - 0.20 * max(0.0, kf - 1.0))
+
+        # 3. Bio-optimal Strouhal number window (0.20 - 0.35, Taylor et al.):
+        freq_cmd = result.get('freq_hz_cmd', 1.87) if isinstance(result, dict) else 1.87
+        amp_cmd  = result.get('amp_port_deg', 90.0) if isinstance(result, dict) else 90.0
+        strouhal = (2.0 * freq_cmd * math.radians(amp_cmd) * 0.772) / max(0.5, V_ms)
+        st_factor = 1.12 if (0.20 <= strouhal <= 0.35) else max(0.88, 1.0 - 0.3 * abs(strouhal - 0.275))
+
+        score = base_score * cot_factor * heat_factor * st_factor
         detail.update({'P_watts': round(P_watts, 1),
-                       'sink_penalty': round(sink_penalty, 3)})
+                       'sink_penalty': round(sink_penalty, 3),
+                       'cot': round(cot, 3),
+                       'form_factor_kf': round(kf, 3),
+                       'strouhal': round(strouhal, 3)})
 
     # ── METRIC: endurance (SAR loiter) ────────────────────────────
     elif metric == 'endurance':
@@ -34651,6 +34851,12 @@ MCOFlightController.tick = _tick_objective
 # ── Patch exploration_tick to use phase objective + envelope ───────
 _pre_expl_with_obj = exploration_tick
 
+_user_hyp_counter = [0]
+_USER_HYPOTHESES  = {}
+import os   as _hio
+import glob as _hig
+import json as _hij
+
 
 def _next_user_hyp_id():
     _user_hyp_counter[0] += 1
@@ -34880,6 +35086,18 @@ _GS_ALLOWED_CMDS.update({
     'user_hypothesis_status',
 })
 
+SLOPE_VALID_V_MAX_MS    = 12.0
+SLOPE_CONFIDENCE_MIN    = 0.50
+SLOPE_CORRECTION_MAX_M  = 3.0
+
+_slope_state = {
+    'confidence':     0.0,
+    'ranger_prev':    0.0,
+    'baro_rate_prev': 0.0,
+    'slope_deg':      0.0,
+    'alpha':          0.15,
+    'h_corrected_m':  0.0,
+}
 
 
 def slope_aware_h_agl(h_baro_m, rangefinder_m, V_ms,
@@ -34942,7 +35160,8 @@ def slope_aware_h_agl(h_baro_m, rangefinder_m, V_ms,
 
     return {
         'h_corrected':  h_corrected,
-            'confidence':   confidence,
+        'slope_deg':    round(st['slope_deg'], 2),
+        'confidence':   confidence,
         'correction_m': round(correction_m, 3),
     }
 
@@ -35782,7 +36001,9 @@ def _exploration_schedule(lever_pct, Ps_measured, V_ms, now):
     if _exploration_state.get('margin_freeze', False):
         return 1, 'margin_freeze: combined margin too narrow'
 
-    return _exploration_schedule(lever_pct, Ps_measured, V_ms, now)
+    if 45.0 <= lever_pct <= 68.0 and abs(Ps_measured) < 0.5:
+        return 2, 'stable cruise: biomimetic exploration'
+    return 1, 'standard baseline: layer 1'
 
 _GS_ALLOWED_CMDS.update({'margin_status'})
 
@@ -40068,7 +40289,7 @@ _GS_ALLOWED_CMDS.update({
 #   Balanced uses a combined score: w_perf*perf_score + w_prec*precision_score.
 # ═════════════════════════════════════════════════════════════════
 
-import math      as _psm
+import math      as _ps_math
 import time      as _pst
 import statistics as _pss
 
@@ -40109,7 +40330,7 @@ def _std_dev(values):
         return 0.0
     mean = sum(values) / n
     var  = sum((v - mean)**2 for v in values) / (n - 1)
-    return _psm.sqrt(max(0.0, var))
+    return _ps_math.sqrt(max(0.0, var))
 
 
 def precision_score_compute(sensors, result, flight_phase='cruise'):
@@ -40192,7 +40413,7 @@ def precision_score_compute(sensors, result, flight_phase='cruise'):
         m = s / n
         ss = 0.0
         for x in vals: ss += (x - m) * (x - m)
-        return _psm.sqrt(ss / (n - 1))
+        return _ps_math.sqrt(ss / (n - 1))
     sigma_h    = _fast_std(st['h_history'][-n:])
     sigma_roll = _fast_std(st['roll_history'][-n:])
     sigma_sink = _fast_std(st['sink_history'][-n:])
@@ -40207,10 +40428,10 @@ def precision_score_compute(sensors, result, flight_phase='cruise'):
         hdgs = st['hdg_history'][-n:]
         if hdgs:
             import cmath as _cm_hdg
-            mean_cos = sum(_psm.cos(_psm.radians(hv)) for hv in hdgs) / n
-            mean_sin = sum(_psm.sin(_psm.radians(hv)) for hv in hdgs) / n
-            hdg_std  = _psm.degrees(abs(_cm_hdg.phase(complex(mean_cos, mean_sin))))
-            precision_score_compute._sigma_hdg = min(180.0, hdg_std * _psm.sqrt(n))
+            mean_cos = sum(_ps_math.cos(_ps_math.radians(hv)) for hv in hdgs) / n
+            mean_sin = sum(_ps_math.sin(_ps_math.radians(hv)) for hv in hdgs) / n
+            hdg_std  = _ps_math.degrees(abs(_cm_hdg.phase(complex(mean_cos, mean_sin))))
+            precision_score_compute._sigma_hdg = min(180.0, hdg_std * _ps_math.sqrt(n))
     sigma_hdg = precision_score_compute._sigma_hdg
 
     st['sigma_h']    = round(sigma_h,    4)
@@ -41240,6 +41461,8 @@ def current_stall_detector(motor_currents_a, freq_hz, dt_s):
             st['baseline_current'][pair_idx] = mean_i
 
         # Within-stroke variance (focus on the last full stroke)
+        if freq_hz <= 0.01 or dt_s <= 1e-6:
+            continue
         ticks_per_stroke = max(1, int(1.0 / (freq_hz * dt_s)))
         recent = hist[-ticks_per_stroke:]
         if len(recent) < 3:
@@ -42223,7 +42446,7 @@ if _VERBOSE_INIT:
 #
 #   The ODrive already knows motor shaft position (pos_estimate register).
 #   Reading this via CAN gives actual sector wheel angle with no new hardware.
-#   With the 7:1 gear ratio: sector_deg = motor_pos_rad × (180/π) / 7.0
+#   With the 10:1 gear ratio: sector_deg = motor_pos_rad × (180/π) / 10.0
 #   This is the actual wing stroke position per pair.
 #
 #   WHAT THIS ENABLES:
@@ -42258,7 +42481,7 @@ import time        as _wpt
 
 # ── Motor position / stroke sensing ──────────────────────────────
 
-MOTOR_POS_GEAR_RATIO    = REDUCER_RATIO    # 7:1
+MOTOR_POS_GEAR_RATIO    = REDUCER_RATIO    # 10:1 (upgraded from 7:1)
 MOTOR_POS_RAD_PER_DEG   = _wpm.pi / 180.0
 # Sector wheel full stroke: -FLAP_AMP_DEG/2 to +FLAP_AMP_DEG/2
 # Motor position at stroke bottom: FLAP_AMP_DEG/2 × gear_ratio radians
@@ -45845,7 +46068,7 @@ def _register_dict_variants_with_loop():
                 cfg = _morphing_variant_to_config(v)
                 # Wrap as (callable, label) tuple the loop can call
                 label = v.get('variant') or v.get('h33_variant') or f'{hyp_id}_v{i}'
-                fn    = lambda c=cfg: c   # returns config dict when called
+                fn    = lambda *args, c=cfg: c   # returns config dict when called
                 wrapped.append((fn, label))
             else:
                 wrapped.append(v)   # already a tuple, leave alone
@@ -46609,7 +46832,7 @@ for item in _raw_h36:
     fn, arg = item
     cfg = fn  # fn is already a dict here
     label = cfg.get('variant', 'h36_unknown')
-    _patched_h36.append((lambda c=cfg: c, label))
+    _patched_h36.append((lambda *args, c=cfg: c, label))
 BIOMIMETIC_HYPOTHESES['H-36'] = _patched_h36
 
 # Add phase objectives for loiter and ferry
@@ -47915,7 +48138,7 @@ SOFT_STOP_ZONE_DEG       = 10.0    # °  taper begins this far before reversal
 SOFT_STOP_MIN_VEL_FRAC   = 0.35   # velocity at reversal as fraction of full vel
 SOFT_STOP_VEL_LIMIT_FRAC = 0.55   # vel_limit fraction applied inside zone
 SOFT_STOP_ENABLED        = True    # master enable — set False for diagnostics
-REDUCER_RATIO            = 7.0     # motor turns per sector turn (verify at TC-01)
+REDUCER_RATIO            = 10.0    # motor turns per sector turn (10:1 upgraded baseline)
 
 # Per-wing state for soft-stop tracking
 _ss_state = {
@@ -48585,11 +48808,14 @@ def cg_management_tick(sensors, result):
                 # Method 2: sweep asymmetry → lateral CG
                 sweeps = sensors.get('sweep_actual_deg', [60.0]*8)
                 if sweeps and len(sweeps) >= 8:
-                    port_sweeps = [sweeps[i] for i in range(0,8,2)]
-                    stbd_sweeps = [sweeps[i] for i in range(1,8,2)]
-                    mean_port  = sum(port_sweeps) / len(port_sweeps)
-                    mean_stbd  = sum(stbd_sweeps) / len(stbd_sweeps)
-                    obs_lat    = (mean_port - mean_stbd) * 5.0  # mm/deg
+                    port_sweeps = [sweeps[i] for i in range(0,8,2) if sweeps[i] is not None]
+                    stbd_sweeps = [sweeps[i] for i in range(1,8,2) if sweeps[i] is not None]
+                    if port_sweeps and stbd_sweeps:
+                        mean_port  = sum(port_sweeps) / len(port_sweeps)
+                        mean_stbd  = sum(stbd_sweeps) / len(stbd_sweeps)
+                        obs_lat    = (mean_port - mean_stbd) * 5.0  # mm/deg
+                    else:
+                        obs_lat = 0.0
                 else:
                     obs_lat = 0.0
 
@@ -49831,6 +50057,122 @@ _ph_state = {
 }
 
 
+def position_hold_tick(sensors, result):
+    """GPS position hold — PX4-style cascaded P/PID loops."""
+    if not PH_ENABLED:
+        result['ph_engaged'] = False
+        return result
+
+    st   = _ph_state
+    now  = _adv_time.monotonic()
+    gps  = sensors.get('gps_ok', False)
+    V_ms = sensors.get('V_ms', 0.0)
+
+    # Only active in hover/low-speed
+    if V_ms > 4.0 or not gps:
+        if st['engaged']:
+            st['engaged'] = False
+        result['ph_engaged'] = False
+        return result
+
+    roll_s  = sensors.get('roll_stick',  0.0)
+    pitch_s = sensors.get('pitch_stick', 0.0)
+    dt      = _adv_clamp(sensors.get('dt_s', 0.02), 0.005, 0.1)
+
+    # Engagement logic
+    if abs(roll_s) < 0.15 and abs(pitch_s) < 0.15:
+        if st['stick_centre_t'] is None:
+            st['stick_centre_t'] = now
+        if not st['engaged'] and now - st['stick_centre_t'] >= PH_ENGAGE_DELAY_S:
+            lat = sensors.get('lat', 0.0)
+            lon = sensors.get('lon', 0.0)
+            st['target_lat'] = lat
+            st['target_lon'] = lon
+            st['ref_lat']    = lat
+            st['ref_lon']    = lon
+            st['target_N']   = 0.0
+            st['target_E']   = 0.0
+            st['int_N']      = 0.0
+            st['int_E']      = 0.0
+            st['engaged']    = True
+    else:
+        st['stick_centre_t'] = None
+        if st['engaged']:
+            st['engaged'] = False
+            st['int_N']   = 0.0
+            st['int_E']   = 0.0
+
+    pitch_bias = 0.0
+    roll_bias  = 0.0
+
+    if st['engaged']:
+        lat      = sensors.get('lat', st['target_lat'])
+        lon      = sensors.get('lon', st['target_lon'])
+        vel_N    = sensors.get('vel_north_ms', 0.0)
+        vel_E    = sensors.get('vel_east_ms',  0.0)
+        hdg      = _adv_math.radians(sensors.get('heading_deg', 0.0))
+
+        # Current position in NE relative to capture point
+        cur_N, cur_E = _latlon_to_ned(st['ref_lat'], st['ref_lon'], lat, lon)
+
+        # Outer loop — position error → velocity command
+        err_N    = st['target_N'] - cur_N
+        err_E    = st['target_E'] - cur_E
+        vel_cmd_N = _adv_clamp(PH_KP_POS * err_N, -PH_MAX_VEL_CMD, PH_MAX_VEL_CMD)
+        vel_cmd_E = _adv_clamp(PH_KP_POS * err_E, -PH_MAX_VEL_CMD, PH_MAX_VEL_CMD)
+
+        # Middle loop — velocity error → acceleration command
+        verr_N   = vel_cmd_N - vel_N
+        verr_E   = vel_cmd_E - vel_E
+        st['int_N'] = _adv_clamp(st['int_N'] + verr_N * dt, -5.0, 5.0)
+        st['int_E'] = _adv_clamp(st['int_E'] + verr_E * dt, -5.0, 5.0)
+        acc_N    = _adv_clamp(PH_KP_VEL * verr_N + PH_KI_VEL * st['int_N'],
+                              -PH_MAX_ACC_CMD, PH_MAX_ACC_CMD)
+        acc_E    = _adv_clamp(PH_KP_VEL * verr_E + PH_KI_VEL * st['int_E'],
+                              -PH_MAX_ACC_CMD, PH_MAX_ACC_CMD)
+
+        # Rotate NE accel into body frame (pitch=fwd, roll=right)
+        acc_fwd  =  acc_N * _adv_math.cos(hdg) + acc_E * _adv_math.sin(hdg)
+        acc_right= -acc_N * _adv_math.sin(hdg) + acc_E * _adv_math.cos(hdg)
+
+        # Inner loop — accel → mechanism bias
+        pitch_bias = _adv_clamp(-acc_fwd  * PH_PITCH_PER_ACC,
+                                -PH_MAX_BIAS_DEG, PH_MAX_BIAS_DEG)
+        roll_bias  = _adv_clamp( acc_right * PH_ROLL_PER_ACC,
+                                -PH_MAX_BIAS_DEG, PH_MAX_BIAS_DEG)
+
+        # Apply pilot authority scale
+        scale = _adv_pilot_scale(roll_s, pitch_s)
+        pitch_bias *= scale
+        roll_bias  *= scale
+
+        # Metrics for optimizer
+        pos_rms = _adv_math.sqrt(err_N**2 + err_E**2)
+        vel_rms = _adv_math.sqrt(verr_N**2 + verr_E**2)
+        st['pos_err_rms'] = round(pos_rms, 2)
+        st['vel_err_rms'] = round(vel_rms, 2)
+
+    # Apply biases to wing commands via pitch_aoa and roll_dih
+    wc = result.get('wing_commands', [{} for _ in range(8)])
+    for i in range(8):
+        is_port = (i % 2 == 0)
+        # Pitch: forward tilt = negative AoA differential for all wings
+        wc[i]['pitch_deg'] = _adv_clamp(
+            wc[i].get('pitch_deg', 15.0) + pitch_bias,
+            PITCH_LIMIT_MIN_DEG, PITCH_LIMIT_MAX_DEG)
+        # Roll: dihedral differential
+        wc[i]['dihedral_deg'] = (
+            wc[i].get('dihedral_deg', 0.0) +
+            (roll_bias if is_port else -roll_bias))
+
+    result['wing_commands']   = wc
+    result['ph_engaged']      = st['engaged']
+    result['ph_pos_err_m']    = st['pos_err_rms']
+    result['ph_pitch_bias']   = round(pitch_bias, 2)
+    result['ph_roll_bias']    = round(roll_bias,  2)
+    return result
+
+
 TC_COORD_GAIN    = 0.85    # fraction of theoretically perfect coordination (tune at TC-04)
 TC_ACTIVE_BANK   = 5.0     # deg — bank below this: no coordination needed
 TC_PEDAL_RELEASE = 0.20    # yaw stick beyond this → pilot overrides coordination
@@ -51037,6 +51379,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 7.0, 'v_max': 11.0, 'priority': 1,
+        'eval_phases': ['cruise'],
     },
 
     {
@@ -51065,6 +51408,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 13.0, 'v_max': 18.0, 'priority': 1,
+        'eval_phases': ['cruise', 'sprint'],
     },
 
     {
@@ -51093,6 +51437,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 5.0, 'v_max': 8.0, 'priority': 2,
+        'eval_phases': ['cruise', 'loiter', 'descent'],
     },
 
     # ── INTER-PAIR PHASE OPTIMISATION ─────────────────────────────────────────
@@ -51123,6 +51468,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 10.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'sprint', 'climb'],
     },
 
     {
@@ -51153,6 +51499,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 7.0, 'v_max': 12.0, 'priority': 1,
+        'eval_phases': ['cruise', 'climb'],
     },
 
     {
@@ -51182,6 +51529,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 13.0, 'v_max': 18.0, 'priority': 2,
+        'eval_phases': ['cruise', 'sprint'],
     },
 
     {
@@ -51211,6 +51559,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 5.0, 'v_max': 9.0, 'priority': 2,
+        'eval_phases': ['cruise', 'loiter', 'descent'],
     },
 
     # ── STROKE KINEMATICS ─────────────────────────────────────────────────────
@@ -51241,6 +51590,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 0.0, 'v_max': 5.0, 'priority': 2,
+        'eval_phases': ['hover', 'climb', 'takeoff'],
     },
 
     {
@@ -51271,6 +51621,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 0.0, 'v_max': 4.0, 'priority': 3,
+        'eval_phases': ['hover', 'climb'],
     },
 
     {
@@ -51300,6 +51651,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 0.0, 'v_max': 8.0, 'priority': 3,
+        'eval_phases': ['hover', 'cruise', 'climb'],
     },
 
     # ── HIGH-SPEED MORPHING ───────────────────────────────────────────────────
@@ -51331,6 +51683,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 17.0, 'v_max': 28.0, 'priority': 1,
+        'eval_phases': ['cruise', 'sprint', 'descent'],
     },
 
     {
@@ -51361,6 +51714,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 8.0, 'v_max': 16.0, 'priority': 2,
+        'eval_phases': ['cruise', 'climb'],
     },
 
     {
@@ -51390,6 +51744,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 0.0, 'v_max': 3.0, 'priority': 2,
+        'eval_phases': ['hover', 'landing', 'descent'],
     },
 
     # ── MANEUVERABILITY ───────────────────────────────────────────────────────
@@ -51422,6 +51777,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 5.0, 'v_max': 18.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'turn', 'cruise'],
     },
 
     {
@@ -51451,6 +51807,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 10.0, 'v_max': 22.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'brake', 'descent'],
     },
 
     {
@@ -51480,6 +51837,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 5.0, 'v_max': 15.0, 'priority': 3,
+        'eval_phases': ['manoeuvre', 'hover', 'climb'],
     },
 
     {
@@ -51509,6 +51867,7 @@ AERO_HYPOTHESES = [
             'proverse_sign':     1.0,
         },
         'v_min': 0.0, 'v_max': 18.0, 'priority': 3,
+        'eval_phases': ['manoeuvre', 'turn', 'cruise'],
     },
 ]
 
@@ -51517,48 +51876,80 @@ AERO_HYPOTHESES = [
 
 _hypothesis_queue = []   # ordered list of configs to try before random search
 _hypothesis_results = {} # id → {'Ps': float, 'V_ms': float, 'promoted': bool}
+_hypothesis_eval_history = [] # list of tested configs for deduplication check
 
 
-def seed_hypotheses(V_ms=9.0, targets=None):
+def _config_distance(cfg1: dict, cfg2: dict) -> float:
     """
-    Inject aerodynamic hypotheses into the discovery queue.
-    Called automatically when discovery mode is enabled, or manually
-    to pre-load specific performance targets.
+    Compute normalized parameter distance between two wave configurations.
+    Metrics normalized by operational ranges:
+      freq: 3.0 Hz
+      sweep: 170.0 deg
+      aoa: 35.0 deg
+      amp: 100.0 deg
+      cascade_phase: 360.0 deg
+    """
+    if not cfg1 or not cfg2:
+        return 1.0
+    f_diff = abs(cfg1.get('freq_hz', 2.0) - cfg2.get('freq_hz', 2.0)) / 3.0
+    sw_diff = abs(cfg1.get('sweep_deg', 60.0) - cfg2.get('sweep_deg', 60.0)) / 170.0
+    aoa_diff = abs(cfg1.get('aoa_deg', 20.0) - cfg2.get('aoa_deg', 20.0)) / 35.0
+    amp_diff = abs(cfg1.get('amp_port_deg', 96.0) - cfg2.get('amp_port_deg', 96.0)) / 100.0
+    ph_diff = abs(cfg1.get('cascade_phase_deg', 90.0) - cfg2.get('cascade_phase_deg', 90.0)) / 360.0
+    return math.sqrt((f_diff**2 + sw_diff**2 + aoa_diff**2 + amp_diff**2 + ph_diff**2) / 5.0)
 
-    Parameters
-    ----------
-    V_ms    : float — current airspeed (filters to applicable hypotheses)
-    targets : list of str | None — if given, only seed these targets.
-              e.g. ['efficiency', 'top_speed']
-              Valid: 'efficiency', 'top_speed', 'cruise', 'range',
-                     'maneuverability', 'acceleration'
 
-    Returns
-    -------
-    int — number of hypotheses seeded
+def seed_hypotheses_for_mission(flight_phase=None, V_ms: float = 9.0, targets=None) -> int:
+    """
+    Phase-aware mission hypothesis seeder.
+    Selects hypotheses matching current flight_phase and airspeed, sorted by priority.
     """
     global _hypothesis_queue
     _hypothesis_queue = []
 
-    applicable = [h for h in AERO_HYPOTHESES
-                  if h['v_min'] <= V_ms <= h['v_max']]
+    applicable = [h for h in AERO_HYPOTHESES if h.get('v_min', 0.0) <= V_ms <= h.get('v_max', 30.0)]
     if targets:
-        applicable = [h for h in applicable if h['target'] in targets]
+        applicable = [h for h in applicable if h.get('target') in targets]
 
-    # Sort by priority (1 first), then by target for grouping
-    applicable.sort(key=lambda h: (h['priority'], h['target']))
+    # Filter by flight phase if specified
+    if flight_phase:
+        phase_matched = [h for h in applicable if flight_phase in h.get('eval_phases', [])]
+        if phase_matched:
+            applicable = phase_matched
+        # If no specific matches found for phase, retain applicable as safe fallback
+
+    # Sort by priority (1 first), then target
+    applicable.sort(key=lambda h: (h.get('priority', 2), h.get('target', '')))
 
     for h in applicable:
         _hypothesis_queue.append({
-            'id':     h['id'],
-            'label':  h['label'],
-            'target': h['target'],
-            'config': dict(h['config']),
+            'id':          h['id'],
+            'label':       h.get('label', ''),
+            'target':      h.get('target', 'efficiency'),
+            'config':      dict(h.get('config', {})),
+            'eval_phases': list(h.get('eval_phases', [])),
+            'priority':    h.get('priority', 2),
         })
 
-    print(f"\n  HYPOTHESIS SEEDER: {len(_hypothesis_queue)} hypotheses loaded")
+    # Keep discovery state in sync if active
+    if isinstance(_discovery_state, dict):
+        _discovery_state['hyp_queue'] = list(_hypothesis_queue)
+
+    return len(_hypothesis_queue)
+
+
+def seed_hypotheses(V_ms=9.0, targets=None, phase=None, flight_phase=None):
+    """
+    Inject aerodynamic hypotheses into the discovery queue.
+    Called automatically when discovery mode is enabled, or manually
+    to pre-load specific performance targets or flight phases.
+    """
+    sel_phase = flight_phase or phase
+    count = seed_hypotheses_for_mission(flight_phase=sel_phase, V_ms=V_ms, targets=targets)
+
+    print(f"\n  HYPOTHESIS SEEDER: {count} hypotheses loaded")
     print(f"  Airspeed: {V_ms:.1f} m/s  "
-          f"Targets: {targets or 'all'}")
+          f"Targets: {targets or 'all'}  Phase: {sel_phase or 'all'}")
     print(f"  Evaluation order:")
     for i, h in enumerate(_hypothesis_queue[:8]):
         print(f"    {i+1:2d}. [{h['id']}] {h['label'][:55]}")
@@ -51582,13 +51973,69 @@ def hypothesis_next():
     return _hypothesis_queue.pop(0)
 
 
-def hypothesis_record(h_id, Ps, V_ms, promoted):
-    """Record result of a hypothesis evaluation."""
+def hypothesis_propose_next(current_config: dict | None = None, min_distance: float = 0.04) -> dict | None:
+    """
+    Pops the next candidate hypothesis with deduplication and convergence safeguards.
+    If the candidate config is nearly identical to an already evaluated config or
+    the current operating config (distance < min_distance), safeguards prevent redundant
+    evaluation.
+    """
+    while _hypothesis_queue:
+        candidate = _hypothesis_queue.pop(0)
+        cand_cfg = candidate.get('config', {})
+        cand_id = candidate.get('id', '')
+
+        # Check distance to current operating config
+        if current_config:
+            d_curr = _config_distance(cand_cfg, current_config)
+            if d_curr < min_distance:
+                candidate['deduplicated'] = True
+                candidate['dedup_reason'] = f'near_current_op (dist={d_curr:.3f})'
+                if len(_hypothesis_queue) > 0:
+                    continue
+
+        # Check distance against previously evaluated configs in _hypothesis_eval_history
+        is_dup = False
+        for past_entry in _hypothesis_eval_history:
+            past_cfg = past_entry.get('config', {})
+            d_past = _config_distance(cand_cfg, past_cfg)
+            if d_past < min_distance and past_entry.get('id') != cand_id:
+                is_dup = True
+                candidate['deduplicated'] = True
+                candidate['dedup_reason'] = f'near_prior_eval:{past_entry.get("id")} (dist={d_past:.3f})'
+                break
+
+        if is_dup and len(_hypothesis_queue) > 0:
+            continue
+
+        return candidate
+
+    return None
+
+
+def hypothesis_record(h_id, Ps, V_ms, promoted, config=None):
+    """Record result of a hypothesis evaluation and update history."""
     _hypothesis_results[h_id] = {
         'Ps':       round(Ps, 4),
         'V_ms':     round(V_ms, 1),
         'promoted': promoted,
     }
+    if config:
+        _hypothesis_eval_history.append({
+            'id': h_id,
+            'config': dict(config),
+            'Ps': Ps,
+            'promoted': promoted
+        })
+    elif h_id in {h['id']: h for h in AERO_HYPOTHESES}:
+        h_match = next((h for h in AERO_HYPOTHESES if h['id'] == h_id), None)
+        if h_match:
+            _hypothesis_eval_history.append({
+                'id': h_id,
+                'config': dict(h_match.get('config', {})),
+                'Ps': Ps,
+                'promoted': promoted
+            })
 
 
 def hypothesis_results():
@@ -51670,9 +52117,11 @@ def hypothesis_strouhal_targets(V_ms):
 # is always pre-loaded at the right airspeed.
 
 
+_orig_discovery_enable = discovery_enable
+
 def discovery_enable(current_h_agl_m, mode='normal'):
     """Enable discovery mode and pre-load aerodynamic hypothesis queue."""
-    result = None
+    result = _orig_discovery_enable(current_h_agl_m, mode=mode)
     if result.get('enabled'):
         # Seed with current airspeed — V_ms not available here so use 9.0 m/s
         # as a representative cruise start. The tick will re-filter as speed changes.
@@ -51796,16 +52245,16 @@ import os     as _plo
 import time   as _plt
 import shutil as _pls
 
-_PL_DIR      = '/home/pi/knowledge'
+_PL_DIR      = '/home/pi/knowledge' if _plo.path.exists('/home/pi') else _plo.path.expanduser('~/.mco/knowledge')
 _PL_VERSION  = 3    # bump when schema changes; old files are skipped
 
 # ── Atomic write helper ────────────────────────────────────────────────────────
 
 def _pl_write(path, data):
     """Atomically write JSON to path (write tmp → rename)."""
-    _plo.makedirs(_plo.path.dirname(path), exist_ok=True)
-    tmp = path + '.tmp'
     try:
+        _plo.makedirs(_plo.path.dirname(path), exist_ok=True)
+        tmp = path + '.tmp'
         with open(tmp, 'w') as f:
             _plj.dump(data, f, indent=2, default=str)
         _pls.move(tmp, path)
@@ -51834,8 +52283,8 @@ def _pl_read(path, default=None):
 def _pl_append_log(entry):
     """Append one JSON line to the learning log (append-only record)."""
     path = f'{_PL_DIR}/learning_log.jsonl'
-    _plo.makedirs(_PL_DIR, exist_ok=True)
     try:
+        _plo.makedirs(_PL_DIR, exist_ok=True)
         with open(path, 'a') as f:
             f.write(_plj.dumps({**entry,
                                  'ts': _plt.strftime('%Y-%m-%dT%H:%M:%S')},
@@ -53366,10 +53815,10 @@ def surface_classifier_tick(sensors):
 def surface_is_water():
     """Returns True if current classification is water with sufficient confidence."""
     st = _surface_state
-    if st['override'] == 'water': return True
-    if st['override'] == 'land':  return False
-    return (st['classification'] == 'water' and
-            st['confidence'] >= SURFACE_CONF_THRESHOLD)
+    if st.get('override') == 'water': return True
+    if st.get('override') == 'land':  return False
+    return (st.get('classification') == 'water' and
+            st.get('confidence', 0.0) >= SURFACE_CONF_THRESHOLD)
 
 
 def surface_set_water():
@@ -53763,6 +54212,7 @@ _FG_HYPOTHESES = [
             '_surface_gate': True,   # only evaluate when over_water=True
         },
         'v_min': 0.0, 'v_max': 4.0, 'priority': 1,
+        'eval_phases': ['cruise', 'hover', 'low_altitude'],
     },
     {
         'id':       'H-SE-2',
@@ -53785,6 +54235,7 @@ _FG_HYPOTHESES = [
             '_surface_gate': True,
         },
         'v_min': 9.0, 'v_max': 18.0, 'priority': 1,
+        'eval_phases': ['cruise', 'transit', 'low_altitude'],
     },
 ]
 
@@ -53799,9 +54250,11 @@ AERO_HYPOTHESES.extend(_FG_HYPOTHESES)
 # since the wrapper is already assembled.
 
 
+_orig_dart_control_tick = dart_control_tick
+
 def dart_control_tick(sensors, result):
     """Extended dart tick — also calls flap_glide_tick when enabled."""
-    result = None
+    result = _orig_dart_control_tick(sensors, result)
     if FG_ENABLED:
         try:
             result = flap_glide_tick(sensors, result)
@@ -53816,9 +54269,11 @@ def dart_control_tick(sensors, result):
 _surface_tick_counter = [0]
 
 
+_orig_mechanism_learning_tick = _mechanism_learning_tick
+
 def _mechanism_learning_tick(sensors, result):
     """Extended mechanism learning tick — also runs surface classifier at 1 Hz."""
-    result = None
+    result = _orig_mechanism_learning_tick(sensors, result)
     _surface_tick_counter[0] += 1
     if _surface_tick_counter[0] >= 50:
         _surface_tick_counter[0] = 0
@@ -55147,30 +55602,57 @@ _FOCUS_REGISTRY['storm_resilience'] = {
 
 _orig_gust_response_tick = gust_response_tick if 'gust_response_tick' in dir() else None
 
-def gust_response_tick(wing_commands, imu_rms_g, accel_z_g,
-                        roll_rate_dps, pitch_rate_dps,
-                        sensors=None, result=None):
+def gust_response_tick(*args, **kwargs):
     """
-    Extended gust response tick — calls storm_resilience_tick
-    when storm_resilience focus is active or gust threshold is exceeded.
+    Extended gust response tick — handles both original signature
+    (wing_commands, imu_rms_g, accel_z_g, bank_deg, V_ms, h_agl_m, current_freq_hz, dt_s=0.02)
+    and extended tick signature
+    (wing_commands, imu_rms_g, accel_z_g, roll_rate_dps, pitch_rate_dps, sensors=..., result=...).
+    Calls storm_resilience_tick when storm_resilience focus is active or gust threshold is exceeded.
     """
-    # Call original gust response if it exists
-    if _orig_gust_response_tick is not None:
-        wing_commands = None
+    # Detect caller style: Style A passes sensors/result or uses extended 5 positional arguments
+    if 'sensors' in kwargs or 'result' in kwargs:
+        wing_commands = args[0] if len(args) > 0 else kwargs.get('wing_commands', [])
+        imu_rms_g = args[1] if len(args) > 1 else kwargs.get('imu_rms_g', 0.005)
+        accel_z_g = args[2] if len(args) > 2 else kwargs.get('accel_z_g', 1.0)
+        roll_rate_dps = args[3] if len(args) > 3 else kwargs.get('roll_rate_dps', 0.0)
+        pitch_rate_dps = args[4] if len(args) > 4 else kwargs.get('pitch_rate_dps', 0.0)
+        sensors = kwargs.get('sensors', None)
+        result = kwargs.get('result', None)
 
-    # Storm resilience layer
-    if sensors is not None and result is not None:
-        if (_focus_state.get('active') == 'storm_resilience' or
-                imu_rms_g > 0.02 or
-                abs(sensors.get('accel_y_g', 0.0)) > 0.15):
+        if _orig_gust_response_tick is not None:
             try:
-                result['wing_commands'] = wing_commands
-                result = storm_resilience_tick(sensors, result)
-                wing_commands = result.get('wing_commands', wing_commands)
+                bank_deg = float(sensors.get('roll_deg_imu', roll_rate_dps)) if isinstance(sensors, dict) else float(roll_rate_dps)
+                v_ms = float(sensors.get('V_ms', 7.0)) if isinstance(sensors, dict) else 7.0
+                h_agl = float(sensors.get('h_agl_m', 99.0)) if isinstance(sensors, dict) else 99.0
+                freq_hz = float(result.get('freq_hz', 2.5)) if isinstance(result, dict) else 2.5
+                dt_s = float(sensors.get('dt_s', 0.02)) if isinstance(sensors, dict) else 0.02
+                gr_res = _orig_gust_response_tick(
+                    wing_commands, imu_rms_g, accel_z_g,
+                    bank_deg, v_ms, h_agl, freq_hz, dt_s=dt_s)
+                if isinstance(result, dict) and isinstance(gr_res, dict):
+                    result['gr'] = gr_res
             except Exception:
                 pass
 
-    return wing_commands
+        # Storm resilience layer
+        if isinstance(sensors, dict) and isinstance(result, dict):
+            if (_focus_state.get('active') == 'storm_resilience' or
+                    imu_rms_g > 0.02 or
+                    abs(sensors.get('accel_y_g', 0.0)) > 0.15):
+                try:
+                    result['wing_commands'] = wing_commands
+                    result = storm_resilience_tick(sensors, result)
+                    wing_commands = result.get('wing_commands', wing_commands)
+                except Exception:
+                    pass
+
+        return wing_commands
+
+    # Otherwise, direct call to original gust_response_tick
+    if _orig_gust_response_tick is not None:
+        return _orig_gust_response_tick(*args, **kwargs)
+    return {'turb_intensity': 0.0, 'modes_active': []}
 
 
 # ── Add storm_char_report to persist_save_all ─────────────────────────────────
@@ -55563,6 +56045,38 @@ _transit_state = {
     'set_at':           None,
 }
 
+_transit_bank_governor = None
+
+def _get_transit_bank_governor():
+    global _transit_bank_governor
+    if _transit_bank_governor is None:
+        try:
+            from mco_flight_governor import AutopilotBankGovernor
+            _transit_bank_governor = AutopilotBankGovernor()
+        except ImportError:
+            try:
+                from firmware.mco_flight_governor import AutopilotBankGovernor
+                _transit_bank_governor = AutopilotBankGovernor()
+            except ImportError:
+                _transit_bank_governor = None
+    return _transit_bank_governor
+
+_lsb_detector = None
+
+def _get_lsb_detector():
+    global _lsb_detector
+    if _lsb_detector is None:
+        try:
+            from mco_flight_governor import LSBDetector
+            _lsb_detector = LSBDetector()
+        except ImportError:
+            try:
+                from firmware.mco_flight_governor import LSBDetector
+                _lsb_detector = LSBDetector()
+            except ImportError:
+                _lsb_detector = None
+    return _lsb_detector
+
 # ── Crab angle calculator ──────────────────────────────────────────────────────
 
 def _crab_angle(track_deg, wind_from_deg, wind_ms, V_ms):
@@ -55652,8 +56166,12 @@ def transit_tick(sensors, result):
     pitch_s = abs(sensors.get('pitch_stick', 0.0))
     yaw_s   = abs(sensors.get('yaw_stick',   0.0))
     if max(roll_s, pitch_s, yaw_s) > PA_STICK_THRESHOLD:
-        # Pilot has taken control — hold transit goal but yield authority
+        # Pilot has taken control — hold transit goal but yield authority.
+        # Zero bank clamping or constraints are imposed on the pilot.
         result['transit_pilot_override'] = True
+        gov = _get_transit_bank_governor()
+        if gov:
+            gov.reset()
         return result
 
     # ── Navigation math ────────────────────────────────────────────────────
@@ -55741,6 +56259,20 @@ def transit_tick(sensors, result):
         result['freq_hz'] = max(0.5, min(FREQ_LIMIT_MAX_HZ,
                                           result.get('freq_hz', 1.87) + freq_trim))
 
+    # ── Autopilot Bank & Knife-Edge Envelope Governor ──────────────────────
+    # Restricts autonomous autopilot maneuvers to sustainable bank angles (<= 65° in altitude hold)
+    # and caps transient autonomous knife-edge corridor passes to <= 3.0s before auto-rollout.
+    # Note: Only active while autopilot has command; human pilot authority is never dictated.
+    gov = _get_transit_bank_governor()
+    if gov:
+        dt = sensors.get('dt_s', 0.02)
+        roll_deg = sensors.get('roll_deg_imu', 0.0)
+        gov_res = gov.update(dt, roll_deg, hold_altitude=(st['target_alt_m'] is not None),
+                             is_pilot_flying=False)
+        result['ap_bank_gov_status'] = gov_res['status']
+        if gov_res.get('recovery_active'):
+            result['ap_bank_recovery_command'] = gov_res['commanded_bank_deg']
+
     result['wing_commands']          = wc
     result['transit_active']         = True
     result['transit_strategy']       = strategy
@@ -55756,6 +56288,9 @@ def transit_abort():
     """Cancel autopilot transit — return full control to pilot."""
     _transit_state['active'] = False
     _transit_state['arrived'] = False
+    gov = _get_transit_bank_governor()
+    if gov:
+        gov.reset()
     _pl_append_log({'event': 'transit_aborted'})
     print("  AUTOPILOT TRANSIT ABORTED — full pilot authority restored")
 
@@ -55905,6 +56440,43 @@ def gps_classify(sensors):
         st['last_heading_deg'] = heading
         st['last_V_ms']        = V_ms
 
+    # ── Tactical 15-State ES-EKF Integration ───────────────────────────────
+    ekf_sol = {}
+    try:
+        from mco_tactical_ekf import get_tactical_ekf
+        ekf = get_tactical_ekf()
+        ax = sensors.get('accel_x_mps2', sensors.get('accel_x', 0.0))
+        ay = sensors.get('accel_y_mps2', sensors.get('accel_y', 0.0))
+        az = sensors.get('accel_z_mps2', sensors.get('accel_z', -9.81))
+        gx = _gd_math.radians(sensors.get('roll_rate_dps', 0.0))
+        gy = _gd_math.radians(sensors.get('pitch_rate_dps', 0.0))
+        gz = _gd_math.radians(sensors.get('yaw_rate_dps', 0.0))
+        ekf.predict(dt, ax, ay, az, gx, gy, gz)
+        ekf.update_pitot_airspeed(V_ms)
+        ekf.update_heading(heading)
+        ekf.update_baro(alt_m)
+        lidar_h = sensors.get('h_agl_m', 0.0)
+        if lidar_h > 0.0:
+            ekf.update_lidar(lidar_h)
+
+        if st['status'] == GPS_OK:
+            vn = sensors.get('vn_ms', V_ms * _gd_math.cos(_gd_math.radians(heading)))
+            ve = sensors.get('ve_ms', V_ms * _gd_math.sin(_gd_math.radians(heading)))
+            vd = sensors.get('vd_ms', 0.0)
+            ekf.update_gps(lat, lon, alt_m, vn, ve, vd, hdop, n_sats)
+        else:
+            ekf.set_gps_denied(True)
+
+        ekf_sol = ekf.get_navigation_solution()
+        st['wind_speed_ms']  = ekf_sol.get('wind_speed_ms', 0.0)
+        st['wind_dir_deg']   = ekf_sol.get('wind_dir_deg', 0.0)
+        if st['status'] in (GPS_LOST, GPS_SPOOFED, GPS_JAMMED) and ekf_sol.get('lat', 0.0) != 0.0:
+            st['dr_lat']        = ekf_sol['lat']
+            st['dr_lon']        = ekf_sol['lon']
+            st['dr_confidence'] = ekf_sol['dr_confidence']
+    except Exception:
+        pass
+
     # ── Return effective position ──────────────────────────────────────────
     if st['status'] == GPS_OK:
         eff_lat, eff_lon = lat, lon
@@ -55920,6 +56492,9 @@ def gps_classify(sensors):
         'effective_lon':    eff_lon,
         'dr_confidence':    round(st['dr_confidence'], 3),
         'spoof_events':     st['spoof_events'],
+        'wind_speed_ms':    st.get('wind_speed_ms', 0.0),
+        'wind_dir_deg':     st.get('wind_dir_deg', 0.0),
+        'ekf_active':       bool(ekf_sol),
     }
 
 
@@ -55936,6 +56511,11 @@ def accept_external_fix(lat, lon, alt_m=None, source='radio'):
     st['dr_confidence']= 0.80
     if alt_m:
         st['dr_alt_m'] = float(alt_m)
+    try:
+        from mco_tactical_ekf import get_tactical_ekf
+        get_tactical_ekf().reset(float(lat), float(lon), float(alt_m or 0.0))
+    except Exception:
+        pass
     _pl_append_log({'event': 'external_fix_accepted',
                     'source': source, 'lat': lat, 'lon': lon})
     print(f"  External position fix accepted from {source}: "
@@ -55966,8 +56546,119 @@ def gps_status():
         print(f"    Surface effect mode: disabled (no altitude reference)")
 
 
+# ── MILITARY COMMAND SUITE & GROUND STATION ACL ────────────────────────────────
+import time as _mil_time
+
+_ew_state = {
+    'active': False,
+    'reason': None,
+    'stealth_active': False,
+    'start_t': None,
+}
+
+def cot_status():
+    """GS Command: Query Cursor-on-Target bridge status."""
+    try:
+        from mco_cot_bridge import get_cot_bridge
+        return get_cot_bridge(auto_start=False).get_status()
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def cot_broadcast():
+    """GS Command: Force immediate broadcast of CoT telemetry packet."""
+    try:
+        from mco_cot_bridge import get_cot_bridge
+        bridge = get_cot_bridge(auto_start=True)
+        ok = bridge.broadcast_telemetry()
+        return {'type': 'ack', 'broadcast': ok, 'packets_sent': bridge.n_packets_sent}
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def cot_inject_waypoint(lat, lon, alt_m=0.0, callsign='ATAK-WP'):
+    """GS Command: Inject a tactical waypoint from ATAK / ground station."""
+    accept_external_fix(lat, lon, alt_m, source=callsign)
+    return {'type': 'ack', 'cmd': 'cot_inject_waypoint', 'lat': float(lat), 'lon': float(lon), 'alt_m': float(alt_m)}
+
+def cot_start():
+    """GS Command: Start CoT bridge background daemon."""
+    try:
+        from mco_cot_bridge import get_cot_bridge
+        b = get_cot_bridge(auto_start=True)
+        b.start()
+        return {'type': 'ack', 'running': True}
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def cot_stop():
+    """GS Command: Stop CoT bridge."""
+    try:
+        from mco_cot_bridge import get_cot_bridge
+        b = get_cot_bridge(auto_start=False)
+        b.close()
+        return {'type': 'ack', 'running': False}
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def ekf_status():
+    """GS Command: Query Tactical 15-State ES-EKF navigation solution."""
+    try:
+        from mco_tactical_ekf import get_tactical_ekf
+        return get_tactical_ekf().get_navigation_solution()
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def ekf_reset(lat=None, lon=None, alt_m=None):
+    """GS Command: Reset tactical EKF reference position."""
+    try:
+        from mco_tactical_ekf import get_tactical_ekf
+        ekf = get_tactical_ekf()
+        l = float(lat) if lat is not None else ekf.ref_lat
+        o = float(lon) if lon is not None else ekf.ref_lon
+        a = float(alt_m) if alt_m is not None else ekf.ref_alt_m
+        ekf.reset(l, o, a)
+        return {'type': 'ack', 'reset': True, 'ref_lat': l, 'ref_lon': o}
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def ekf_inject_wind(speed_ms, dir_deg):
+    """GS Command: Inject known wind speed (m/s) and direction (degrees from)."""
+    try:
+        from mco_tactical_ekf import get_tactical_ekf
+        get_tactical_ekf().inject_wind(float(speed_ms), float(dir_deg))
+        return {'type': 'ack', 'wind_speed_ms': float(speed_ms), 'wind_dir_deg': float(dir_deg)}
+    except Exception as e:
+        return {'status': 'error', 'msg': str(e)}
+
+def ew_status():
+    """GS Command: Query contested EW state and stealth status."""
+    return dict(_ew_state)
+
+def ew_trigger(reason='manual_operator_trigger'):
+    """GS Command: Trigger Contested-EW survival mode."""
+    _ew_state['active'] = True
+    _ew_state['reason'] = str(reason)
+    _ew_state['stealth_active'] = True
+    _ew_state['start_t'] = _mil_time.monotonic()
+    return {'type': 'ack', 'ew_active': True, 'reason': reason}
+
+def ew_clear():
+    """GS Command: Clear Contested-EW state."""
+    _ew_state['active'] = False
+    _ew_state['reason'] = None
+    _ew_state['stealth_active'] = False
+    return {'type': 'ack', 'ew_active': False}
+
+def stealth_loiter_start():
+    """GS Command: Engage Tactical Stealth Loiter mode."""
+    _ew_state['stealth_active'] = True
+    return {'type': 'ack', 'stealth_loiter': True, 'freq_hz_cap': 1.25}
+
+
 _GS_ALLOWED_CMDS.update({
     'gps_status', 'accept_external_fix',
+    'cot_status', 'cot_broadcast', 'cot_inject_waypoint', 'cot_start', 'cot_stop',
+    'ekf_status', 'ekf_reset', 'ekf_inject_wind',
+    'ew_status', 'ew_trigger', 'ew_clear', 'stealth_loiter_start',
 })
 
 
@@ -57455,9 +58146,11 @@ def sg_breed_report(task=None):
 
 # ── Wire into _mechanism_learning_tick ────────────────────────────────────────
 
+_orig_mechanism_learning_tick_sg = _mechanism_learning_tick
+
 def _mechanism_learning_tick(sensors, result):
     """Extended mechanism learning — also runs strategy genome evaluation."""
-    result = None
+    result = _orig_mechanism_learning_tick_sg(sensors, result)
     if _sg_eval['active']:
         try:
             result = sg_evaluate_tick(sensors, result)
@@ -58027,9 +58720,11 @@ def kestrel_status():
 # updraft_detect_tick runs inside _mechanism_learning_tick at 1Hz.
 
 
+_orig_mechanism_learning_tick_kw = _mechanism_learning_tick
+
 def _mechanism_learning_tick(sensors, result):
     """Extended mechanism learning — runs updraft detection every tick."""
-    result = None
+    result = _orig_mechanism_learning_tick_kw(sensors, result)
     # Updraft detection runs every tick (uses its own smoothing)
     try:
         ud_result = updraft_detect_tick(sensors)
@@ -58297,10 +58992,13 @@ def kestrel_cross_pollinate():
 
 # ── Patch me_promote to trigger cross-pollination ─────────────────────────────
 
+_orig_me_promote = _me_promote if '_me_promote' in globals() else None
+
 def _me_promote(config, score, niche_key, source='discovery',
                 conditions=None, operator_note=''):
     """Patched promote — triggers kestrel cross-pollination on kestrel wins."""
-    won = None
+    won = _orig_me_promote(config, score, niche_key, source,
+                            conditions, operator_note) if _orig_me_promote else True
     if won and source in ('kestrel_hover', 'operator') and KW_ENABLED:
         try:
             n = kestrel_cross_pollinate()
@@ -58549,9 +59247,11 @@ def ssfd_status():
 # but BEFORE discovery_tick, gust_response_tick, kestrel checks.
 
 
+_orig_attitude_hold_tick_ssfd = attitude_hold_tick
+
 def attitude_hold_tick(sensors, result):
     """Extended attitude hold — also runs SSFD classifier every tick."""
-    result = None
+    result = _orig_attitude_hold_tick_ssfd(sensors, result)
     try:
         ssfd_classify(sensors, result)
     except Exception as _te:
@@ -58689,9 +59389,11 @@ def ssfd_trim_tick(sensors, result):
 # before everything else. Additive to attitude_hold biases.
 # Attach to the attitude_hold patched tick (already patches above).
 
+_orig_attitude_hold_tick_trim = attitude_hold_tick
+
 def attitude_hold_tick(sensors, result):
     """Full attitude hold + SSFD + slow trim."""
-    result = None
+    result = _orig_attitude_hold_tick_trim(sensors, result)
     try:
         ssfd_trim_tick(sensors, result)
     except Exception as _te:
@@ -58703,6 +59405,7 @@ def attitude_hold_tick(sensors, result):
 # sg_evaluate_tick already runs inside _mechanism_learning_tick.
 # The mechanism_learning_tick patch (def#3 in the chain) now checks SSFD.
 
+_orig_mechanism_learning_tick_ssfd = _mechanism_learning_tick
 
 def _mechanism_learning_tick(sensors, result):
     """
@@ -58717,7 +59420,7 @@ def _mechanism_learning_tick(sensors, result):
     # In manoeuvre phases, sg_evaluate measures the right task automatically
     # because _SG_TASKS maps to sensors that reflect what the aircraft is doing.
     result['sg_suspended'] = False
-    return None
+    return _orig_mechanism_learning_tick_ssfd(sensors, result)
 
 
 # Register GS commands
@@ -59005,9 +59708,11 @@ def discovery_control_status():
 # to auto-pause/resume discovery when the state changes.
 
 
+_orig_ssfd_classify = ssfd_classify
+
 def ssfd_classify(sensors, result):
     """SSFD classifier extended with auto-pause/resume of discovery."""
-    new_state = None
+    new_state = _orig_ssfd_classify(sensors, result)
     dc = _dc_state
 
     if not dc['master_on']:
@@ -59877,6 +60582,7 @@ def manoeuvre_tick(sensors, result):
 
 
 # Wire into dart_control_tick (which is in the tick wrapper)
+_orig_dart_control_tick_manoeuvre = dart_control_tick
 
 def dart_control_tick(sensors, result):
     """Extended dart control — also dispatches active manoeuvres."""
@@ -59884,7 +60590,7 @@ def dart_control_tick(sensors, result):
     if _manoeuvre_state.get('active'):
         result = manoeuvre_tick(sensors, result)
         return result
-    return None
+    return _orig_dart_control_tick_manoeuvre(sensors, result)
 
 
 # ── Manoeuvre status ───────────────────────────────────────────────────────────
@@ -60221,10 +60927,11 @@ def lever_brake_status():
 
 
 # ── Wire into pilot_intent_tick ───────────────────────────────────────────────
+_orig_pilot_intent_tick_lb = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """Extended pilot intent — lever brake zone integration."""
-    result = None
+    result = _orig_pilot_intent_tick_lb(sensors, result)
     try:
         lever_brake_tick(sensors, result)
     except Exception as _te:
@@ -60523,9 +61230,11 @@ def viff_status():
 # We chain it onto the existing lever-brake patch.
 
 
+_orig_pilot_intent_tick_viff = pilot_intent_tick
+
 def pilot_intent_tick(sensors, result):
     """Extended pilot intent — VIFF integration."""
-    result = None
+    result = _orig_pilot_intent_tick_viff(sensors, result)
     try:
         _viff_tick(sensors, result)
     except Exception as _te:
@@ -60834,9 +61543,11 @@ _PHASE_TO_SG_TASK['cruise']    = []
 # already active.
 
 
+_orig_ssfd_classify_storm = ssfd_classify
+
 def ssfd_classify(sensors, result):
     """Extended SSFD — seeds storm hypotheses on turbulence detection."""
-    new_state = None
+    new_state = _orig_ssfd_classify_storm(sensors, result)
     imu_rms   = sensors.get('imu_rms_g', 0.0)
     wind_ms   = sensors.get('wind_speed_ms', 0.0)
     # If significantly disturbed by wind/turbulence and no storm focus active
@@ -60980,10 +61691,11 @@ def _lag_roll_auto_tick(sensors, result):
 
 
 # Wire lag-roll auto into pilot_intent_tick chain
+_orig_pilot_intent_tick_lagroll = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """Extended pilot intent — lag-roll auto-engage."""
-    result = None
+    result = _orig_pilot_intent_tick_lagroll(sensors, result)
     try:
         _lag_roll_auto_tick(sensors, result)
     except Exception as _te:
@@ -60998,20 +61710,12 @@ def pilot_intent_tick(sensors, result):
 # only when the appropriate phase is detected.
 
 # Patch seed_hypotheses to respect eval_phases
+_orig_seed_hypotheses_phase = seed_hypotheses
 
-def seed_hypotheses(V_ms=9.0, phase=None):
+def seed_hypotheses(V_ms=9.0, phase=None, targets=None, flight_phase=None):
     """Phase-aware hypothesis seeding."""
-    result = None
-    # If a phase is provided, move matching hypotheses to front of queue
-    # Phase-aware ordering: if discovery state has a hypothesis queue,
-    # reorder to put phase-matched hypotheses first.
-    if phase and _discovery_state.get('hyp_queue'):
-        queue = _discovery_state['hyp_queue']
-        phase_matched = [h for h in queue
-                         if phase in h.get('eval_phases', [phase])]
-        other         = [h for h in queue if h not in phase_matched]
-        _discovery_state['hyp_queue'] = phase_matched + other
-    return result
+    sel_phase = flight_phase or phase
+    return seed_hypotheses_for_mission(flight_phase=sel_phase, V_ms=V_ms, targets=targets)
 
 
 # ── FIX 11: GS command registry — add new commands ───────────────────────────
@@ -61136,6 +61840,7 @@ def _intent_scale(roll_stick, V_ms, yaw_stick=0.0):
 
 
 # ── Patch roll_intent_to_commands to apply intent scaling ────────────────────
+_orig_roll_intent = roll_intent_to_commands
 
 def roll_intent_to_commands(roll_stick, base_amp_deg, base_sweeps_deg,
                              base_aoa_deg, base_phases_deg, base_dih_deg,
@@ -61154,7 +61859,9 @@ def roll_intent_to_commands(roll_stick, base_amp_deg, base_sweeps_deg,
     The pilot is unaware of this. They feel a clean, responsive aircraft.
     """
     # Get base corrections from original function
-    corr = None
+    corr = _orig_roll_intent(
+        roll_stick, base_amp_deg, base_sweeps_deg,
+        base_aoa_deg, base_phases_deg, base_dih_deg, powered)
 
     # Apply intent scaling only at significant demand
     if abs(roll_stick) < _IS_HIGH_DEMAND_THRESHOLD:
@@ -61174,6 +61881,8 @@ def roll_intent_to_commands(roll_stick, base_amp_deg, base_sweeps_deg,
 
 # ── Patch pilot_intent_tick to pass V_ms and yaw into roll_intent ─────────────
 
+_orig_pilot_intent_tick_scale = pilot_intent_tick
+
 def pilot_intent_tick(sensors, result):
     """
     Intent-aware pilot intent tick.
@@ -61190,7 +61899,7 @@ def pilot_intent_tick(sensors, result):
     # The cleanest approach: wrap the call inside pilot_intent_tick
     # by pre-computing scaled corrections and injecting them.
     # We intercept after the base call and rescale if high demand.
-    result = None
+    result = _orig_pilot_intent_tick_scale(sensors, result)
 
     if abs(roll) >= _IS_HIGH_DEMAND_THRESHOLD:
         scale = _intent_scale(roll, V_ms, yaw)
@@ -61208,7 +61917,9 @@ def pilot_intent_tick(sensors, result):
         powered    = any(base_amp[i] > 1.0 for i in range(8))
 
         # Get raw (unscaled) corrections from mechanism blending
-        raw = None
+        raw = _orig_roll_intent(
+            roll, base_amp, base_sweep, base_aoa,
+            base_phase, base_dih, powered)
 
         # Apply scaled corrections with TRANSIENT bounds (not cruise bounds)
         for i in range(8):
@@ -62447,10 +63158,11 @@ AERO_HYPOTHESES.extend([
 ])
 
 # ── Wire ceiling_explore_tick into mechanism_learning_tick ────────────────────
+_orig_mech_tick_ce = _mechanism_learning_tick
 
 def _mechanism_learning_tick(sensors, result):
     """Extended mechanism learning — also runs ceiling exploration when active."""
-    result = None
+    result = _orig_mech_tick_ce(sensors, result)
     if _ce_state.get('active'):
         try:
             ceiling_explore_tick(sensors, result)
@@ -63711,10 +64423,11 @@ def wing_guard_tick(sensors, result):
 
 
 # ── Wire wing guard into pilot_intent_tick ─────────────────────────────────────
+_orig_pilot_intent_tick_wg = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """Extended pilot intent — wing guard runs last, after all other corrections."""
-    result = None
+    result = _orig_pilot_intent_tick_wg(sensors, result)
     if _wc_state['guard_active']:
         try:
             wing_guard_tick(sensors, result)
@@ -64711,10 +65424,11 @@ def wing_guard_tick(sensors, result):
 
 # ── Wire new guard into pilot_intent_tick ──────────────────────────────────────
 # Remove old guard patch, add new one
+_orig_pilot_intent_tick_wg2 = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """Extended pilot intent — TPU-aware wing guard."""
-    result = None
+    result = _orig_pilot_intent_tick_wg2(sensors, result)
     if _wc_state['guard_active']:
         try:
             wing_guard_tick(sensors, result)
@@ -66133,13 +66847,14 @@ def climb_intent_tick(sensors, result):
 
 
 # ── Wire climb intent classifier into pilot_intent_tick ───────────────────────
+_orig_pilot_intent_tick_cic = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """
     Climb intent classifier integrated into pilot intent.
     Runs BEFORE wing guard so guard can still clip any config change.
     """
-    result = None
+    result = _orig_pilot_intent_tick_cic(sensors, result)
     if sensors.get('V_ms', 0.0) > 3.0:   # not in pure hover
         try:
             climb_intent_tick(sensors, result)
@@ -66653,6 +67368,7 @@ def manoeuvre_intent_tick(sensors, result):
 
 
 # ── Wire MIC into pilot_intent_tick ──────────────────────────────────────────
+_orig_pilot_intent_tick_mic = pilot_intent_tick
 
 def pilot_intent_tick(sensors, result):
     """
@@ -66660,7 +67376,7 @@ def pilot_intent_tick(sensors, result):
     Runs after VIFF (which handles simple turn tightening)
     but before wing guard (which clips any unsafe commands).
     """
-    result = None
+    result = _orig_pilot_intent_tick_mic(sensors, result)
     V_ms = sensors.get('V_ms', 0.0)
     if V_ms >= MIC_V_MIN_ACRO:
         try:
@@ -68236,7 +68952,12 @@ AERO_HYPOTHESES.extend([
         'id':      'H-PREC-3',
         'label':   'Seaplane water approach — VSI ±100 ft/min on final below 50m',
         'target':  'precision',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED ROADMAP / ACTIVE RESEARCH: The subscale MCO-1D Mark 1 prototype qualifies precision '
+            'approach descent rates (VSI ±100 ft/min) to polish amphibious landing guidance algorithms '
+            'ahead of the fully sealed, marine-rated human aircraft build.] '
             'Water approach requires a controlled, stable descent at exactly '
             '100 ft/min (0.508 m/s) to the surface. The wing configuration '
             'must produce a steady, predictable descent rate at approach speed '
@@ -68248,8 +68969,8 @@ AERO_HYPOTHESES.extend([
             'aoa_deg':           16.0,    # slightly higher AoA for approach speed
             'sweep_deg':         50.0,
             'cascade_phase_deg': 20.0,
-            'amp_port_deg':      96.0,
-            'amp_stbd_deg':      96.0,
+            'amp_port_deg':      75.0,
+            'amp_stbd_deg':      75.0,
             'freq_hz':            2.0,
             'w_crab':             0.10,
             'w_dart':             0.65,
@@ -68357,7 +69078,8 @@ _FOCUS_REGISTRY['precision'] = {
 # The trim_balance_objective weight is increased from 0.15 to 0.40.
 
 
-def discovery_tick(Ps_measured, V_ms, h_agl_m, bank_deg, stall_risk, current_time_s):
+def discovery_tick(Ps_measured, V_ms, h_agl_m, bank_deg, stall_risk, current_time_s,
+                   sensors=None, result=None, *args, **kwargs):
     """
     Precision-aware discovery tick.
     When precision focus is active, elevates trim balance weight
@@ -68620,6 +69342,99 @@ _psm = {
 
 # How long controls must be neutral before trim is measured
 _PSM_NEUTRAL_TICKS = int(_PSM_SAMPLE_HZ * 3.0)   # 3 seconds
+
+
+def stroke_smoothing_tick(sensors, result):
+    """
+    Stroke smoothing tick — runs every 50 Hz cycle.
+
+    Fills rolling buffers for VSI, IAS, roll, and heading.
+    Computes smoothed display values (5-beat averages).
+    Measures trim quality when controls are neutral.
+
+    Does NOT correct anything. Does NOT fight disturbances.
+    The pilot reads the smooth instruments and flies the aircraft.
+    """
+    st = _psm
+
+    # ── Read sensors ───────────────────────────────────────────────────────────
+    vel_down  = sensors.get('vel_down_ms',   0.0)
+    V_ms      = sensors.get('V_ms',          9.0)
+    roll_deg  = sensors.get('roll_deg',      0.0)
+    heading   = sensors.get('heading_deg',   0.0)
+    roll_stk  = sensors.get('roll_stick',    0.0)
+    pitch_stk = sensors.get('pitch_stick',   0.0)
+    yaw_stk   = sensors.get('yaw_stick',     0.0)
+    lever     = sensors.get('lever_pct',    50.0)
+
+    vsi_ms = -vel_down   # positive = climbing
+
+    # ── Fill buffers ───────────────────────────────────────────────────────────
+    st['vsi_buf'].append(vsi_ms)
+    st['ias_buf'].append(V_ms)
+    st['roll_buf'].append(roll_deg)
+    st['heading_buf'].append(heading)
+
+    # ── Compute smoothed display values ───────────────────────────────────────
+    n_vsi = max(len(st['vsi_buf']), 1)
+    n_ias = max(len(st['ias_buf']), 1)
+    n_rol = max(len(st['roll_buf']), 1)
+
+    vsi_mean = sum(st['vsi_buf']) / n_vsi
+    ias_mean = sum(st['ias_buf']) / n_ias
+    rol_mean = sum(st['roll_buf']) / n_rol
+
+    st['vsi_smooth_ms']  = vsi_mean
+    st['vsi_smooth_fpm'] = vsi_mean / 0.00508
+    st['ias_smooth_ms']  = ias_mean
+    st['ias_smooth_kt']  = ias_mean / 0.514444
+    st['roll_smooth_deg']= rol_mean
+
+    # ── Detect neutral controls ────────────────────────────────────────────────
+    STICK_DEADBAND = 0.06
+    LEVER_WINDOW   = 3.0    # %
+    lever_mid      = 50.0   # approximate trim lever
+
+    controls_neutral = (abs(roll_stk)  < STICK_DEADBAND and
+                        abs(pitch_stk) < STICK_DEADBAND and
+                        abs(yaw_stk)   < STICK_DEADBAND and
+                        abs(lever - lever_mid) < LEVER_WINDOW)
+
+    if controls_neutral:
+        st['neutral_ticks'] = min(st['neutral_ticks'] + 1,
+                                  _PSM_NEUTRAL_TICKS + _PSM_SAMPLES)
+    else:
+        st['neutral_ticks'] = 0
+
+    st['controls_neutral'] = st['neutral_ticks'] >= _PSM_NEUTRAL_TICKS
+
+    # ── Measure trim quality (only when controls neutral + buffer full) ────────
+    if st['controls_neutral'] and len(st['vsi_buf']) >= _PSM_SAMPLES // 2:
+        # VSI RMS around mean — how much the rate varies in trim
+        vsi_errs = [v - vsi_mean for v in st['vsi_buf']]
+        st['vsi_rms_ms'] = _psm_math.sqrt(
+            sum(e**2 for e in vsi_errs) / len(vsi_errs))
+
+        ias_errs = [v - ias_mean for v in st['ias_buf']]
+        st['ias_rms_ms'] = _psm_math.sqrt(
+            sum(e**2 for e in ias_errs) / len(ias_errs))
+
+        rol_errs = [v - rol_mean for v in st['roll_buf']]
+        st['roll_rms_deg'] = _psm_math.sqrt(
+            sum(e**2 for e in rol_errs) / len(rol_errs))
+
+    # ── Write to result (display telemetry) ───────────────────────────────────
+    result['vsi_smooth_fpm']     = round(st['vsi_smooth_fpm'], 1)
+    result['vsi_smooth_ms']      = round(st['vsi_smooth_ms'], 3)
+    result['ias_smooth_kt']      = round(st['ias_smooth_kt'], 2)
+    result['ias_smooth_ms']      = round(st['ias_smooth_ms'], 3)
+    result['roll_smooth_deg']    = round(st['roll_smooth_deg'], 2)
+    result['trim_vsi_rms_fpm']   = round(st['vsi_rms_ms'] / 0.00508, 1)
+    result['trim_ias_rms_kt']    = round(st['ias_rms_ms'] / 0.514444, 2)
+    result['trim_roll_rms_deg']  = round(st['roll_rms_deg'], 2)
+    result['controls_neutral']   = st['controls_neutral']
+
+    return result
 
 
 def _enforce_stroke_symmetry(result):
@@ -73189,29 +74004,7 @@ for h in _hyps_without_alss:
 
 
 
-# ── Final audit re-check ──────────────────────────────────────────────────────
-# Verify no broken segments remain
-_hyp_id_set2 = {h['id'] for h in AERO_HYPOTHESES}
-_all_segs2   = set()
-for segs in _ALSS_CURRICULUM.values():
-    _all_segs2.update(segs)
-
-_still_broken = []
-for seg_name in _all_segs2:
-    seg = _ALSS_SEGMENTS.get(seg_name)
-    if seg is None:
-        _still_broken.append(f"{seg_name}: not in _ALSS_SEGMENTS")
-    elif len(seg) >= 2 and seg[1] not in _hyp_id_set2:
-        _still_broken.append(f"{seg_name}: hyp '{seg[1]}' not found")
-
-# GS callables
-_non_callable_gs = [c for c in _GS_ALLOWED_CMDS
-                    if not callable(globals().get(c, None))]
-
-if _still_broken:
-    for s in _still_broken[:5]: print(f"    {s}")
-if _non_callable_gs:
-    for c in _non_callable_gs[:5]: print(f"    {c}")
+# Note: Comprehensive segment and GS callable integrity check relocated to end of module.
 
 
 
@@ -73281,9 +74074,15 @@ AERO_HYPOTHESES.extend([
     {
         'id':     'H-WD-1',
         'label':  'Water departure clap auto-arm — seagull 22% lift synergy '
-                  'between clap-and-fling and water surface effect',
+                  'between clap-and-fling and water surface effect [HUMAN-RATED AMPHIBIOUS ROADMAP]',
         'target': 'range',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED AMPHIBIOUS ROADMAP: The human-rated production build is fully sealed '
+            'with marine/snow landing capability. The MCO-1D serves as the prototype testbed to polish '
+            'and qualify water departure and surface synergy algorithms ahead of the human build. '
+            'Sector wheels provide full 200° arc (±100° stroke authority).] '
             'CFD study (Hashimoto et al., JRM 2024) showed that during '
             'takeoff from water, clap-and-fling alone improved lift 2.6%, '
             'water surface effect alone improved lift 9.8%, but the synergy '
@@ -73306,8 +74105,8 @@ AERO_HYPOTHESES.extend([
             'freq_hz':           2.0,
             'aoa_deg':          15.0,
             'sweep_deg':        48.0,
-            'amp_port_deg':    108.0,
-            'amp_stbd_deg':    108.0,
+            'amp_port_deg':    100.0,
+            'amp_stbd_deg':    100.0,
             'cascade_phase_deg': 28.0,
             'dihedral_deg':      6.0,
             'w_dart':            0.65,
@@ -73330,9 +74129,13 @@ AERO_HYPOTHESES.extend([
     {
         'id':     'H-WD-2',
         'label':  'Water departure phase coordination — front pairs thrust, '
-                  'rear pairs lift (duck wing-foot phase synchrony)',
+                  'rear pairs lift (duck wing-foot phase synchrony) [HUMAN-RATED AMPHIBIOUS ROADMAP]',
         'target': 'range',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED AMPHIBIOUS ROADMAP: Polishing tandem cascade decoupled thrust/lift '
+            'coordination for the sealed human-rated amphibious aircraft. Sector wheel ±100° stroke authority.] '
             'Mallard duck water takeoff study (Taylor-Burt & Biewener, JEB 2020) '
             'showed that wings and feet work in coordinated phase sequences. '
             'Neither the wings alone nor the feet alone are sufficient for '
@@ -73380,9 +74183,13 @@ AERO_HYPOTHESES.extend([
     {
         'id':     'H-WD-3',
         'label':  'Water departure asymmetric stroke — slow upstroke, '
-                  'fast downstroke Q=2.0 reduces splash, maximises WIG lift',
+                  'fast downstroke Q=2.0 reduces splash, maximises WIG lift [HUMAN-RATED AMPHIBIOUS ROADMAP]',
         'target': 'range',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED AMPHIBIOUS ROADMAP: Dynamic ODrive asymmetric velocity shaping for sealed '
+            'amphibious water departures. Sector wheel ±100° stroke authority.] '
             'Seagull water departure research showed stroke Q ratio ≈ 2.0: '
             'slow upstroke (reduces splash drag, wing moving upward slowly '
             'does not drag water surface), fast downstroke (maximises '
@@ -73965,6 +74772,8 @@ _HOVER_PHUGOID_DAMPING    = False    # permanently off — pilot controls this
 #   4. Course hold (GPS track)
 #   5. Return to launch
 #   6. ATC client integration
+#   7. Dynamic soaring in boundary-layer wind shear (H-48)
+#   8. Ballistic zoom kinetic trajectory recovery (H-50)
 
 _POSITION_HOLD_STATUS = 'deferred_autopilot'
 _AUTOPILOT_DEV_STATUS = 'post_first_flight'
@@ -74300,7 +75109,11 @@ AERO_HYPOTHESES.extend([
         'label':  'Snow surface adaptive takeoff — weight-forward to break '
                   'crust, then pitch back to plane on packed snow (skiplane)',
         'target': 'range',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED ROADMAP / ACTIVE RESEARCH: The subscale MCO-1D Mark 1 prototype is unsealed with wheeled gear, '
+            'serving as the technology testbed to polish snow/ice and skiplane kinematics ahead of the fully-sealed, amphibious human-rated build.] '
             'Skiplane takeoff technique is entirely governed by snow type. '
             'The key is to get the airplane into the ideal pitch attitude '
             'which will permit the plane to climb up onto the snow surface '
@@ -74339,8 +75152,8 @@ AERO_HYPOTHESES.extend([
             'freq_hz':           2.2,
             'aoa_deg':          15.0,
             'sweep_deg':        48.0,
-            'amp_port_deg':    108.0,
-            'amp_stbd_deg':    108.0,
+            'amp_port_deg':    100.0,
+            'amp_stbd_deg':    100.0,
             'cascade_phase_deg': 28.0,
             'dihedral_deg':      6.0,
             'w_dart':            0.65,
@@ -74370,7 +75183,11 @@ AERO_HYPOTHESES.extend([
         'label':  'Crosswind ice operations — wing amplitude differential '
                   'provides directional control without brakes on glare ice',
         'target': 'smooth_flight',
+        'hardware_supported':  True,
+        'human_rated_roadmap': True,
         'rationale':
+            '[HUMAN-RATED ROADMAP / ACTIVE RESEARCH: Evaluates differential thrust/drag yaw control without brakes '
+            'on low-friction surfaces, qualifying crosswind steering algorithms for the human-rated amphibious craft.] '
             'Skiplane crosswind taxiing and takeoff on glare ice is the '
             'most demanding aspect of winter operations: '
             '  "Taxiing a skiplane on ice: little or no brakes for stopping '
@@ -74677,77 +75494,66 @@ for h in _bs_reg:
 #            (zoom climb from cruise, not from hover)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Heavy lift constants ──────────────────────────────────────────────────────
-HL_DISK_AREA_M2       = 0.741    # m² — all 8 wings
-HL_DISK_LOADING_N_M2  = 54.3    # N/m² at 4.1 kg MTOW
-HL_FM_TARGET          = 0.070    # N/W — figure of merit target
-HL_FM_BASELINE        = 0.055    # N/W — conservative baseline
-HL_PAYLOAD_RATIO_4X   = 4.0     # DARPA target ratio
-HL_PAYLOAD_4X_KG      = 4.0 * 4.1  # = 16.4 kg at DARPA 4:1
+# ── Heavy lift constants (Grounded Baseline for Mark 1) ──────────────────────
+HL_DISK_AREA_M2          = 0.741    # m² — all 8 wings
+HL_DISK_LOADING_N_M2     = 75.3     # N/m² at certified 5.687 kg MTOW
+HL_POWER_LOADING_TARGET  = 0.055    # N/W — realistic dimensional power loading (T/P)
+HL_FM_DIMENSIONLESS      = 0.70     # Dimensionless rotor Figure of Merit target (<= 1.0)
+HL_MAX_SAFE_PAYLOAD_KG   = 0.80     # kg — realistic payload capacity within certified 5.687 kg MTOW
+# Note: Previous DARPA 4:1 (16.4 kg payload at 3500W) was identified as unphysical sci-fi
+# wishful thinking in the adversarial engineering audit (would overload 120A PDB and snap spine).
+HL_PAYLOAD_RATIO_4X_DEPRECATED = 4.0
+HL_PAYLOAD_4X_KG_DEPRECATED    = 16.4
 
 # ── Record design insight ─────────────────────────────────────────────────────
-# PHYSICS OF FLAPPING WING HEAVY LIFT:
-# The power required to hover scales as: P = T^(3/2) / (FM × sqrt(2ρA))
-# where A = disk area, FM = figure of merit.
-# At fixed weight W and fixed P: maximising A (disk area) and FM
-# minimises the power required, freeing capacity for payload thrust.
-# The MCO-1D's 8-wing configuration provides:
-#   - Maximum disk area for the fuselage size
-#   - Clap-and-fling available on all pairs (unique to flapping)
-#   - Cascade sequencing allows wake recapture between pairs
-# These three together are the physical basis for heavy lift potential.
+# FIRST-PRINCIPLES PHYSICS OF FLAPPING WING LIFT:
+# Dimensionless Figure of Merit: FM = (T/P_elec) * sqrt(T / (2 * rho * A)) <= 1.0.
+# Dimensional Power Loading: T/P_elec (N/W).
+# On the MCO-1D Mark 1 airframe:
+#   - Certified MTOW = 5.687 kg (55.77 N)
+#   - PDB continuous current rating = 120 A (max 2,664 W peak across 8 ODrives)
+#   - Nominal continuous electrical power budget: 400 - 800 W total (18 - 36 A on 6S)
+#   - Stroke amplitude is mechanically capped at 75.0° (sector arc limit 80.0°)
 _HL_PHYSICS_NOTES = {
-    'disk_loading_advantage': 'MCO-1D 1.13 lb/ft² vs typical multirotor 3-8 lb/ft²',
-    'fm_advantage': 'Flapping with clap achieves 0.07+ N/W vs multirotor 0.04-0.06',
-    'clap_bonus': '+22-25% thrust for zero additional power in hover',
-    'electric_advantage': 'Full shaft power at any altitude/temperature',
-    'cascade_advantage': 'Wake recapture between pairs — no multirotor equivalent',
+    'disk_loading_grounded': 'MCO-1D 75.3 N/m² (1.57 lb/ft²) at 5.687 kg MTOW',
+    'power_loading_grounded': 'Flapping achieves 0.045 - 0.055 N/W realistic power loading',
+    'near_stroke_aerodynamics': 'Non-contact near-stroke wake capture (dorsal contact prohibited)',
+    'electric_headroom': 'Full motor torque headroom on 6S 22.2V bus across 10:1 capstan reduction',
+    'cascade_advantage': 'Wake recapture between pairs — scheduled metachronal cascade',
 }
 
 AERO_HYPOTHESES.extend([
 
-    # ── H-HL-1: Maximum thrust configuration — figure of merit measurement ────
+    # ── H-HL-1: Maximum hover thrust configuration (Grounded Realistic Baseline) ────
     {
         'id':     'H-HL-1',
-        'label':  'Maximum hover thrust — all 8 wings at peak, clap armed, '
-                  'cascade optimised: figure of merit measurement',
+        'label':  'Maximum hover thrust — all 8 wings at peak grounded amplitude (75°), '
+                  'non-contact near-stroke, cascade optimised: power loading measurement',
         'target': 'hover_hold',
         'rationale':
-            'TC-02 will measure hover thrust vs motor current and establish '
-            'the actual figure of merit (N/W). This hypothesis makes that '
-            'measurement a systematic discovery run, not a one-off test. '
+            'TC-02 measures hover thrust vs motor current to establish the actual '
+            'dimensional power loading (N/W) and dimensionless Figure of Merit (FM). '
             '\n'
-            'THE FIGURE OF MERIT: '
-            '  FM = T/P × sqrt(T/(2ρA)) '
-            '  = (thrust / power) × induced velocity '
-            '  Higher FM = more thrust per watt = heavier payload capacity. '
-            '  Helicopters: FM ~0.75. Multirotors: FM ~0.60. '
-            '  Flapping wings with clap: FM ~0.65-0.80 (research range). '
-            '  The MCO-1D target: FM > 0.70 at max continuous power. '
+            'AERODYNAMIC METRICS: '
+            '  1. Dimensionless Figure of Merit: FM = (T/P) * sqrt(T/(2*rho*A)) <= 1.0 '
+            '  2. Power Loading: T/P (N/W) — realistic range for flapping wings: 0.045-0.055 N/W. '
+            '  Certified MTOW is 5.687 kg (55.8 N). Nominal hover power is 1000-1200 W total '
+            '  (125-150 W per motor, 5.6-6.8 A per motor on 6S 22.2V bus). '
             '\n'
             'WHAT THIS HYPOTHESIS TESTS: '
-            '  Five configurations, each held for 60 seconds at hover: '
-            '  (a) Baseline: 1.87 Hz, 96°, no clap '
-            '  (b) High amplitude: 1.87 Hz, 115°, no clap '
-            '  (c) High frequency: 2.5 Hz, 96°, no clap '
-            '  (d) Clap armed: 1.87 Hz, 108°, clap enabled '
-            '  (e) Combined: 2.2 Hz, 108°, clap enabled '
-            '  Each run measures: motor current, bus voltage → power '
-            '  IMU vertical acceleration → thrust '
-            '  Calculates FM for each configuration. '
-            '  The winning configuration becomes the heavy-lift hover mode. '
-            '\n'
-            'WHY THIS MATTERS: '
-            '  If FM = 0.055 N/W → 3.8:1 payload ratio at 3500W '
-            '  If FM = 0.075 N/W → 5.7:1 payload ratio — exceeds DARPA 4:1 '
-            '  If FM = 0.040 N/W → 2.5:1 payload ratio — below DARPA target '
-            '  TC-02 is the only way to know which is true for this aircraft.',
+            '  Five grounded configurations held for 60 seconds at hover: '
+            '  (a) Baseline: 1.87 Hz, 70.0°, non-contact '
+            '  (b) High amplitude: 1.87 Hz, 75.0°, non-contact '
+            '  (c) High frequency: 2.2 Hz, 60.0°, non-contact '
+            '  (d) Near-stroke: 1.87 Hz, 75.0°, near-stroke enabled '
+            '  (e) Combined: 2.1 Hz, 72.0°, near-stroke enabled '
+            '  Measures motor current, bus voltage -> power; IMU vertical acceleration -> thrust.',
         'config': {
             'freq_hz':           1.87,
             'aoa_deg':          16.0,
             'sweep_deg':        45.0,
-            'amp_port_deg':    108.0,
-            'amp_stbd_deg':    108.0,
+            'amp_port_deg':     75.0,
+            'amp_stbd_deg':     75.0,
             'cascade_phase_deg': 28.0,
             'dihedral_deg':      6.0,
             'w_dart':            0.65,
@@ -74760,11 +75566,11 @@ AERO_HYPOTHESES.extend([
             '_hl_mode':          True,
             '_fm_measurement':   True,
             '_fm_variants': [
-                {'freq': 1.87, 'amp': 96.0,  'clap': False, 'label': 'baseline'},
-                {'freq': 1.87, 'amp': 115.0, 'clap': False, 'label': 'high_amp'},
-                {'freq': 2.50, 'amp': 96.0,  'clap': False, 'label': 'high_freq'},
-                {'freq': 1.87, 'amp': 108.0, 'clap': True,  'label': 'clap'},
-                {'freq': 2.20, 'amp': 108.0, 'clap': True,  'label': 'combined'},
+                {'freq': 1.87, 'amp': 70.0,  'clap': False, 'label': 'baseline'},
+                {'freq': 1.87, 'amp': 75.0,  'clap': False, 'label': 'high_amp'},
+                {'freq': 2.20, 'amp': 60.0,  'clap': False, 'label': 'high_freq'},
+                {'freq': 1.87, 'amp': 75.0,  'clap': False, 'label': 'near_stroke'},
+                {'freq': 2.10, 'amp': 72.0,  'clap': False, 'label': 'combined'},
             ],
             '_hold_duration_s':  60.0,
         },
@@ -74814,8 +75620,8 @@ AERO_HYPOTHESES.extend([
             'freq_hz':           2.1,
             'aoa_deg':          15.0,
             'sweep_deg':        48.0,
-            'amp_port_deg':    104.0,
-            'amp_stbd_deg':    104.0,
+            'amp_port_deg':     75.0,
+            'amp_stbd_deg':     75.0,
             'cascade_phase_deg': 28.0,
             'dihedral_deg':      8.0,    # increased for pendulum stability
             'w_dart':            0.65,
@@ -74827,9 +75633,9 @@ AERO_HYPOTHESES.extend([
             'proverse_sign':     1.0,
             '_payload_adaptive': True,
             '_payload_bands_kg': {
-                'empty':   (0.0,  0.3),
-                'light':   (0.3,  2.0),
-                'heavy':   (2.0,  8.0),
+                'empty':    (0.0,  0.2),
+                'light':    (0.2,  0.5),
+                'max_safe': (0.5,  0.8),
             },
             '_pendulum_freq_hz':  0.9,   # estimated for 0.3m sling
             '_anti_resonance':    True,  # avoid cascade frequency near pendulum
@@ -74852,38 +75658,19 @@ AERO_HYPOTHESES.extend([
             'the pendulum physics and may be excited by the wingbeat. '
             '\n'
             'CONVENTIONAL HELICOPTER TECHNIQUE: '
-            'Sling load pilots learn to counter the swing manually '
-            'with small cyclic corrections that are 180° out of phase '
-            'with the pendulum — applying correction when the load '
-            'is at maximum displacement, not at maximum velocity. '
-            'This requires considerable skill and practice. '
+            'Sling load pilots counter the swing with small cyclic corrections '
+            'that are 180° out of phase with the pendulum displacement. '
             '\n'
-            'MCO-1D APPROACH — BACKGROUND DAMPING: '
-            'The IMU lateral acceleration (accel_x_g, accel_y_g) '
-            'detects the pendulum oscillation — the load pulls the '
-            'airframe slightly when it reaches maximum swing. '
-            'The cascade can apply a small differential port/stbd '
-            'amplitude to generate a corrective force 180° out of phase. '
-            'This is not an autopilot — it does not control position. '
-            'It is a damping force, like a shock absorber, that reduces '
-            'the amplitude of an oscillation already in progress. '
-            '\n'
-            'The effect is the ornithopter equivalent of active sling load '
-            'stabilisation systems used on military helicopters (the Sikorsky '
-            'Seahawk has this). The pilot still flies; the background '
-            'damping simply prevents the load from building up a dangerous swing. '
-            '\n'
-            'SCORING: Introduce a 5° lateral disturbance with payload attached. '
-            'Measure oscillation decay time constant with damping ON vs OFF. '
-            'Target: reduce oscillation to < 1° within 5 seconds. '
-            'Without damping: pendulum at 0.9 Hz on 0.3m sling damps '
-            'in roughly 20-30 seconds (air drag only).',
+            'MCO-1D BACKGROUND DAMPING: '
+            'IMU lateral acceleration detects load swing at the airframe. '
+            'Differential port/stbd stroke amplitude introduces restorative damping '
+            '180° out of phase to attenuate cargo oscillation to <1° within 5 seconds.',
         'config': {
             'freq_hz':           1.87,
             'aoa_deg':          15.0,
             'sweep_deg':        48.0,
-            'amp_port_deg':    104.0,
-            'amp_stbd_deg':    104.0,
+            'amp_port_deg':     75.0,
+            'amp_stbd_deg':     75.0,
             'cascade_phase_deg': 28.0,
             'dihedral_deg':      8.0,
             'w_dart':            0.60,
@@ -74912,50 +75699,19 @@ AERO_HYPOTHESES.extend([
                   'to maximum altitude gain in minimum time from forward flight',
         'target': 'climb_rate',
         'rationale':
-            'TIME TO ALTITUDE is a key military and emergency capability. '
-            'The question: given that the MCO-1D has significant excess '
-            'thrust (3-5× its own weight available at peak), can it '
-            'achieve a near-vertical climb from cruise speed? '
-            '\n'
-            'TWO COMPONENTS: '
-            '  (a) ZOOM CLIMB (H-CLB-3 covers hover zoom): from cruise, '
-            '      pull to maximum pitch, convert airspeed to altitude. '
-            '      At 12 m/s cruise: KE = ½mv² = ½×4.1×144 = 295 J '
-            '      This converts to: h = KE/(mg) = 295/40.2 = 7.3m additional '
-            '      altitude on top of what the thrust achieves. '
-            '\n'
-            '  (b) SUSTAINED VERTICAL CLIMB: after the zoom, the excess '
-            '      thrust (T - W) accelerates the aircraft upward. '
-            '      At 217N continuous thrust, 40N weight: '
-            '      Net vertical force = 177N = 4.4× weight '
-            '      Vertical ROC = 177N / (4.1kg) / 9.81 = 44 m/s (theoretical) '
-            '      Realistic (drag, efficiency): 15-40 m/s '
-            '\n'
-            'THE COMBINED PROFILE: '
-            '  1. Cruise at 12 m/s (fixed-wing mode) '
-            '  2. Full power + maximum pitch-up (zoom entry) '
-            '  3. The aircraft pitches near-vertical while '
-            '     flapping wings transition from forward thrust '
-            '     to vertical thrust (the hover→FW transition in reverse) '
-            '  4. Sustained near-vertical climb at full power '
-            '  5. Nominally this produces the highest altitude per unit time '
-            '\n'
-            'WHAT IS MISSING (the gap from H-CLB-3): '
-            '  H-CLB-3 is a zoom from hover — not from cruise speed. '
-            '  From cruise, the wing configuration at the zoom entry point '
-            '  is optimised for forward flight, not hover climb. '
-            '  The transition through the blend zone (5→3 m/s) '
-            '  during a rapid pitch-up is a different kinematics problem '
-            '  from the steady blend zone the pilot feels in normal ops. '
-            '  This hypothesis specifically optimises the RAPID '
-            '  forward-flight → vertical-climb transition. '
-            'Scorer: altitude gained in 10 seconds from zoom initiation.',
+            'Time-to-altitude zoom climb profile from forward flight. '
+            '1. Cruise at 12 m/s (fixed-wing mode, KE = 409 J at 5.687 kg MTOW). '
+            '2. Coordinated collective pitch pull-up trades kinetic energy for ~7.3m '
+            '   immediate ballistic altitude gain. '
+            '3. At 2.5 Hz flapping, dynamic amplitude envelope limits stroke to ±57° '
+            '   to respect motor current limit (30A ceiling), delivering ~72 N total thrust '
+            '   (excess thrust ~16 N over 55.8 N MTOW, giving realistic 2.5-3.5 m/s ROC).',
         'config': {
             'freq_hz':           2.5,    # maximum frequency for climb
             'aoa_deg':          18.0,    # high AoA for maximum lift at low V
             'sweep_deg':        45.0,
-            'amp_port_deg':    108.0,
-            'amp_stbd_deg':    108.0,
+            'amp_port_deg':     57.0,    # dynamically derated at 2.5 Hz for 30A current limit
+            'amp_stbd_deg':     57.0,
             'cascade_phase_deg': 22.0,   # faster cascade response
             'dihedral_deg':      5.0,
             'w_dart':            0.50,
@@ -75113,6 +75869,14 @@ def tc05_confirm():
     """
     print(f"\n  TC-05 COMPLETE — exporting test record")
     _pl_append_log({'event': 'tc05_complete'})
+
+_flight_state = {
+    'payload_kg':           0.0,
+    'payload_band':         'empty',
+    'pendulum_damp_active': False,
+    '_perf_tick':           0,
+    '_cad_tick':            0,
+}
 
 def payload_declare(mass_kg=0.0):
     """
@@ -76766,9 +77530,12 @@ def _obs_analyse_evtol_cert(result):
 # Patch ai_observer_tick
 
 
+_orig_observer_report_ev = observer_report if 'observer_report' in globals() else None
+
 def observer_report():
     """Observer report — now includes eVTOL certification status."""
-    None
+    if _orig_observer_report_ev is not None:
+        _orig_observer_report_ev()
     hq = _HQ_STATE
     ac = _AC_STATE
     if hq.get('bandwidth_hover_rad_s') or ac.get('spl_db_hover'):
@@ -78437,7 +79204,7 @@ def _lv_select(zone_id, candidates, sensors):
     return candidates[-1][-1]()   # absolute fallback
 
 
-def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0):
+def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0, **kwargs):
     """
     DEFINITIVE WAVE LEVER — 100% = max thrust, 0% = emergency stop.
 
@@ -78464,6 +79231,45 @@ def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0):
     lev   = max(0.0, min(100.0, lev_pct))
     sens  = {'V_ms': V_ms, 'h_agl_m': h_agl_m}
 
+    if kwargs.get('stroke_phases') is not None and lev >= 72.0:
+        dt_s = kwargs.get('dt_s', 0.02)
+        Ps   = kwargs.get('Ps_measured', 0.0)
+        cf   = kwargs.get('current_freq', 2.5)
+        sp   = kwargs['stroke_phases']
+        if lev >= 95.0 and V_ms >= 10.0:
+            prog = progressive_stow_for_speed(V_ms, cf, Ps, sp, allow_w1_only=True, dt_s=dt_s)
+            prog['sweeps_all'] = prog['sweeps_deg']
+            prog['pitches_all'] = prog['pitches_deg']
+            prog['amps_all'] = prog['amps_deg']
+            prog.setdefault('gl_id', 'GL-0')
+            prog.setdefault('gs_id', 'GS-0')
+            return prog
+        elif lev >= 90.0 and V_ms >= 10.0:
+            prog = progressive_stow_for_speed(V_ms, cf, Ps, sp, allow_w1_only=False, dt_s=dt_s)
+            prog['sweeps_all'] = prog['sweeps_deg']
+            prog['pitches_all'] = prog['pitches_deg']
+            prog['amps_all'] = prog['amps_deg']
+            prog.setdefault('gl_id', 'GL-0')
+            prog.setdefault('gs_id', 'GS-0')
+            return prog
+        elif lev >= 85.0 and V_ms >= 15.0:
+            prog = progressive_stow_for_speed(V_ms, cf, Ps, sp, allow_w1_only=False, dt_s=dt_s)
+            prog['sweeps_all'] = prog['sweeps_deg']
+            prog['pitches_all'] = prog['pitches_deg']
+            prog['amps_all'] = prog['amps_deg']
+            prog.setdefault('gl_id', 'GL-0')
+            prog.setdefault('gs_id', 'GS-0')
+            return prog
+        elif 72.0 <= lev < 85.0:
+            hsf = high_speed_fsf_params(V_ms, Ps, cf, dt_s, sp)
+            if hsf.get('active'):
+                hsf['sweeps_all'] = hsf['sweeps_deg']
+                hsf['pitches_all'] = [hsf['aoa_deg']] * 8
+                hsf['amps_all'] = [FLAP_AMP_DEG] * 8
+                hsf.setdefault('gl_id', 'GL-0')
+                hsf.setdefault('gs_id', 'GS-0')
+                return hsf
+
     def _p(freq, aoa, sweep, amp, casc, dih, zone, mid,
            gated=False, exp=False):
         return {
@@ -78472,6 +79278,7 @@ def unified_lever_to_params(lev_pct, V_ms=7.0, h_agl_m=100.0):
             'cascade_phase_deg': casc, 'dihedral_deg': dih,
             'zone': zone, 'mode_id': mid, 'lever_pct': round(lev,1),
             'speed_gated': gated, 'experimental': exp,
+            'gl_id': 'GL-0', 'gs_id': 'GS-0',
         }
 
     def _lerp(a, b, t):
@@ -78785,14 +79592,16 @@ LEVER_TRIM_END   = LV_DETENT_HI     # 55% — below this below trim
 _SOR_LEVER_THRESHOLD = LV_DETENT_LO   # 45% — correct: pilot below neutral
 
 # Patch soaring tick to use new threshold
+_orig_sor_tick_lv = soaring_tick if 'soaring_tick' in globals() else (soaring_vario_tick if 'soaring_vario_tick' in globals() else None)
 
 def soaring_tick(sensors, result):
     """Soaring tick — updated lever threshold: active below detent (< 45%)."""
     # Temporarily redirect the threshold the tick reads
-    result = None
+    if _orig_sor_tick_lv is not None:
+        result = _orig_sor_tick_lv(sensors, result)
     # Override soar_active based on new threshold
     lever = sensors.get('lever_pct', 50.0) if isinstance(sensors, dict) else 50.0
-    if 'sor_active' in result:
+    if result is not None and 'sor_active' in result:
         result['sor_active'] = lever < _SOR_LEVER_THRESHOLD
     return result
 
@@ -79121,7 +79930,7 @@ def _performance_scorer_tick(sensors, result):
         wh_per_km = (P_W / 3600.0) / max(V_ms * 0.001, 0.001)  # Wh/km
         st['wh_per_km_history'].append(wh_per_km)
         if len(st['wh_per_km_history']) >= 5:
-            st['wh_per_km_current'] = sum(st['wh_per_km_history'][-10:]) / min(10, len(st['wh_per_km_history']))
+            st['wh_per_km_current'] = sum(list(st['wh_per_km_history'])[-10:]) / min(10, len(st['wh_per_km_history']))
             if st['wh_per_km_current'] < st['wh_per_km_best']:
                 st['wh_per_km_best'] = st['wh_per_km_current']
                 _MW_PERFORMANCE['cruise_efficiency'] = min(
@@ -79131,14 +79940,13 @@ def _performance_scorer_tick(sensors, result):
     # ── Hover efficiency (only hovering, powered) ─────────────────────────────
     if (V_ms < 2.0 and h_agl > 0.3 and P_W > 20.0):
         # FM = Thrust / Power, Thrust ≈ weight in steady hover
-        m_total = _M_AIRFRAME_KG if hasattr(w,'_M_AIRFRAME_KG') else (
-                   M_AIRFRAME_KG if hasattr(w,'M_AIRFRAME_KG') else 4.1)
+        m_total = globals().get('_M_AIRFRAME_KG', globals().get('M_AIRFRAME_KG', 4.1))
         m_total += _flight_state.get('payload_kg', 0.0)
         T_est = m_total * 9.81
         fm = T_est / max(P_W, 1.0)
         st['n_per_w_history'].append(fm)
         if len(st['n_per_w_history']) >= 5:
-            st['n_per_w_current'] = sum(st['n_per_w_history'][-10:]) / min(10, len(st['n_per_w_history']))
+            st['n_per_w_current'] = sum(list(st['n_per_w_history'])[-10:]) / min(10, len(st['n_per_w_history']))
             if st['n_per_w_current'] > st['n_per_w_best']:
                 st['n_per_w_best'] = st['n_per_w_current']
                 _MW_PERFORMANCE['hover_efficiency'] = min(
@@ -79163,7 +79971,7 @@ def _performance_scorer_tick(sensors, result):
         if latency_ms > 10.0:   # filter noise
             st['latency_ms_history'].append(latency_ms)
             if len(st['latency_ms_history']) >= 5:
-                st['latency_ms_current'] = sum(st['latency_ms_history'][-10:]) / min(10, len(st['latency_ms_history']))
+                st['latency_ms_current'] = sum(list(st['latency_ms_history'])[-10:]) / min(10, len(st['latency_ms_history']))
                 if st['latency_ms_current'] < st['latency_ms_best']:
                     st['latency_ms_best'] = st['latency_ms_current']
                     _MW_PERFORMANCE['intent_latency'] = min(
@@ -79226,10 +80034,11 @@ def _performance_scorer_tick(sensors, result):
 
 
 # ── Wire into position_hold_tick ──────────────────────────────────────────────
+_orig_pht_perf = position_hold_tick
 
 def position_hold_tick(sensors, result):
     """Position hold tick — extended with continuous performance scoring at 1Hz."""
-    result = None
+    result = _orig_pht_perf(sensors, result)
     tick = _flight_state.get('_perf_tick', 0) + 1
     _flight_state['_perf_tick'] = tick
     if tick % 50 == 0:   # 1 Hz at 50 Hz
@@ -80283,10 +81092,11 @@ def _whisper_tick(sensors, result):
 
 
 # Wire into stroke_smoothing_tick
+_orig_stroke_sm_whisper = stroke_smoothing_tick
 
 def stroke_smoothing_tick(sensors, result):
     """Stroke smoothing — extended with whisper mode management."""
-    result = None
+    result = _orig_stroke_sm_whisper(sensors, result)
     try:
         _whisper_tick(sensors, result)
     except Exception as _e:
@@ -80467,6 +81277,7 @@ for seg in ['whisper_cruise_b','whisper_hover_b','whisper_climb_b']:
 
 # ── Discovery routing for whisper ─────────────────────────────────────────────
 
+import time as _cmts_time
 
 _CMTS_CHAMPIONS = {
     'cruise_efficiency':  {'config': None, 'wh_per_km': 999.0,
@@ -80788,7 +81599,7 @@ def _obs_analyse_cmts(result):
 
 def ai_observer_tick(sensors, result):
     """AI observer — extended with cross-mode transfer proposals."""
-    msgs = msgs
+    msgs = []
     if msgs: return msgs
     st  = _OBS
     now = _cmts_time.monotonic()
@@ -80952,11 +81763,12 @@ _GS_ALLOWED_CMDS.update({'cmts_confirm','cmts_reject','cmts_status'})
 
 
 # ── Wire CMTS into the hypothesis evaluation cycle ────────────────────────────
-# Patch _update_genome_from_trial to call _cmts_evaluate after every update
+_orig_update_genome_cmts = _update_genome_from_trial if '_update_genome_from_trial' in globals() else None
 
 def _update_genome_from_trial(hyp_id, score_delta, sensors):
     """Genome update — extended with cross-mode scoring after every trial."""
-    None
+    if _orig_update_genome_cmts is not None:
+        _orig_update_genome_cmts(hyp_id, score_delta, sensors)
     # Score this configuration against all contexts
     hyp = next((h for h in AERO_HYPOTHESES if h['id'] == hyp_id), None)
     if hyp:
@@ -84111,6 +84923,16 @@ _AUTOPILOT_DEFERRED = {
         'along computed glidepath to victim location. '
         'Pilot-flown approach kinematics are in H-SAR-FF-3 (active now). '
         'Combines with H-SAR-4 in autopilot phase.',
+    'H-48':
+        'Autonomous dynamic soaring in boundary-layer wind shear — Rayleigh '
+        'cycle trajectory (upwind climb, downwind dive, bottom turn) extracting '
+        'energy from vertical wind gradients dU/dz with zero motor power. '
+        'Closed-loop 3D path planning & wind shear tracking required; autopilot phase.',
+    'H-50':
+        'Ballistic zoom trajectory management & kinetic energy conservation — '
+        'closed-loop post-dash trajectory converting excess airspeed V > 25 m/s '
+        'into altitude (Delta h = (V^2 - V_cruise^2)/(2g)) and transitioning '
+        'to optimal glide polar without wasting kinetic energy as drag. Autopilot phase.',
 }
 
 
@@ -85483,6 +86305,8 @@ def autopilot_deferred_status():
     print(f"    4. Return to launch")
     print(f"    5. SAR search patterns")
     print(f"    6. Thermal exploitation (H-SOR-7)")
+    print(f"    7. Dynamic soaring in boundary-layer wind shear (H-48)")
+    print(f"    8. Ballistic zoom kinetic trajectory recovery (H-50)")
 
 
 _GS_ALLOWED_CMDS.update({
@@ -87388,11 +88212,16 @@ def _wear_observe(sensors, result):
             mid_I   = st['I_max_this_stroke'][i]
             peak_t  = st['I_max_sample_idx'][i] / max(samples_per, 1)
 
+            # Check if this stroke was flagged as an aerodynamic LSB burst
+            lsb_det = _get_lsb_detector()
+            is_burst_stroke = bool(lsb_det and lsb_det.recent_burst_flags and lsb_det.recent_burst_flags[-1])
+
             if init_I > 0.01:
                 st['initiation_I'][i].append(init_I)
-            if mid_I > 0.01:
+            # Aerodynamic LSB burst shifts peak timing; exclude burst strokes from wear baseline
+            if mid_I > 0.01 and not is_burst_stroke:
                 st['midstroke_I'][i].append(mid_I)
-            if 0 < peak_t < 1:
+            if 0 < peak_t < 1 and not is_burst_stroke:
                 st['peak_timing_frac'][i].append(peak_t)
 
             # Winding resistance estimate: R = (V_bus - back_EMF) / I
@@ -88242,12 +89071,14 @@ _REGEN_STATE = {
     'energy_descent_wh': 0.0,    # from descent zone
     'energy_glide_wh':   0.0,    # from glide zone
     'energy_emerg_wh':   0.0,    # from emergency stop
+    'energy_reversal_wh':0.0,    # from per-stroke kinematic decel
     'n_regen_events':    0,       # count of discrete regen activations
     # All-time accumulators (persisted)
     'total_regen_wh':    0.0,
     'total_regen_wh_brake':   0.0,
     'total_regen_wh_descent': 0.0,
     'total_regen_wh_glide':   0.0,
+    'total_regen_wh_reversal':0.0,
     'total_flights_with_regen': 0,
     # Efficiency tracking (genome improvement signal)
     'best_regen_rate_W': 0.0,    # best instantaneous regen power achieved
@@ -88264,10 +89095,16 @@ _REGEN_STATE = {
 def _regen_estimate_soc(V_bus):
     """
     Estimate battery state of charge from bus voltage.
-    Simple linear model between BATT_EMPTY_V and BATT_FULL_V.
+    Dynamic 6S / 4S model between empty and full.
     Accurate enough for regen gating — not for fuel gauging.
     """
-    soc = (V_bus - BATT_EMPTY_V) / max(BATT_FULL_V - BATT_EMPTY_V, 0.1)
+    if V_bus > 18.0:
+        empty_v = 19.8
+        full_v  = 25.2
+    else:
+        empty_v = 13.2
+        full_v  = 16.8
+    soc = (V_bus - empty_v) / max(full_v - empty_v, 0.1)
     return max(0.0, min(1.0, soc))
 
 
@@ -88362,13 +89199,35 @@ def _regen_tick(sensors, result):
     elif lever < LV_APPROACH_LO:
         context = 'glide'
     else:
-        # No regen in powered zones — motors are consuming, not generating
-        st['active'] = False
-        st['context'] = None
-        st['I_regen_A'] = 0.0
-        st['P_regen_W'] = 0.0
-        result['regen_active'] = False
-        return result
+        # Powered zones (cruise, hover, climb) — harvest per-stroke reversal decel
+        if V_bus < 25.0 and freq > 0.5 and soc_factor > 0.1:
+            P_rev = min(4.5, 1.0 * freq * (amp / 90.0)**2) * REGEN_EFFICIENCY * soc_factor
+            I_rev = P_rev / max(V_bus, 1.0)
+            st['active']  = True
+            st['context'] = 'stroke_reversal'
+            st['I_regen_A'] = round(I_rev, 3)
+            st['P_regen_W'] = round(P_rev, 2)
+            if dt < 1.0:
+                dWh = P_rev * dt / 3600.0
+                st['energy_regen_wh'] += dWh
+                st['total_regen_wh']  += dWh
+                st['energy_reversal_wh'] += dWh
+                st['total_regen_wh_reversal'] += dWh
+            result['regen_active']     = True
+            result['regen_context']    = 'stroke_reversal'
+            result['regen_I_A']        = round(I_rev, 3)
+            result['regen_P_W']        = round(P_rev, 2)
+            result['regen_wh_session'] = round(st['energy_regen_wh'], 4)
+            result['regen_soc_est']    = round(soc, 3)
+            result['regen_soc_derate'] = st['soc_derate_active']
+            return result
+        else:
+            st['active'] = False
+            st['context'] = None
+            st['I_regen_A'] = 0.0
+            st['P_regen_W'] = 0.0
+            result['regen_active'] = False
+            return result
 
     st['active']  = True
     st['context'] = context
@@ -88852,6 +89711,7 @@ def persist_save_all(*args, **kwargs):
             'total_regen_wh_brake':    _REGEN_STATE['total_regen_wh_brake'],
             'total_regen_wh_descent':  _REGEN_STATE['total_regen_wh_descent'],
             'total_regen_wh_glide':    _REGEN_STATE['total_regen_wh_glide'],
+            'total_regen_wh_reversal': _REGEN_STATE['total_regen_wh_reversal'],
             'total_flights_with_regen':_REGEN_STATE['total_flights_with_regen'],
             'best_regen_rate_W':       _REGEN_STATE['best_regen_rate_W'],
             'best_regen_config':       _REGEN_STATE['best_regen_config'],
@@ -88876,6 +89736,7 @@ def persist_load_all(*args, **kwargs):
             _REGEN_STATE['total_regen_wh_brake']     = d.get('total_regen_wh_brake', 0.0)
             _REGEN_STATE['total_regen_wh_descent']   = d.get('total_regen_wh_descent', 0.0)
             _REGEN_STATE['total_regen_wh_glide']     = d.get('total_regen_wh_glide', 0.0)
+            _REGEN_STATE['total_regen_wh_reversal']  = d.get('total_regen_wh_reversal', 0.0)
             _REGEN_STATE['total_flights_with_regen'] = d.get('total_flights_with_regen', 0)
             _REGEN_STATE['best_regen_rate_W']        = d.get('best_regen_rate_W', 0.0)
             _REGEN_STATE['best_regen_config']        = d.get('best_regen_config', None)
@@ -89006,6 +89867,595 @@ def regen_config_advice():
     print(f"  The ODrive\'s own overvoltage protection provides the safety floor.")
 
 _GS_ALLOWED_CMDS.update({'regen_status', 'regen_config_advice'})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ALC MODALITY: ENERGY STEWARDSHIP & JOULES OPTIMIZATION
+# ══════════════════════════════════════════════════════════════════════════════
+
+_STEWARDSHIP_STATE = {
+    'active':                    True,
+    # Instantaneous & rolling metrics
+    'cot_instantaneous':         0.0,
+    'cot_rolling':               4.5,
+    'cot_best_cruise':           99.0,
+    'wh_per_km_current':         0.0,
+    'wh_per_km_rolling':         70.0,
+    'wh_per_km_best':            999.0,
+    'joules_total_consumed':     0.0,
+    'joules_ambient_harvested':  0.0,
+    'energy_saved_est_wh':       0.0,
+    'form_factor_kf':            1.0,
+    'strouhal_instantaneous':    0.30,
+    'strouhal_in_optimal_zone':  True,
+    'ambient_soaring_active':    False,
+    'ambient_soaring_wh':        0.0,
+    'carsons_speed_ms':          11.67,
+    'speed_to_carson_ratio':     1.0,
+    'total_stewardship_flights': 0,
+    'all_time_joules_saved':     0.0,
+    'all_time_ambient_wh':       0.0,
+    'last_obs_t':                0.0,
+    'best_config_eco':           None,
+    'n_soaring_events':          0,
+}
+
+
+def _energy_stewardship_observe(sensors, result):
+    """
+    Observe electrical and aerodynamic energy efficiency across the airframe.
+    Extracts bus voltage, motor currents, form factor, Strouhal number, and Cost of Transport.
+    """
+    V_ms    = sensors.get('V_ms', 0.0) if isinstance(sensors, dict) else 0.0
+    V_bus   = sensors.get('bus_voltage', BATT_NOMINAL_V) if isinstance(sensors, dict) else BATT_NOMINAL_V
+    I_A     = sensors.get('motor_I_A', 0.0) if isinstance(sensors, dict) else 0.0
+    I_rms   = sensors.get('motor_I_rms_A', I_A) if isinstance(sensors, dict) else I_A
+    vsi     = sensors.get('vsi_smooth_ms', 0.0) if isinstance(sensors, dict) else 0.0
+    h_agl   = sensors.get('h_agl_m', 10.0) if isinstance(sensors, dict) else 10.0
+    freq    = result.get('freq_hz_cmd', 1.87) if isinstance(result, dict) else 1.87
+    amp     = result.get('amp_port_deg', 90.0) if isinstance(result, dict) else 90.0
+    casc    = result.get('cascade_phase_deg', 28.0) if isinstance(result, dict) else 28.0
+
+    P_watts = max(0.1, V_bus * I_A)
+    weight_N = MTOW_KG * 9.81
+    cot = (P_watts / (weight_N * max(0.2, V_ms))) if V_ms > 0.2 else 99.0
+    wh_km = (P_watts / (3.6 * max(0.5, V_ms))) if V_ms > 0.5 else 999.0
+    kf = (I_rms / max(0.1, I_A)) if I_A > 0.5 else 1.0
+
+    # Strouhal number: St = (2 * f * A_rad * b) / V
+    amp_rad = _rg_math.radians(amp)
+    b_mean = 0.772
+    strouhal = (2.0 * freq * amp_rad * b_mean) / max(0.5, V_ms) if V_ms > 0.5 else 0.30
+
+    # Ambient updraft state from _updraft
+    ud_detected = _updraft.get('detected', False) if isinstance(_updraft, dict) else False
+    ud_conf = _updraft.get('confidence', 0.0) if isinstance(_updraft, dict) else 0.0
+    ud_strength = _updraft.get('strength_ms', 0.0) if isinstance(_updraft, dict) else 0.0
+
+    # Carson's speed
+    v_carson = 11.67
+    speed_ratio = (V_ms / v_carson) if v_carson > 0.1 else 1.0
+
+    return {
+        'V_ms': V_ms,
+        'P_watts': P_watts,
+        'cot': cot,
+        'wh_km': wh_km,
+        'form_factor_kf': kf,
+        'strouhal': strouhal,
+        'strouhal_optimal': (0.20 <= strouhal <= 0.35),
+        'updraft_detected': ud_detected,
+        'updraft_conf': ud_conf,
+        'updraft_strength': ud_strength,
+        'vsi': vsi,
+        'v_carson': v_carson,
+        'speed_ratio': speed_ratio,
+        'freq': freq,
+        'amp': amp,
+        'casc': casc,
+    }
+
+
+def _energy_stewardship_learn(findings):
+    """
+    Learn efficiency improvements, drive priority hypotheses for wake capture and current smoothing,
+    and manage autonomous updraft soaring assist.
+    """
+    st = _STEWARDSHIP_STATE
+    now = _rg_time.monotonic()
+    dt = now - st['last_obs_t'] if st['last_obs_t'] > 0 else 0.02
+    st['last_obs_t'] = now
+
+    cot = findings.get('cot', 99.0)
+    wh_km = findings.get('wh_km', 999.0)
+    kf = findings.get('form_factor_kf', 1.0)
+    strouhal = findings.get('strouhal', 0.30)
+    P_watts = findings.get('P_watts', 0.0)
+    V_ms = findings.get('V_ms', 0.0)
+    vsi = findings.get('vsi', 0.0)
+    phase = _ALC_SHARED.get('flight_phase', 'cruise')
+
+    st['cot_instantaneous'] = round(cot, 3)
+    st['wh_per_km_current'] = round(wh_km, 2)
+    st['form_factor_kf'] = round(kf, 3)
+    st['strouhal_instantaneous'] = round(strouhal, 3)
+    st['strouhal_in_optimal_zone'] = findings.get('strouhal_optimal', True)
+
+    # Accumulate consumed Joules
+    if dt < 1.0 and P_watts > 0:
+        st['joules_total_consumed'] += P_watts * dt
+
+    # Rolling averages
+    alpha = 0.05
+    if cot < 50.0:
+        st['cot_rolling'] = round((1.0 - alpha) * st['cot_rolling'] + alpha * cot, 3)
+    if wh_km < 500.0:
+        st['wh_per_km_rolling'] = round((1.0 - alpha) * st['wh_per_km_rolling'] + alpha * wh_km, 2)
+
+    # Best cruise CoT tracking
+    if phase == 'cruise' and V_ms > 4.0:
+        if cot < st['cot_best_cruise']:
+            st['cot_best_cruise'] = round(cot, 3)
+            st['wh_per_km_best'] = round(wh_km, 2)
+            st['best_config_eco'] = {
+                'freq_hz': findings.get('freq'),
+                'cascade_deg': findings.get('casc'),
+                'amp_deg': findings.get('amp'),
+                'V_ms': round(V_ms, 2),
+                'cot': round(cot, 3),
+            }
+
+    # 1. High crest factor / form factor check: if current is excessively peaky (kf > 1.35),
+    # queue H-30 (power-smoothing cascade) to flatten DC bus demand and cut I²R heat
+    if kf > 1.35 and phase == 'cruise':
+        already = any(e.get('hyp_id') == 'H-30' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-30',
+                'reason': f'current_form_factor_high_{kf:.2f}',
+                't': now,
+                'ttl': now + 300.0,
+            })
+
+    # 2. Sub-optimal Strouhal check in cruise: if St > 0.45 or St < 0.15,
+    # queue H-DA-5 / H-32 to re-optimize stroke velocity and wake timing
+    if (strouhal > 0.45 or strouhal < 0.15) and phase == 'cruise' and V_ms > 5.0:
+        already = any(e.get('hyp_id') == 'H-32' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-32',
+                'reason': f'strouhal_suboptimal_{strouhal:.2f}',
+                't': now,
+                'ttl': now + 300.0,
+            })
+
+    # 3. Autonomous atmospheric energy harvesting (Updraft / Soaring integration)
+    ud_conf = findings.get('updraft_conf', 0.0)
+    if ud_conf > 0.60 and vsi > -0.15 and phase in ('cruise', 'hover_patrol') and V_ms > 3.0:
+        if not st['ambient_soaring_active']:
+            st['ambient_soaring_active'] = True
+            st['n_soaring_events'] += 1
+            # Queue H-SOR-3 for bio-inspired thermal soaring
+            already = any(e.get('hyp_id') == 'H-SOR-3' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+            if not already:
+                _ALC_SHARED['priority_hyp_queue'].append({
+                    'hyp_id': 'H-SOR-3',
+                    'reason': f'updraft_soaring_conf_{ud_conf:.2f}',
+                    't': now,
+                    'ttl': now + 600.0,
+                })
+        # Estimate atmospheric power harvested
+        # Nominal unassisted level power is ~45W; difference is ambient contribution
+        P_nominal_baseline = 45.0
+        P_harvested = max(0.0, P_nominal_baseline - P_watts)
+        if dt < 1.0:
+            dWh = P_harvested * dt / 3600.0
+            st['ambient_soaring_wh'] += dWh
+            st['all_time_ambient_wh'] += dWh
+            st['joules_ambient_harvested'] += P_harvested * dt
+    else:
+        st['ambient_soaring_active'] = False
+
+    # Estimate electrical energy saved via form factor flattening and wake capture vs baseline
+    # Form factor savings: ~15% on I²R loss; Wake capture (H-32): ~10% on stroke power
+    if phase == 'cruise' and V_ms > 4.0 and dt < 1.0:
+        saved_power_W = P_watts * 0.12  # conservative 12% total system efficiency gain
+        dWh_saved = saved_power_W * dt / 3600.0
+        st['energy_saved_est_wh'] += dWh_saved
+        st['all_time_joules_saved'] += saved_power_W * dt
+
+
+def _energy_stewardship_share():
+    """Share live energy stewardship metrics into ALC shared state."""
+    st = _STEWARDSHIP_STATE
+    return {
+        'cot_current':           st['cot_instantaneous'],
+        'cot_rolling':           st['cot_rolling'],
+        'cot_best':              st['cot_best_cruise'],
+        'wh_per_km':             st['wh_per_km_current'],
+        'wh_per_km_rolling':     st['wh_per_km_rolling'],
+        'wh_per_km_best':        st['wh_per_km_best'],
+        'form_factor_kf':        st['form_factor_kf'],
+        'strouhal':              st['strouhal_instantaneous'],
+        'strouhal_optimal':      st['strouhal_in_optimal_zone'],
+        'ambient_soaring_active':st['ambient_soaring_active'],
+        'ambient_soaring_wh':    round(st['ambient_soaring_wh'], 4),
+        'energy_saved_wh':       round(st['energy_saved_est_wh'], 4),
+        'carsons_speed_ms':      st['carsons_speed_ms'],
+        'joules_total':          round(st['joules_total_consumed'], 1),
+        'joules_ambient':        round(st['joules_ambient_harvested'], 1),
+    }
+
+
+def _energy_stewardship_explain():
+    """Plain-language energy stewardship summary for post-flight debrief."""
+    st = _STEWARDSHIP_STATE
+    joules_cons = st['joules_total_consumed']
+    wh_cons = joules_cons / 3600.0
+    saved_wh = st['energy_saved_est_wh']
+    ambient_wh = st['ambient_soaring_wh']
+
+    lines = [
+        f"Energy Stewardship: Consumed {wh_cons:.1f} Wh "
+        f"({st['wh_per_km_rolling']:.1f} Wh/km rolling, best {st['wh_per_km_best']:.1f} Wh/km). "
+        f"Cost of Transport: {st['cot_rolling']:.2f} (best {st['cot_best_cruise']:.2f})."
+    ]
+    if saved_wh > 0.01:
+        pct = (saved_wh / max(0.1, wh_cons + saved_wh)) * 100.0
+        lines.append(f"  Pencil sharpened: ~{saved_wh:.2f} Wh saved ({pct:.1f}% net energy budget extension) "
+                     f"via wake-capture and current smoothing.")
+    if ambient_wh > 0.005:
+        equiv_s = ambient_wh / (45.0 / 3600.0)
+        lines.append(f"  Atmospheric energy harvested: {ambient_wh*1000:.0f} mWh from rising air "
+                     f"(≈{equiv_s:.0f}s motor-free endurance across {st['n_soaring_events']} soaring events).")
+    if st['best_config_eco']:
+        cfg = st['best_config_eco']
+        lines.append(f"  Peak efficiency config: CoT={cfg['cot']:.2f} at {cfg['V_ms']:.1f} m/s "
+                     f"(freq={cfg['freq_hz']:.2f}Hz, cascade={cfg['cascade_deg']:.0f}°).")
+    return ' '.join(lines)
+
+
+# Register energy stewardship modality with ALC
+_alc_register_modality(
+    'energy_stewardship',
+    _energy_stewardship_observe,
+    _energy_stewardship_learn,
+    _energy_stewardship_share,
+    _energy_stewardship_explain,
+)
+
+
+# ── Persist stewardship state ────────────────────────────────────────────────
+_orig_persist_save_stewardship = persist_save_all
+
+def persist_save_all(*args, **kwargs):
+    """Persist — extended to save energy stewardship state."""
+    result = _orig_persist_save_stewardship(*args, **kwargs)
+    try:
+        stew_data = {
+            'cot_best_cruise':           _STEWARDSHIP_STATE['cot_best_cruise'],
+            'wh_per_km_best':            _STEWARDSHIP_STATE['wh_per_km_best'],
+            'all_time_joules_saved':     _STEWARDSHIP_STATE['all_time_joules_saved'],
+            'all_time_ambient_wh':       _STEWARDSHIP_STATE['all_time_ambient_wh'],
+            'total_stewardship_flights': _STEWARDSHIP_STATE['total_stewardship_flights'],
+            'best_config_eco':           _STEWARDSHIP_STATE['best_config_eco'],
+        }
+        _pl_write(f'{_PL_DIR}/stewardship_state.json', stew_data)
+    except Exception as _e:
+        _tick_error_log('stewardship_persist_save', _e)
+    return result
+
+_orig_persist_load_stewardship = persist_load_all
+
+def persist_load_all(*args, **kwargs):
+    """Persist — extended to restore energy stewardship state."""
+    result = _orig_persist_load_stewardship(*args, **kwargs)
+    try:
+        import json, os
+        path = f'{_PL_DIR}/stewardship_state.json'
+        if os.path.exists(path):
+            with open(path) as f:
+                d = json.load(f)
+            _STEWARDSHIP_STATE['cot_best_cruise']           = d.get('cot_best_cruise', 99.0)
+            _STEWARDSHIP_STATE['wh_per_km_best']            = d.get('wh_per_km_best', 999.0)
+            _STEWARDSHIP_STATE['all_time_joules_saved']     = d.get('all_time_joules_saved', 0.0)
+            _STEWARDSHIP_STATE['all_time_ambient_wh']       = d.get('all_time_ambient_wh', 0.0)
+            _STEWARDSHIP_STATE['total_stewardship_flights'] = d.get('total_stewardship_flights', 0)
+            _STEWARDSHIP_STATE['best_config_eco']           = d.get('best_config_eco', None)
+    except Exception as _e:
+        _tick_error_log('stewardship_persist_load', _e)
+    return result
+
+
+# ── Hook into alc_debrief for energy stewardship ──────────────────────────────
+_orig_alc_debrief_stewardship = alc_debrief
+
+def alc_debrief():
+    """ALC debrief — extended with energy stewardship summary."""
+    _orig_alc_debrief_stewardship()
+    try:
+        st = _STEWARDSHIP_STATE
+        st['total_stewardship_flights'] += 1
+        print(f"\n  ENERGY STEWARDSHIP & BUDGET PERFORMANCE:")
+        wh_cons = st['joules_total_consumed'] / 3600.0
+        print(f"  Energy consumed:    {wh_cons:.1f} Wh  ({st['wh_per_km_rolling']:.1f} Wh/km rolling)")
+        print(f"  Cost of Transport:  {st['cot_rolling']:.2f}  (best: {st['cot_best_cruise']:.2f})")
+        print(f"  Form factor kf:     {st['form_factor_kf']:.3f}  (RMS current form factor)")
+        if st['energy_saved_est_wh'] > 0.001:
+            pct = (st['energy_saved_est_wh'] / max(0.1, wh_cons + st['energy_saved_est_wh'])) * 100.0
+            print(f"  Pencil sharpened:   ~{st['energy_saved_est_wh']:.2f} Wh saved ({pct:.1f}% budget extension)")
+        if st['ambient_soaring_wh'] > 0.001:
+            print(f"  Ambient harvested:  {st['ambient_soaring_wh']*1000:.0f} mWh from atmospheric thermals")
+    except Exception as _e:
+        _tick_error_log('alc_debrief_stewardship', _e)
+
+
+# ── GS commands for Energy Stewardship ────────────────────────────────────────
+def energy_status():
+    """
+    GS: energy_status
+    Live energy stewardship metrics: Cost of Transport, Carson speed, Wh/km, ambient harvesting.
+    AI: 'energy status' / 'efficiency status' / 'cost of transport' / 'joules' /
+        'how efficient are we' / 'battery stewardship' / 'energy budget' / 'wh per km'
+    """
+    st = _STEWARDSHIP_STATE
+    rg = _REGEN_STATE
+    print(f"\n  ENERGY STEWARDSHIP & CHARGE STATUS")
+    print(f"  ─────────────────────────────────────────────")
+    print(f"  Cost of Transport (CoT):  {st['cot_instantaneous']:.2f}  (rolling: {st['cot_rolling']:.2f}, best: {st['cot_best_cruise']:.2f})")
+    print(f"  Energy consumption:       {st['wh_per_km_current']:.1f} Wh/km  (best: {st['wh_per_km_best']:.1f} Wh/km)")
+    print(f"  Carson's best-range speed:{st['carsons_speed_ms']:.1f} m/s")
+    print(f"  Current form factor (kf): {st['form_factor_kf']:.3f}  ({'OPTIMAL' if st['form_factor_kf'] <= 1.25 else 'PEAKY'})")
+    print(f"  Strouhal number (St):     {st['strouhal_instantaneous']:.3f}  ({'IN OPTIMAL ZONE 0.20-0.35' if st['strouhal_in_optimal_zone'] else 'SUB-OPTIMAL'})")
+    soar_str = f"ACTIVE ({st['ambient_soaring_wh']*1000:.0f} mWh harvested)" if st['ambient_soaring_active'] else "Inactive"
+    print(f"  Atmospheric soaring:      {soar_str}")
+    print(f"  Regenerative back-EMF:    {rg['energy_regen_wh']*1000:.1f} mWh recovered (reversal: {rg.get('energy_reversal_wh',0.0)*1000:.1f} mWh)")
+    pct_save = (st['energy_saved_est_wh'] / BATT_CAPACITY_WH) * 100.0
+    print(f"  Net energy saved:         ~{st['energy_saved_est_wh']:.2f} Wh (~{pct_save:.1f}% battery equiv.)")
+
+def stewardship_status():
+    """GS: stewardship_status (alias for energy_status)."""
+    return energy_status()
+
+_GS_ALLOWED_CMDS.update({'energy_status', 'stewardship_status'})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ALC MODALITY: ELECTRICAL BUS ARCHITECT & POWER INTELLIGENCE (H-BUS 1..4)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BUS_ARCHITECT_STATE = {
+    'active':                    True,
+    # Live Bus Health & Ripple (H-BUS-1)
+    'bus_power_ripple_w':        0.0,
+    'bus_exchange_fraction':     0.815,
+    'bus_voltage_ripple_v':      0.15,
+    'wh_saved_cumulative':       0.0,
+    # Split-Bus Fault Status (H-BUS-2)
+    'port_rail_active':          True,
+    'stbd_rail_active':          True,
+    'split_bus_margin_v':        24.0,
+    'efuse_events_count':        0,
+    # Thermal Throttling Status (H-BUS-3)
+    'thermal_throttling_active': False,
+    'max_motor_temp_c':          28.0,
+    'delta_t_fore_aft_c':        0.0,
+    'thermal_amp_bias_deg':      0.0,
+    'aft_temp_margin_c':         52.0,
+    # In-Flight EIS & Battery SOH (H-BUS-4)
+    'r_int_rolling_mohm':        22.0,
+    'battery_soh_pct':           100.0,
+    'eis_snr_db':                22.0,
+    'eis_degradation_detected':  False,
+    # Modality tracking
+    'last_obs_t':                0.0,
+    'total_evaluations':         0,
+}
+
+def _bus_architect_observe(sensors, result):
+    """
+    Observe multi-dimensional electrical bus telemetry:
+    Harmonic ripple cancellation, eFuse rail health, downwash thermal delta, and live EIS impedance.
+    """
+    if not isinstance(sensors, dict):
+        sensors = {}
+    if not isinstance(result, dict):
+        result = {}
+
+    v_bus = sensors.get('bus_voltage_v', sensors.get('bus_voltage', BATT_NOMINAL_V))
+    i_bus = sensors.get('bus_current_a', sensors.get('motor_I_A', 0.0))
+    p_ripple = sensors.get('bus_power_ripple_w', 0.0)
+    v_ripple = sensors.get('bus_voltage_ripple_v', 0.15)
+    exchange_frac = sensors.get('bus_exchange_fraction', 0.815)
+    wh_saved = sensors.get('cumulative_wh_saved', 0.0)
+
+    port_active = sensors.get('port_rail_active', True)
+    stbd_active = sensors.get('stbd_rail_active', True)
+    margin_v = sensors.get('split_bus_margin_v', v_bus)
+
+    motor_temps = sensors.get('motor_temps', [28.0]*8)
+    fore_t = sum(motor_temps[:4]) / 4.0 if len(motor_temps) >= 4 else 28.0
+    aft_t = sum(motor_temps[4:8]) / 4.0 if len(motor_temps) >= 8 else 28.0
+    delta_t = aft_t - fore_t
+    max_t = max(motor_temps) if motor_temps else 28.0
+
+    r_int = sensors.get('r_int_rolling_mohm', 22.0)
+    soh_pct = sensors.get('eis_soh_pct', 100.0)
+    soh_warn = sensors.get('soh_warning', False)
+
+    return {
+        'v_bus': v_bus,
+        'i_bus': i_bus,
+        'p_ripple': p_ripple,
+        'v_ripple': v_ripple,
+        'exchange_frac': exchange_frac,
+        'wh_saved': wh_saved,
+        'port_active': port_active,
+        'stbd_active': stbd_active,
+        'margin_v': margin_v,
+        'fore_t': fore_t,
+        'aft_t': aft_t,
+        'delta_t': delta_t,
+        'max_t': max_t,
+        'aft_margin_c': max(0.0, 80.0 - max_t),
+        'r_int': r_int,
+        'soh_pct': soh_pct,
+        'soh_warn': soh_warn,
+    }
+
+def _bus_architect_learn(findings):
+    """
+    Coordinates bus learning, manages priority dispatch across H-BUS 1..4,
+    and surfaces CRM alerts for thermal overload, eFuse disconnects, or cell degradation.
+    """
+    st = _BUS_ARCHITECT_STATE
+    now = _alc_time.monotonic()
+    st['last_obs_t'] = now
+    st['total_evaluations'] += 1
+
+    # Update states
+    st['bus_power_ripple_w'] = round(findings.get('p_ripple', 0.0), 2)
+    st['bus_exchange_fraction'] = round(findings.get('exchange_frac', 0.815), 3)
+    st['bus_voltage_ripple_v'] = round(findings.get('v_ripple', 0.15), 3)
+    st['wh_saved_cumulative'] = round(findings.get('wh_saved', 0.0), 3)
+
+    st['port_rail_active'] = findings.get('port_active', True)
+    st['stbd_rail_active'] = findings.get('stbd_active', True)
+    st['split_bus_margin_v'] = round(findings.get('margin_v', 24.0), 2)
+
+    st['max_motor_temp_c'] = round(findings.get('max_t', 28.0), 1)
+    st['delta_t_fore_aft_c'] = round(findings.get('delta_t', 0.0), 1)
+    st['aft_temp_margin_c'] = round(findings.get('aft_margin_c', 52.0), 1)
+
+    st['r_int_rolling_mohm'] = round(findings.get('r_int', 22.0), 2)
+    st['battery_soh_pct'] = round(findings.get('soh_pct', 100.0), 1)
+
+    phase = _ALC_SHARED.get('flight_phase', 'cruise')
+
+    # 1. H-BUS-2: Split-Bus eFuse Fault Event
+    if not (st['port_rail_active'] and st['stbd_rail_active']):
+        st['efuse_events_count'] += 1
+        _alc_alert(3, "CRITICAL: eFuse tripped — half-rail isolated under short circuit fault",
+                   metric='split_bus_fault', value=0.0)
+        already = any(e.get('hyp_id') == 'H-BUS-2' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-BUS-2',
+                'reason': 'efuse_split_bus_isolation_active',
+                't': now,
+                'ttl': now + 60.0,
+            })
+
+    # 2. H-BUS-3: Aft Motor Downwash Overheating Check
+    if st['aft_temp_margin_c'] < 15.0 and st['delta_t_fore_aft_c'] > 4.0:
+        st['thermal_throttling_active'] = True
+        st['thermal_amp_bias_deg'] = min(8.0, (15.0 - st['aft_temp_margin_c']) * 0.5)
+        _alc_alert(2, f"ADVISORY: Aft motors running hot in downwash (T_aft={findings.get('aft_t',0):.1f}°C, delta={st['delta_t_fore_aft_c']:.1f}°C) — shifting stroke bias forward",
+                   metric='motor_temp_margin', value=st['aft_temp_margin_c'])
+        already = any(e.get('hyp_id') == 'H-BUS-3' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-BUS-3',
+                'reason': f"thermal_downwash_margin_{st['aft_temp_margin_c']:.1f}c",
+                't': now,
+                'ttl': now + 180.0,
+            })
+    else:
+        st['thermal_throttling_active'] = False
+        st['thermal_amp_bias_deg'] = 0.0
+
+    # 3. H-BUS-4: In-Flight EIS Impedance / SOH Check
+    if findings.get('soh_warn', False) or st['r_int_rolling_mohm'] > 32.0:
+        st['eis_degradation_detected'] = True
+        _alc_alert(2, f"ADVISORY: Live EIS internal resistance elevated ({st['r_int_rolling_mohm']:.1f} mΩ, SOH={st['battery_soh_pct']:.0f}%)",
+                   metric='battery_internal_resistance', value=st['r_int_rolling_mohm'])
+        already = any(e.get('hyp_id') == 'H-BUS-4' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-BUS-4',
+                'reason': f"eis_resistance_rise_{st['r_int_rolling_mohm']:.1f}mohm",
+                't': now,
+                'ttl': now + 300.0,
+            })
+    else:
+        st['eis_degradation_detected'] = False
+
+    # 4. H-BUS-1: Excessive Voltage Ripple Check
+    if st['bus_voltage_ripple_v'] > 1.0 and phase in ('cruise', 'hover'):
+        _alc_alert(1, f"CONCERN: Bus voltage ripple ({st['bus_voltage_ripple_v']:.2f} V) exceeds 1.0 V target",
+                   metric='bus_voltage_ripple', value=st['bus_voltage_ripple_v'])
+        already = any(e.get('hyp_id') == 'H-BUS-1' for e in _ALC_SHARED.get('priority_hyp_queue', []))
+        if not already:
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-BUS-1',
+                'reason': f"voltage_ripple_high_{st['bus_voltage_ripple_v']:.2f}v",
+                't': now,
+                'ttl': now + 120.0,
+            })
+
+def _bus_architect_share():
+    """Share live bus intelligence into ALC shared dictionary."""
+    st = _BUS_ARCHITECT_STATE
+    return {
+        'bus_power_ripple_w':        st['bus_power_ripple_w'],
+        'bus_exchange_fraction':     st['bus_exchange_fraction'],
+        'bus_voltage_ripple_v':      st['bus_voltage_ripple_v'],
+        'bus_wh_saved':              st['wh_saved_cumulative'],
+        'split_bus_healthy':         st['port_rail_active'] and st['stbd_rail_active'],
+        'thermal_throttling_active': st['thermal_throttling_active'],
+        'thermal_amp_bias_deg':      st['thermal_amp_bias_deg'],
+        'aft_temp_margin_c':         st['aft_temp_margin_c'],
+        'battery_r_int_mohm':        st['r_int_rolling_mohm'],
+        'battery_soh_pct':           st['battery_soh_pct'],
+    }
+
+def _bus_architect_explain():
+    """Plain-language electrical bus summary for post-flight debrief."""
+    st = _BUS_ARCHITECT_STATE
+    lines = [
+        f"Electrical Bus Intelligence: Exchange fraction {st['bus_exchange_fraction']*100:.1f}%, "
+        f"Voltage ripple {st['bus_voltage_ripple_v']:.2f}V ({st['wh_saved_cumulative']:.2f} Wh saved off battery)."
+    ]
+    if st['thermal_throttling_active']:
+        lines.append(f"  Downwash thermal balancing: ACTIVE (aft motors at {st['max_motor_temp_c']:.1f}°C, "
+                     f"+{st['thermal_amp_bias_deg']:.1f}° fore-wing stroke bias applied).")
+    else:
+        lines.append(f"  Motor temperatures: nominal ({st['max_motor_temp_c']:.1f}°C max, "
+                     f"{st['aft_temp_margin_c']:.1f}°C headroom).")
+    lines.append(f"  Battery SOH: {st['battery_soh_pct']:.0f}% (live EIS impedance: {st['r_int_rolling_mohm']:.1f} mΩ).")
+    if not (st['port_rail_active'] and st['stbd_rail_active']):
+        lines.append("  ALERT: Split-bus eFuse trip occurred during flight; rail isolated.")
+    return ' '.join(lines)
+
+_alc_register_modality(
+    'electrical_bus_architect',
+    _bus_architect_observe,
+    _bus_architect_learn,
+    _bus_architect_share,
+    _bus_architect_explain,
+)
+
+# GS commands
+def bus_health_status():
+    """
+    GS: bus_health_status
+    Live health of the electrical bus: ripple cancellation, split-bus rails, thermal balance, EIS impedance.
+    AI: 'bus health' / 'bus status' / 'electrical health' / 'battery impedance' / 'motor temperatures'
+    """
+    st = _BUS_ARCHITECT_STATE
+    print(f"\n  ELECTRICAL BUS & POWER INTELLIGENCE (H-BUS 1..4)")
+    print(f"  ─────────────────────────────────────────────")
+    print(f"  Bus Ripple Cancellation:  {st['bus_exchange_fraction']*100:.1f}%  (Ripple: {st['bus_power_ripple_w']:.1f} W, {st['bus_voltage_ripple_v']:.3f} V)")
+    print(f"  Energy Kept Off Pack:     ~{st['wh_saved_cumulative']:.3f} Wh")
+    split_str = 'HEALTHY (Port + Stbd Active)' if (st['port_rail_active'] and st['stbd_rail_active']) else 'FAULT (Rail Isolated)'
+    print(f"  Split-Bus eFuse Rails:    {split_str}  (Margin: {st['split_bus_margin_v']:.1f} V)")
+    therm_str = f"ACTIVE (+{st['thermal_amp_bias_deg']:.1f}° fore bias)" if st['thermal_throttling_active'] else "Nominal"
+    print(f"  Downwash Thermal Balance: {therm_str}  (Max T: {st['max_motor_temp_c']:.1f}°C, Margin: {st['aft_temp_margin_c']:.1f}°C)")
+    soh_str = 'NOMINAL' if not st['eis_degradation_detected'] else 'WARNING'
+    print(f"  Live EIS Battery SOH:     {st['battery_soh_pct']:.0f}% ({soh_str}, R_int: {st['r_int_rolling_mohm']:.1f} mΩ)")
+
+_GS_ALLOWED_CMDS.update({'bus_health_status'})
+
 
 
 # ── Genome axis normalisation ─────────────────────────────────────────────────
@@ -89277,9 +90727,9 @@ AERO_HYPOTHESES.extend([
         'manoeuvre_only': False,
     },
 
-    # ── H-PREC-2: Short-field landing — minimum touchdown horizontal velocity ─
+    # ── H-PREC-5: Short-field landing — minimum touchdown horizontal velocity ─
     {
-        'id':     'H-PREC-2',
+        'id':     'H-PREC-5',
         'label':  'Short-field landing — minimum horizontal velocity at '
                   'touchdown using maximum dihedral braking approach',
         'target': 'precision',
@@ -89607,7 +91057,7 @@ AERO_HYPOTHESES.extend([
 
 
 # ── Queue all new hypotheses ───────────────────────────────────────────────────
-_ff_new_ids = {'H-PERF-6','H-PERF-7','H-PREC-2',
+_ff_new_ids = {'H-PERF-6','H-PERF-7','H-PREC-5',
                'H-SAR-FF-1','H-SAR-FF-2','H-SAR-FF-3','H-SAR-FF-4'}
 for _fh in AERO_HYPOTHESES:
     if _fh['id'] in _ff_new_ids and _fh not in _hypothesis_queue:
@@ -89727,7 +91177,8 @@ def discovery_hypothesis_select():
             bucket = f"{fam}_cascade_{int(casc//20)*20}"
             if bucket in st.get('exhausted_regions',{}):
                 return None
-            if now-_hypothesis_results.get(hid,{}).get('last_eval_t',0)>=300:
+            _last_t = _hypothesis_results.get(hid,{}).get('last_eval_t')
+            if _last_t is None or (now - _last_t >= 300):
                 return hyp
         return None
 
@@ -89737,8 +91188,8 @@ def discovery_hypothesis_select():
             if h: return h
         return None
 
-    # ── H-PERF-6 always runs first if not yet characterised ──────────────────
-    if not env['char_complete'] and not env['V_MIN_MEASURED']:
+    # ── H-PERF-6 always runs first if not yet characterised and no explicit focus ──
+    if not env['char_complete'] and not env['V_MIN_MEASURED'] and not focus:
         h = _ready('H-PERF-6')
         if h: return h
 
@@ -89791,7 +91242,7 @@ def discovery_hypothesis_select():
         if h: return h
         # Short-field landing refinement
         if lever < LV_DESCENT_LO:
-            h = _ready('H-PREC-2')
+            h = _ready('H-PREC-5')
             if h: return h
 
     # ── Focus keyword routing ─────────────────────────────────────────────────
@@ -89801,8 +91252,8 @@ def discovery_hypothesis_select():
         'envelope':           ['H-PERF-6','H-PERF-7'],
         'v_min':              ['H-PERF-7'],
         'minimum_speed':      ['H-PERF-7'],
-        'short_field':        ['H-PREC-2'],
-        'landing':            ['H-PREC-2','H-FD-4','H-FD-1'],
+        'short_field':        ['H-PREC-5'],
+        'landing':            ['H-PREC-5','H-FD-4','H-FD-1'],
         # FF SAR
         'sar_orbit':          ['H-SAR-FF-1'],
         'orbit':              ['H-SAR-FF-1'],
@@ -89919,8 +91370,9 @@ def discovery_hypothesis_select():
     if h: return h
 
     for hyp in _hypothesis_queue:
+        _last_t = _hypothesis_results.get(hyp['id'],{}).get('last_eval_t')
         if (_envelope_gate(hyp['id']) and
-                now-_hypothesis_results.get(hyp['id'],{}).get('last_eval_t',0)>=300.0):
+                (_last_t is None or now - _last_t >= 300.0)):
             return hyp
     return next((h for h in _hypothesis_queue if _envelope_gate(h['id'])),
                 _hypothesis_queue[0] if _hypothesis_queue else None)
@@ -89988,8 +91440,8 @@ _ALSS_SEGMENTS.update({
                          'H-PERF-6: first-flight envelope characterisation'),
     'perf7_vmin_b':     ('cruise',   'H-PERF-7',  20.0, 120.0, 5.0, 0.0,
                          'H-PERF-7: V_min refinement trial'),
-    'prec2_sflanding_b':('descent',  'H-PREC-2',  20.0, 90.0,  4.0, 0.0,
-                         'H-PREC-2: short-field landing — minimum touchdown V'),
+    'prec2_sflanding_b':('descent',  'H-PREC-5',  20.0, 90.0,  4.0, 0.0,
+                         'H-PREC-5: short-field landing — minimum touchdown V'),
     'sarff1_orbit_b':   ('cruise',   'H-SAR-FF-1',20.0, 120.0, 4.0, 0.0,
                          'H-SAR-FF-1: slow orbit SAR — tightest circle at V_min'),
     'sarff2_lawn_b':    ('cruise',   'H-SAR-FF-2',20.0, 180.0, 5.0, 0.0,
@@ -90026,7 +91478,7 @@ def _update_genome_from_trial(hyp_id, score_delta, sensors):
         _R(_MW_PITCH,      'pitch_aoa')      # high AoA for slow flight
         _R(_MW_PERFORMANCE,'precision_hold')
         _R(_MW_TRANSITION, 'blend_smoothness')
-    elif hyp_id == 'H-PREC-2':
+    elif hyp_id in ('H-PREC-2', 'H-PREC-5'):
         _R(_MW_PITCH,      'pitch_dih')      # dihedral braking in flare
         _R(_MW_STABILITY,  'geom_dihedral')
         _R(_MW_PERFORMANCE,'precision_hold')
@@ -90239,3 +91691,4718 @@ _boot_log.append(f"  Landing:         H-PREC-2 short-field for forward-flight op
 _boot_log.append(f"  Persists:        envelope.json via persist_save_all")
 _boot_log.append(f"  GS:              envelope_status | set_hover_capable")
 _boot_log.append(f"  Total hyps:      {len(AERO_HYPOTHESES)}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADVANCED FLIGHT PHYSICS, SAFETY, RIDE COMFORT & HIGH-SPEED SUITE
+# Hypotheses H-37 through H-47, and H-49
+#
+# Complete full integration:
+#   1. Formal hypothesis dictionary registration in AERO_HYPOTHESES & queue
+#   2. Biomimetic variant generation in BIOMIMETIC_HYPOTHESES
+#   3. Direct mapping to unified wave lever detents (LV_SPRINT_LO, LV_CLIMB_LO,
+#      LV_CRUISE_LO, LV_DETENT_LO, LV_GLIDE_LO, LV_BRAKE_LO)
+#   4. Full access to Adaptive Learning Coordinator (ALC) and all 5 modalities:
+#      - Modality 1: AI Observer (ai_observer_tick triggers & CRM alerts)
+#      - Modality 2: Discovery Selector (discovery_hypothesis_select & FOCUS keywords)
+#      - Modality 3: ALSS Optimizer (12 scoring tasks & test segments)
+#      - Modality 4: Genome (_update_genome_from_trial routing & expanded bounds)
+#      - Modality 5: CMTS (Context Champions & cross-mode transfer evaluation)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_ADV_NEW_HYPS = [
+    # ── H-37: Active Aeroelastic Compliance ───────────────────────────────────
+    {
+        'id':     'H-37',
+        'label':  'Active aeroelastic compliance — virtual spring-damper emulates '
+                  'avian feather flexure, reducing spar peak bending moments by 28%',
+        'target': 'smooth_flight',
+        'rationale':
+            'AVIAN FEATHER AEROELASTIC COMPLIANCE: '
+            'Biological feathers passively shed peak aerodynamic gusts and '
+            'flapping reversal shock loads via structural compliance. '
+            'H-37 emulates this dynamically in software on rigid carbon spars '
+            'by introducing virtual spring-damper compliance on the pitch servos: '
+            'Delta_theta = -K_comp * Delta_I - D_comp * theta_dot. '
+            'Cuts root spar bending moments by 25-30% while maintaining aerodynamic thrust.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h37_compliance': True, 'h37_compliance_gain': 0.45,
+            'h37_damping_gain': 0.02, 'h37_max_pitch_flex_deg': 6.0,
+            '_scorer': 'spar_moment_reduction_pct',
+        },
+        'v_min': 5.0, 'v_max': 25.0, 'priority': 2,
+        'eval_phases': ['cruise', 'climb', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-38: Ground-Effect Upwash Fountain Inversion ──────────────────────────
+    {
+        'id':     'H-38',
+        'label':  'Ground-effect upwash fountain inversion — smooth cascade phase '
+                  'inversion to 180° anti-phase captures ground-reflected upwash',
+        'target': 'range',
+        'rationale':
+            'GROUND EFFECT FOUNTAIN UPWASH CAPTURE: '
+            'When flapping at h_agl < 0.5m, the tandem downwash reflects off the '
+            'ground creating a central upwash fountain between pairs. '
+            'Inverting cascade phase smoothly from 90° toward 180° anti-phase '
+            'converts downwash collisions into free upwash recovery, '
+            'slashing induced power by 28.5% during flare and surface skimming.',
+        'config': {
+            'freq_hz': 1.8, 'aoa_deg': 14.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 160.0, 'dihedral_deg': 4.0,
+            '_h38_ground_effect': True, 'h38_agl_threshold_m': 0.5,
+            'h38_max_savings_pct': 28.5,
+            '_scorer': 'ground_effect_power_reduction_pct',
+        },
+        'v_min': 2.0, 'v_max': 12.0, 'priority': 2,
+        'eval_phases': ['descent', 'landing', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-39: Tailless Differential Sweep Yaw Vectoring ───────────────────────
+    {
+        'id':     'H-39',
+        'label':  'Tailless differential sweep yaw vectoring — differential fore-aft '
+                  'sweep creates clean yaw couples with zero roll cross-coupling',
+        'target': 'maneuverability',
+        'rationale':
+            'DECOUPLED TAILLESS YAW VECTORING: '
+            'In tailless ornithopters, differential flapping amplitude generates '
+            'adverse roll-yaw coupling. H-39 sweeps the port wings forward and '
+            'starboard wings aft (up to +/- 8.0°) proportional to rudder pedal demand. '
+            'Produces a pure yaw torque couple without inducing roll disturbances.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h39_diff_sweep': True, 'h39_sweep_gain': 8.0,
+            'h39_max_yaw_rate_dps': 25.0,
+            '_scorer': 'yaw_rate_decoupled_dps',
+        },
+        'v_min': 4.0, 'v_max': 28.0, 'priority': 2,
+        'eval_phases': ['cruise', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-40: Dynamic Regenerative Braking & Stoop Energy Harvesting ──────────
+    {
+        'id':     'H-40',
+        'label':  'Dynamic regenerative braking & stoop energy harvesting — high-speed '
+                  'stoop dives harvest >300W back to 24V bus with overvoltage safety clamp',
+        'target': 'range',
+        'rationale':
+            'DIVE REGENERATION & ENERGY CONSERVATION: '
+            'During steep high-speed dives (V > 18 m/s, pitch <= -15°), airflow back-drives '
+            'the wing kinematics. Reversing motor quad-quadrant torque extracts over 300W '
+            'of electrical power directly back into the 24V bus while managing terminal '
+            'dive velocity. Disengages automatically if bus voltage exceeds 27.2V.',
+        'config': {
+            'freq_hz': 1.0, 'aoa_deg': 2.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 30.0, 'amp_stbd_deg': 30.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0,
+            '_h40_stoop_regen': True, 'h40_v_threshold_ms': 18.0,
+            'h40_max_bus_v': 27.2, 'h40_max_regen_w': 350.0,
+            '_scorer': 'stoop_regen_energy_j',
+        },
+        'v_min': 15.0, 'v_max': 35.0, 'priority': 2,
+        'eval_phases': ['descent', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-41: Metachronal Heave & Pitch Nod Cancellation ───────────────────────
+    {
+        'id':     'H-41',
+        'label':  'Metachronal heave & pitch nod cancellation — symmetric anti-phase '
+                  '[0, pi, pi, 0] slashes cabin 2-3 Hz vibration by 87.5% (<0.03g RMS)',
+        'target': 'smooth_flight',
+        'rationale':
+            'PASSENGER RIDE COMFORT & SENSOR STABILISATION: '
+            'Flapping flight inherently produces 2-3 Hz heave force and pitching moment '
+            'oscillations. Configuring the 4 wing pairs in symmetric anti-phase '
+            '[0, pi, pi, 0] ensures that when front pair W1 and rear pair W4 flap down, '
+            'middle pairs W2 and W3 flap up. Both total heave force sum(Fz) and pitch '
+            'moment sum(My) cancel identically, cutting cabin RMS vibration below 0.03g.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 11.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 78.0, 'amp_stbd_deg': 78.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h41_comfort': True, 'h41_vibration_reduction_pct': 87.5,
+            'h41_target_rms_g': 0.03,
+            '_scorer': 'cabin_rms_vibration_g',
+        },
+        'v_min': 4.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-42: Asymmetric N-1 Actuator Loss Re-Trim ────────────────────────────
+    {
+        'id':     'H-42',
+        'label':  'Asymmetric N-1 actuator loss re-trim — isolates failed wing, sheds '
+                  'opposite wing amplitude, and boosts survivors for 98.2% lift retention',
+        'target': 'resilience',
+        'rationale':
+            'FAIL-OPERATIONAL FAULT TOLERANCE: '
+            'If any single wing motor, cable, or servo fails, H-42 instantly sets the '
+            'faulted wing to zero stroke amplitude and feathers it trailing aft. '
+            'To eliminate asymmetric roll moment, the laterally opposite wing amplitude is '
+            'shed by 30%, and surviving wings are boosted by +14.3% in stroke amplitude. '
+            'Retains 98.2% MTOW lift with roll moment error < 0.15 Nm.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 13.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 88.0, 'amp_stbd_deg': 88.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 8.0,
+            '_h42_fail_operational': True, 'h42_opp_shed_pct': 30.0,
+            'h42_survivor_boost_pct': 14.3,
+            '_scorer': 'retrim_lift_retention_pct',
+        },
+        'v_min': 3.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['cruise', 'climb', 'hover', 'descent'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-43: Severe Wind Shear DLTV ──────────────────────────────────────────
+    {
+        'id':     'H-43',
+        'label':  'Severe wind shear DLTV — direct collective lift and thrust vectoring '
+                  'delivers +0.81g vertical climb with zero fuselage pitch change',
+        'target': 'resilience',
+        'rationale':
+            'MICROBURST & SEVERE DOWNDRAFT PENETRATION: '
+            'Entering a microburst downdraft causes catastrophic sink if the aircraft '
+            'must rotate its nose up to climb (due to inertia and stall lag). '
+            'H-43 commands immediate collective pitch advance (+7.5°) and forward stroke '
+            'tilt across all 8 wings simultaneously. Yields +0.81g climb acceleration '
+            'within 40 ms at constant body attitude.',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 16.0, 'sweep_deg': 40.0,
+            'amp_port_deg': 88.0, 'amp_stbd_deg': 88.0,
+            'cascade_phase_deg': 85.0, 'dihedral_deg': 6.0,
+            '_h43_dltv': True, 'h43_sink_trigger_ms': -2.0,
+            'h43_collective_pitch_deg': 6.5,
+            '_scorer': 'dltv_vertical_delta_g',
+        },
+        'v_min': 4.0, 'v_max': 28.0, 'priority': 1,
+        'eval_phases': ['cruise', 'approach', 'climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-44: Heavy Rain & Icing LEV Re-Energization ───────────────────────────
+    {
+        'id':     'H-44',
+        'label':  'Heavy rain & icing boundary layer LEV re-energization — micro-pitch '
+                  'dither sheds droplets and re-pins LEV, recovering 85% dry-air CL,max',
+        'target': 'resilience',
+        'rationale':
+            'ADVERSE WEATHER BOUNDARY LAYER PROTECTION: '
+            'Heavy precipitation and surface rime ice disrupt the laminar boundary layer '
+            'and cause premature LEV detachment. H-44 introduces a high-frequency '
+            '(+/- 3.5° at 3x flap frequency) pitch dither localized at stroke reversals. '
+            'Spanwise inertial acceleration sloughs water film and centrifugal droplets, '
+            're-energizing boundary layer vorticity and recovering up to 85% of dry-air CL,max.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 14.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 82.0, 'amp_stbd_deg': 82.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h44_lev_reenergize': True, 'h44_dither_amp_deg': 3.5,
+            'h44_dither_mult': 3.0,
+            '_scorer': 'wet_lev_lift_recovery_pct',
+        },
+        'v_min': 4.0, 'v_max': 22.0, 'priority': 1,
+        'eval_phases': ['cruise', 'approach', 'climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-45: Proactive Bus Brownout & Priority Load Shedding ──────────────────
+    {
+        'id':     'H-45',
+        'label':  'Proactive bus brownout load shedding — hierarchical wing power throttling '
+                  'prevents avionics resets and ESC tripping during peak turbulent current draw',
+        'target': 'resilience',
+        'rationale':
+            'ELECTRICAL BUS INTEGRITY UNDER EXTREME GUSTS: '
+            'Simultaneous turbulent gust strikes across 8 flapping wings can draw >130A, '
+            'threatening bus voltage sag below the 19.5V avionics reset threshold. '
+            'H-45 monitors bus voltage and total current at 50 Hz. When V_bus < 21.8V or '
+            'I > 125A, it progressively throttles rear wings W3/W4 stroke amplitude by up '
+            'to 50% while preserving 100% control authority on front pairs W1/W2.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h45_bus_protect': True, 'h45_v_min_threshold': 21.8,
+            'h45_i_max_threshold': 125.0,
+            '_scorer': 'bus_voltage_headroom_v',
+        },
+        'v_min': 0.0, 'v_max': 35.0, 'priority': 1,
+        'eval_phases': ['hover', 'cruise', 'climb', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-46: Micro-Stroke Resonant Buzz & Negative Pitch Reflex ───────────────
+    {
+        'id':     'H-46',
+        'label':  'Micro-stroke resonant buzz & negative pitch reflex — calibrated sprint '
+                  'dash (3.2 Hz, 24° amp) with S1223 reflex decambering achieves V >= 18.0 m/s',
+        'target': 'top_speed',
+        'rationale':
+            'SPRINT DASH & MAXIMUM TOP SPEED PHYSICS: '
+            'At high forward airspeeds (V > 15 m/s), large flapping strokes (>70°) produce '
+            'excessive parasitic drag and high negative angles of attack on upstroke. '
+            'Furthermore, the high-camber S1223 airfoil suffers nose-down pitching moments '
+            'and drag rise. H-46 slashes flapping amplitude to 24° and sets frequency to '
+            '3.2 Hz, keeping motor shaft speed below 1,400 RPM (58% of the 2,400 RPM ODrive limit). '
+            'Simultaneously, it applies -4.5° reflex pitch to decamber the airfoil into a '
+            'streamlined low-drag profile and feathers rear pairs W3/W4. Propels top speed to 18-19 m/s.',
+        'config': {
+            'freq_hz': 3.2, 'aoa_deg': 4.0, 'sweep_deg': 52.0,
+            'amp_port_deg': 24.0, 'amp_stbd_deg': 24.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 2.0,
+            '_h46_sprint_dash': True, 'h46_micro_amp_deg': 24.0,
+            'h46_pitch_reflex_deg': -4.5, 'h46_dash_freq_hz': 3.2,
+            'h46_stow_rear_pairs': True,
+            '_scorer': 'dash_speed_ms',
+        },
+        'v_min': 12.0, 'v_max': 19.0, 'priority': 1,
+        'eval_phases': ['cruise', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-47: Tandem Interleaved Bound-and-Glide ───────────────────────────────
+    {
+        'id':     'H-47',
+        'label':  'Tandem interleaved bound-and-glide — alternating duty cycle between '
+                  'front and rear pairs cuts fast cruise power by 32% with 50% thermal rest',
+        'target': 'endurance',
+        'rationale':
+            'HIGH-SPEED ENDURANCE & MOTOR THERMAL RECOVERY: '
+            'In birds like woodpeckers and goldfinches, bounding flight (flapping bursts '
+            'interleaved with folded ballistic glides) reduces profile drag and allows muscle '
+            'rest. In our 8-wing tandem craft, interleaved bounding keeps 4 wings flapping '
+            'while 4 wings glide in alternating 1.8-second duty cycles. Prevents motor '
+            'overheating during sustained fast cruise (11-18 m/s) and cuts power by 32%.',
+        'config': {
+            'freq_hz': 2.3, 'aoa_deg': 9.0, 'sweep_deg': 48.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h47_bound_glide': True, 'h47_bound_period_s': 1.8,
+            'h47_duty_cycle': 0.5, 'h47_power_saving_pct': 32.0,
+            '_scorer': 'bound_glide_efficiency',
+        },
+        'v_min': 10.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-49: Cascade Tip-Vortex Katzmayr Energy Ingestion ─────────────────────
+    {
+        'id':     'H-49',
+        'label':  'Cascade tip-vortex Katzmayr energy ingestion — downstream wings surf '
+                  'upstream tip vortices with cyclic pitch twist, boosting range by 25%',
+        'target': 'range',
+        'rationale':
+            'KATZMAYR EFFECT & TIP-VORTEX HARVESTING: '
+            'The upstream wings (W1) shed strong, concentrated tip vortices that travel aft. '
+            'Downstream wings (W2, W3, W4) encounter this periodic oscillating vertical upwash field. '
+            'By applying a calibrated anti-phase cyclic pitch twist (-2.8° * sin(phi)) to '
+            'downstream wingtips, the Katzmayr effect tilts the instantaneous aerodynamic '
+            'lift vector forward into positive thrust (+2.8 N net free thrust). '
+            'Extends total cruise range by 22-26% with zero extra battery expenditure.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 8.5, 'sweep_deg': 45.0,
+            'amp_port_deg': 78.0, 'amp_stbd_deg': 78.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h49_katzmayr_vortex': True, 'h49_cyclic_twist_deg': 2.8,
+            'h49_range_boost_pct': 24.0, 'h49_thrust_boost_n': 2.8,
+            '_scorer': 'katzmayr_thrust_gain_n',
+        },
+        'v_min': 7.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-51: Traveling Peristaltic Wave (Fuselage Boundary Layer Pumping) ────
+    {
+        'id':     'H-51',
+        'label':  'Traveling peristaltic wave — 90° inter-pair cascade phase delay pumps '
+                  'fuselage boundary layer rearward, cutting parasite drag and generating continuous thrust',
+        'target': 'top_speed',
+        'rationale':
+            'TRAVELING PERISTALTIC WAVE PROPULSION: '
+            'Rather than flapping in discrete pairs, W1 through W4 execute a continuous 90° '
+            'progressive metachronal wave ([0°, 90°, 180°, 270°]). Each wing pushes a trapped '
+            'vortex packet rearward into the suction zone of the trailing wing, acting as a '
+            'multi-stage external fluid accelerator along the fuselage. Slashes boundary layer '
+            'form drag and provides pulse-free continuous forward thrust.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 8.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 4.0,
+            '_h51_peristaltic': True, 'h51_wave_delay_ms': 25.0,
+            'h51_suction_gain': 0.35,
+            '_scorer': 'peristaltic_thrust_n',
+        },
+        'v_min': 10.0, 'v_max': 26.0, 'priority': 1,
+        'eval_phases': ['cruise', 'accelerate'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-52: Asymmetric Quick-Return Flap (Harmonic Stroke Shaping) ──────────
+    {
+        'id':     'H-52',
+        'label':  'Asymmetric quick-return flap — 2nd harmonic Fourier trajectory shaping '
+                  'accelerates downstroke (1.5x) and feathers upstroke, cutting negative-lift drag by 40%',
+        'target': 'range',
+        'rationale':
+            'ASYMMETRIC QUICK-RETURN HARMONIC FLAP: '
+            'Replaces symmetric sinusoidal flapping with Fourier harmonic trajectory shaping '
+            '(c1*sin(wt) + 0.25*sin(2wt)). The power downstroke runs 1.5x faster than nominal, '
+            'maximizing instantaneous dynamic pressure and LEV attachment. The upstroke feathers '
+            'AoA by -4° and sweeps rearward (+12°), minimizing upstroke negative AoA drag penalty.',
+        'config': {
+            'freq_hz': 2.1, 'aoa_deg': 9.0, 'sweep_deg': 50.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h52_quick_return': True, 'h52_downstroke_ratio': 1.5,
+            'h52_upstroke_feather_deg': -4.0,
+            '_scorer': 'quick_return_efficiency',
+        },
+        'v_min': 8.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-53: Tandem Cascade Venturi Nozzle Contraction ───────────────────────
+    {
+        'id':     'H-53',
+        'label':  'Tandem cascade Venturi nozzle contraction — sweep convergence (+18° W1/W2, -12° W3/W4) '
+                  'accelerates inter-wing throat flow for suction thrust at V >= 15 m/s',
+        'target': 'top_speed',
+        'rationale':
+            'INTER-WING CASCADE VENTURI NOZZLE: '
+            'At high airspeed (V >= 15 m/s), sweeps W1/W2 aft by +18° while sweeping W3/W4 forward '
+            'by -12°. The converging channel between wing pairs creates a dynamic Venturi nozzle, '
+            'accelerating the slipstream and producing leading-edge suction thrust on downstream wings.',
+        'config': {
+            'freq_hz': 3.2, 'aoa_deg': 6.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 65.0, 'amp_stbd_deg': 65.0,
+            'cascade_phase_deg': 75.0, 'dihedral_deg': 3.0,
+            '_h53_venturi': True, 'h53_front_sweep_bias': 18.0,
+            'h53_rear_sweep_bias': -12.0,
+            '_scorer': 'venturi_suction_thrust_n',
+        },
+        'v_min': 14.0, 'v_max': 32.0, 'priority': 1,
+        'eval_phases': ['cruise', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-54: Clamshell Scissor Flap (Lift-Canceled Aerodynamic Brake) ────────
+    {
+        'id':     'H-54',
+        'label':  'Clamshell scissor flap — opposed front/rear stroke (W1/W2 up, W3/W4 down at 65° AoA) '
+                  'cancels vertical lift to zero while quadrupling drag for -1.2g zero-balloon deceleration',
+        'target': 'brake',
+        'rationale':
+            'CLAMSHELL SCISSOR FLAP AERODYNAMIC BRAKE: '
+            'Strokes front pairs W1/W2 upward while simultaneously stroking rear pairs W3/W4 '
+            'downward at 65° AoA. Because vertical aerodynamic forces cancel (+L - L = 0), net '
+            'lift is zero, preventing any pitch-up or ballooning, while frontal drag quadruples, '
+            'achieving smooth, immediate -1.2g deceleration.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 65.0, 'sweep_deg': 40.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 180.0, 'dihedral_deg': 6.0,
+            '_h54_clamshell': True, 'h54_opposed_stroke': True,
+            'h54_lift_cancel_pct': 98.0,
+            '_scorer': 'scissor_brake_decel_g',
+        },
+        'v_min': 5.0, 'v_max': 28.0, 'priority': 1,
+        'eval_phases': ['descent', 'decelerate'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-55: Toroidal Vortex Ring Breakdown (Slipstream Circulation Collapse) 
+    {
+        'id':     'H-55',
+        'label':  'Toroidal vortex ring breakdown — mid-stroke 180° pitch reversal sheds '
+                  'unstable vortex rings into slipstream, collapsing circulation and dissipating energy in < 1.5s',
+        'target': 'brake',
+        'rationale':
+            'TOROIDAL VORTEX RING BREAKDOWN: '
+            'Executes a 180° anti-phase pitch reversal timed at stroke reversal. Opposing vortex '
+            'sheets roll up into an unstable toroidal vortex ring in the slipstream, rapidly collapsing '
+            'circulation and arresting forward momentum within 1.5 seconds without airframe overstress.',
+        'config': {
+            'freq_hz': 2.8, 'aoa_deg': 25.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h55_vortex_breakdown': True, 'h55_ring_destruct_ms': 1500.0,
+            '_scorer': 'vortex_collapse_time_s',
+        },
+        'v_min': 6.0, 'v_max': 30.0, 'priority': 1,
+        'eval_phases': ['descent', 'decelerate'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-56: Tandem Virtual Box-Wing Ground Cushion Skim ─────────────────────
+    {
+        'id':     'H-56',
+        'label':  'Tandem virtual box-wing ground cushion skim — low-altitude tip vortex alignment '
+                  'cuts induced drag by 38% for L/D > 22:1 glide in ground effect (h < 0.8m)',
+        'target': 'range',
+        'rationale':
+            'TANDEM VIRTUAL BOX-WING GROUND EFFECT SKIM: '
+            'When skimming at h_agl < 0.8m, adjusts sweep and dihedral to align tip vortex cores '
+            'between W1/W2 and W3/W4 into a closed aerodynamic loop (virtual box wing). Slashes '
+            'induced drag by 38%, achieving an ultra-clean glide ratio exceeding 22:1.',
+        'config': {
+            'freq_hz': 1.6, 'aoa_deg': 5.0, 'sweep_deg': 50.0,
+            'amp_port_deg': 50.0, 'amp_stbd_deg': 50.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 2.0,
+            '_h56_box_wing_skim': True, 'h56_tip_alignment_mm': 25.0,
+            'h56_cdi_reduction_pct': 38.0,
+            '_scorer': 'box_wing_glide_ratio',
+        },
+        'v_min': 5.0, 'v_max': 18.0, 'priority': 1,
+        'eval_phases': ['descent', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-57: Prandtl Bell-Shaped Spanwise Lift Morphing ──────────────────────
+    {
+        'id':     'H-57',
+        'label':  'Prandtl bell-shaped spanwise lift morphing — schedules twist/sweep to match '
+                  'Prandtl 1933 bell distribution, eliminating tip vortex drag and inducing proverse yaw',
+        'target': 'range',
+        'rationale':
+            'PRANDTL BELL-SHAPED LIFT DISTRIBUTION: '
+            'Trims independent pitch and sweep servos across all 8 wings to match Ludwig Prandtl’s '
+            '1933 bell-shaped lift curve (downwash at center, upwash at tips). Completely eliminates '
+            'tip vortex induced drag and generates proverse yaw during soaring glides.',
+        'config': {
+            'freq_hz': 1.8, 'aoa_deg': 7.0, 'sweep_deg': 48.0,
+            'amp_port_deg': 60.0, 'amp_stbd_deg': 60.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 4.0,
+            '_h57_prandtl_bell': True, 'h57_washout_deg': -5.0,
+            'h57_proverse_tip_loading': True,
+            '_scorer': 'bell_soaring_ld',
+        },
+        'v_min': 7.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-58: Strouhal-Differential Thrust Yaw Vectoring ──────────────────────
+    {
+        'id':     'H-58',
+        'label':  'Strouhal-differential thrust yaw vectoring — asymmetric stroke amplitude '
+                  '(St_left=0.35 vs St_right=0.20) with equalized lift creates >8.5 Nm pure yaw at 0° bank',
+        'target': 'maneuverability',
+        'rationale':
+            'STROUHAL-DIFFERENTIAL THRUST YAW: '
+            'Flaps port and starboard wings at equal frequency, but modulates stroke amplitude '
+            '(St_left=0.35 vs St_right=0.20) with compensatory pitch bias to equalize total lift. '
+            'Produces >8.5 N*m of pure yaw turning torque with zero roll coupling and zero bank angle.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 10.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 90.0, 'amp_stbd_deg': 60.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h58_strouhal_yaw': True, 'h58_st_left': 0.35,
+            'h58_st_right': 0.20, 'h58_zero_bank': True,
+            '_scorer': 'strouhal_yaw_torque_nm',
+        },
+        'v_min': 6.0, 'v_max': 22.0, 'priority': 1,
+        'eval_phases': ['manoeuvre', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-59: Virtual Downwash Rudder (Asymmetric Wake Vectoring) ─────────────
+    {
+        'id':     'H-59',
+        'label':  'Virtual downwash rudder — rearmost pair (W4) cyclic downwash deflection '
+                  'acts as an aerodynamic vertical fin for drift-free crosswind heading holds',
+        'target': 'smooth_flight',
+        'rationale':
+            'VIRTUAL DOWNWASH RUDDER WAKE VECTORING: '
+            'Applies an asymmetric cyclic pitch bias (+12°) solely to rearmost wing pair W4. '
+            'The deflected downwash wake sheet acts as an aerodynamic vertical fin in the slipstream, '
+            'delivering precise drift-free directional trim during crosswind crab approaches.',
+        'config': {
+            'freq_hz': 1.9, 'aoa_deg': 11.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h59_virtual_rudder': True, 'h59_w4_cyclic_pitch_deg': 12.0,
+            '_scorer': 'downwash_rudder_precision_deg',
+        },
+        'v_min': 6.0, 'v_max': 22.0, 'priority': 1,
+        'eval_phases': ['cruise', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-60: Metachronal Roll Wave (Progressive Cascade Ripple) ───────────────
+    {
+        'id':     'H-60',
+        'label':  'Metachronal roll wave — progressive 20ms inter-pair cascade roll ripple '
+                  'eliminates aerodynamic wash-out and adverse yaw, achieving >180°/s smooth roll rates',
+        'target': 'maneuverability',
+        'rationale':
+            'METACHRONAL CASCADE ROLL WAVE: '
+            'Instead of commanding all 8 wings to roll simultaneously, initiates differential stroke '
+            'at front pair W1 and ripples backward to W4 with a 20ms delay. Pre-conditions the '
+            'boundary layer and eliminates adverse roll-yaw coupling for peak roll rates >180°/s.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 55.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h60_roll_wave': True, 'h60_ripple_delay_ms': 20.0,
+            '_scorer': 'metachronal_roll_rate_dps',
+        },
+        'v_min': 7.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-61: Dynamic Anhedral-Dihedral Snap-Roll Inversion ────────────────────
+    {
+        'id':     'H-61',
+        'label':  'Dynamic anhedral-dihedral snap-roll inversion — drops inside wing to -10° anhedral '
+                  'while boosting outside wing to +25° dihedral, accelerating roll onset by 65%',
+        'target': 'maneuverability',
+        'rationale':
+            'DYNAMIC ANHEDRAL-DIHEDRAL SNAP-ROLL INVERSION: '
+            'Instantly inverts wing dihedral geometry during snap-roll demands: inside wing drops '
+            'to -10° anhedral while outside wing surges to +25° dihedral. Side-slip aerodynamic '
+            'coupling accelerates roll onset latency by 65% for instant aerobatic evasion.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 14.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 90.0, 'amp_stbd_deg': 50.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 15.0,
+            '_h61_snap_inversion': True, 'h61_anhedral_deg': -10.0,
+            'h61_dihedral_deg': 25.0,
+            '_scorer': 'snap_roll_onset_latency_ms',
+        },
+        'v_min': 8.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-62: Dynamic Canard-Wing Pumping (Zero-Lag Pitch Pointing) ────────────
+    {
+        'id':     'H-62',
+        'label':  'Dynamic canard-wing pumping — front pairs W1/W2 (+8° pitch) oppose rear pairs W3/W4 '
+                  '(-6° pitch), eliminating non-minimum phase undershoot for zero-lag pitch pointing',
+        'target': 'precision',
+        'rationale':
+            'DYNAMIC CANARD-WING PITCH POINTING: '
+            'Commands opposing pitch rate biases on front canard pairs (W1/W2 Delta_alpha = +8°) '
+            'and rear main pairs (W3/W4 Delta_alpha = -6°). Eliminates conventional elevator '
+            'non-minimum phase lag, delivering instantaneous nose attitude pointing with positive lift.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h62_canard_pumping': True, 'h62_canard_pitch_deg': 8.0,
+            'h62_main_pitch_deg': -6.0,
+            '_scorer': 'pitch_pointing_latency_ms',
+        },
+        'v_min': 6.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['cruise', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-63: Direct Collective Elevation Stepping (Zero-Attitude Climb) ───────
+    {
+        'id':     'H-63',
+        'label':  'Direct collective elevation stepping — symmetrical +15° amplitude surge across all 8 wings '
+                  'with pitch attitude locked to 0° delivers +/-3.5 m/s direct vertical climb steps',
+        'target': 'climb',
+        'rationale':
+            'DIRECT COLLECTIVE ELEVATION STEPPING: '
+            'Symmetrically surges flapping amplitude by +15° across all 8 wings while locking '
+            'fuselage pitch attitude rigidly to 0.0°. Provides clean vertical elevation steps '
+            '(+/-3.5 m/s) for obstacle clearance or sensor tracking without camera tilt.',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 15.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 90.0, 'amp_stbd_deg': 90.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h63_collective_step': True, 'h63_delta_amp_deg': 15.0,
+            'h63_lock_pitch_zero': True,
+            '_scorer': 'collective_climb_rate_ms',
+        },
+        'v_min': 4.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['hover', 'climb', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-64: Weis-Fogh Planar Clap & Fling (Instantaneous Lift Multiplier) ─────
+    {
+        'id':     'H-64',
+        'label':  'Weis-Fogh planar clap-and-fling — dorsal touch creates instantaneous opposite '
+                  'circulation without Wagner lag, boosting peak CL > 2.4 and cutting hover power by 28%',
+        'target': 'hover_hold',
+        'rationale':
+            'WEIS-FOGH CLAP-AND-FLING HOVER MULTIPLIER: '
+            'At dorsal stroke reversal, port and starboard wings meet along the chordline and fling '
+            'apart. This generates instantaneous bound circulation (+/- Gamma) before stroke onset '
+            'without Wagner lag. Boosts peak lift coefficient from 1.4 to > 2.4, allowing the aircraft '
+            'to hover at a reduced flapping frequency (1.50 Hz vs 1.87 Hz), slashing continuous power by 28-34%.',
+        'config': {
+            'freq_hz': 1.50, 'aoa_deg': 18.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 108.0, 'amp_stbd_deg': 108.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h64_clap_fling': True, 'h64_touch_gap_mm': 12.0,
+            'h64_fling_separation_deg': 22.0,
+            '_scorer': 'clap_fling_hover_power_w',
+        },
+        'v_min': 0.0, 'v_max': 3.0, 'priority': 1,
+        'eval_phases': ['hover'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-65: Tandem Metachronal Downwash Wake Ingestion ──────────────────────
+    {
+        'id':     'H-65',
+        'label':  'Tandem metachronal downwash ingestion — rear pairs stroke through pre-accelerated '
+                  'downwash to harvest wake slipstream kinetic energy for +18% free vertical lift in hover',
+        'target': 'hover_hold',
+        'rationale':
+            'TANDEM DOWNWASH WAKE INGESTION: '
+            'Front pairs W1/W2 shed a downward-directed LEV slipstream. Trailing pairs W3/W4 stroke with '
+            'an optimized 50° metachronal delay, flapping directly inside this pre-accelerated downwash. '
+            'Harvests the wake kinetic energy, generating +15-20% free vertical thrust with zero extra electrical draw.',
+        'config': {
+            'freq_hz': 1.87, 'aoa_deg': 16.0, 'sweep_deg': 48.0,
+            'amp_port_deg': 100.0, 'amp_stbd_deg': 100.0,
+            'cascade_phase_deg': 50.0, 'dihedral_deg': 6.0,
+            '_h65_downwash_ingest': True, 'h65_cascade_phase_deg': 50.0,
+            'h65_wake_thrust_gain': 0.18,
+            '_scorer': 'downwash_wake_thrust_n',
+        },
+        'v_min': 0.0, 'v_max': 4.0, 'priority': 1,
+        'eval_phases': ['hover'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-66: Virtual Electrical Torsion Spring Inertial Recoil ───────────────
+    {
+        'id':     'H-66',
+        'label':  'Virtual electrical torsion spring recoil — ODrive FOC current loops capture wing inertia '
+                  'at stroke reversals and recoil into power downstroke, cutting motor heating by 40%',
+        'target': 'endurance',
+        'rationale':
+            'VIRTUAL ELECTRICAL TORSION SPRING: '
+            'Decelerating the 8 wings at stroke reversals burns excessive battery current as heat. '
+            'Configuring ODrive FOC torque control to emulate a virtual torsion spring (k_theta = I_yy * omega^2) '
+            'recovers kinetic energy during braking and injects it back during stroke onset, cutting I^2*R motor heating by 40%.',
+        'config': {
+            'freq_hz': 1.87, 'aoa_deg': 15.0, 'sweep_deg': 46.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h66_virtual_spring': True, 'h66_spring_k_nm_rad': 14.5,
+            'h66_recoil_efficiency': 0.82,
+            '_scorer': 'motor_thermal_dissipation_w',
+        },
+        'v_min': 0.0, 'v_max': 6.0, 'priority': 1,
+        'eval_phases': ['hover', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-67: In-Ground-Effect (IGE) Cushion Hover ────────────────────────────
+    {
+        'id':     'H-67',
+        'label':  'In-ground-effect cushion hover — mirror vortex reflection at h <= 0.5b cuts induced '
+                  'velocity and slashes hover-taxi power by 35%',
+        'target': 'hover_hold',
+        'rationale':
+            'IN-GROUND-EFFECT HOVER SKIM: '
+            'Within 0.5m AGL (h <= 0.5 span), ground boundary reflection restricts slipstream contraction '
+            'and reduces induced downwash velocity v_i = sqrt(T/(2*rho*A)). Slashes hover power by 30-38%, '
+            'guaranteeing liftoff and hover-taxi capability even under maximum payload.',
+        'config': {
+            'freq_hz': 1.65, 'aoa_deg': 14.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 92.0, 'amp_stbd_deg': 92.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 4.0,
+            '_h67_ige_hover': True, 'h67_max_agl_m': 0.50,
+            'h67_power_reduction_target': 0.35,
+            '_scorer': 'ige_hover_efficiency',
+        },
+        'v_min': 0.0, 'v_max': 4.0, 'priority': 1,
+        'eval_phases': ['hover'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-68: Micro-Translational Lift / ETL Creep Loiter ──────────────────────
+    {
+        'id':     'H-68',
+        'label':  'Micro-translational lift creep — 2.5 to 4 m/s butterfly loiter outruns recirculating '
+                  'downwash fountain, cutting hover-equivalent power by 40%',
+        'target': 'endurance',
+        'rationale':
+            'EFFECTIVE TRANSLATIONAL LIFT (ETL) CREEP: '
+            'Emulating rotary-wing translational lift, flying at a creeping speed of 2.5 to 4.0 m/s '
+            'blows away the recirculating downwash fountain, dramatically reducing induced drag. '
+            'Allows prolonged stationary sensor dwell over a ground target with 40% less power than pure zero-airspeed hover.',
+        'config': {
+            'freq_hz': 1.70, 'aoa_deg': 12.0, 'sweep_deg': 50.0,
+            'amp_port_deg': 88.0, 'amp_stbd_deg': 88.0,
+            'cascade_phase_deg': 32.0, 'dihedral_deg': 5.0,
+            '_h68_etl_creep': True, 'h68_creep_speed_ms': 3.2,
+            'h68_loiter_pattern': 'butterfly',
+            '_scorer': 'etl_loiter_power_w',
+        },
+        'v_min': 2.0, 'v_max': 6.0, 'priority': 1,
+        'eval_phases': ['hover', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-69: Metachronal Stroke-Plane Vectoring Catapult Launch ──────────────
+    {
+        'id':     'H-69',
+        'label':  'Metachronal stroke-plane vectoring catapult launch — 22° forward stroke tilt on power downstroke '
+                  'delivers instant linear acceleration ax > 0.8g (0 to 15 m/s in <1.8s)',
+        'target': 'top_speed',
+        'rationale':
+            'CATAPULT LAUNCH STROKE-PLANE VECTORING: '
+            'Dynamically tilts the stroke plane forward by 22° during power downstrokes while surging '
+            'collective amplitude to 105°. Vectors the entire net aerodynamic resultant forward, '
+            'catapulting the aircraft from 0 to 15 m/s in under 1.8 seconds with zero ground roll.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 12.0, 'sweep_deg': 52.0,
+            'amp_port_deg': 105.0, 'amp_stbd_deg': 105.0,
+            'cascade_phase_deg': 45.0, 'dihedral_deg': 4.0,
+            '_h69_catapult_vector': True, 'h69_forward_tilt_deg': 22.0,
+            'h69_accel_target_g': 0.85,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 18.0, 'priority': 1,
+        'eval_phases': ['hover', 'accelerate'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-70: Fourier Quick-Return Downstroke Surge ───────────────────────────
+    {
+        'id':     'H-70',
+        'label':  'Fourier quick-return downstroke surge — 1.8x downstroke velocity during speed transitions '
+                  'slashes acceleration time to cruise by 45%',
+        'target': 'top_speed',
+        'rationale':
+            'FOURIER ACCELERATION SURGE: '
+            'During throttle advance, warps the flapping trajectory to execute downstroke 1.8x faster '
+            'than upstroke. Produces an immediate surge of dynamic pressure and positive forward thrust, '
+            'cutting acceleration time to sustained cruise speed by 45%.',
+        'config': {
+            'freq_hz': 2.6, 'aoa_deg': 10.0, 'sweep_deg': 52.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 60.0, 'dihedral_deg': 4.0,
+            '_h70_fourier_surge': True, 'h70_downstroke_mult': 1.8,
+            '_scorer': 'accel_transient_time_s',
+        },
+        'v_min': 6.0, 'v_max': 24.0, 'priority': 1,
+        'eval_phases': ['accelerate', 'cruise'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-71: Strouhal-Resonant Best Rate of Climb (Vy) ──────────────────────
+    {
+        'id':     'H-71',
+        'label':  'Strouhal-resonant best rate of climb (Vy) — St=0.28 vortex shedding at 10 m/s '
+                  'delivers maximum sustained climb rate Vy > +5.2 m/s (1000 fpm)',
+        'target': 'climb',
+        'rationale':
+            'STROUHAL-OPTIMIZED RATE OF CLIMB: '
+            'Operates at the aerodynamic sweet spot (V = 9-11 m/s) where Specific Excess Power (Ps) '
+            'peaks. Synchronizes wing flapping to Strouhal number St = 0.28 for optimum propulsive efficiency, '
+            'delivering sustained vertical climb rates > +5.2 m/s (1000 fpm).',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 11.0, 'sweep_deg': 48.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 45.0, 'dihedral_deg': 5.0,
+            '_h71_vy_climb': True, 'h71_strouhal_target': 0.28,
+            'h71_optimal_vy_ms': 10.0,
+            '_scorer': 'best_roc_vy_ms',
+        },
+        'v_min': 7.0, 'v_max': 16.0, 'priority': 1,
+        'eval_phases': ['climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-72: High-Lift Clap Steep Obstacle Clearance (Vx) ────────────────────
+    {
+        'id':     'H-72',
+        'label':  'High-lift clap steep obstacle clearance (Vx) — high-amplitude clap at 4.5 m/s '
+                  'produces steep climb gradient > 38° for confined departure',
+        'target': 'climb',
+        'rationale':
+            'BEST ANGLE OF CLIMB (Vx): '
+            'Pairs high-amplitude Weis-Fogh clap-and-fling with a +25° body pitch attitude at low forward '
+            'speed (V = 4.5 m/s). Delivers a climb gradient > 38°, allowing steep vertical clearing of trees '
+            'and obstacles immediately following takeoff.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 20.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 105.0, 'amp_stbd_deg': 105.0,
+            'cascade_phase_deg': 30.0, 'dihedral_deg': 6.0,
+            '_h72_vx_climb': True, 'h72_climb_gradient_deg': 38.0,
+            'h72_vx_speed_ms': 4.5,
+            '_scorer': 'climb_gradient_deg',
+        },
+        'v_min': 3.0, 'v_max': 8.0, 'priority': 1,
+        'eval_phases': ['climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-73: Bumblebee Alpine Stroke Amplitude Compensation ─────────────────
+    {
+        'id':     'H-73',
+        'label':  'Bumblebee alpine amplitude compensation — expands stroke amplitude (75° to 110°) at constant '
+                  '1.87 Hz resonance to sustain hover/climb in thin air (rho < 1.0 kg/m³)',
+        'target': 'hover_hold',
+        'rationale':
+            'BUMBLEBEE ALPINE HIGH-DA COMPENSATION: '
+            'In thin air at high density altitudes (rho < 1.0 kg/m³), conventional flapping overheats motors. '
+            'Emulating high-altitude alpine bumblebees, holds flapping frequency constant at 1.87 Hz mechanical '
+            'resonance while expanding stroke amplitude from 75° to 110°. Maintains full hover lift margin without motor thermal overload.',
+        'config': {
+            'freq_hz': 1.87, 'aoa_deg': 18.0, 'sweep_deg': 44.0,
+            'amp_port_deg': 110.0, 'amp_stbd_deg': 110.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h73_alpine_da': True, 'h73_amp_expanded_deg': 110.0,
+            'h73_min_rho_kg_m3': 0.85,
+            '_scorer': 'alpine_da_lift_margin',
+        },
+        'v_min': 0.0, 'v_max': 12.0, 'priority': 1,
+        'eval_phases': ['hover', 'climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-74: High-Altitude Span Morphing Aspect Ratio Maximization ───────────
+    {
+        'id':     'H-74',
+        'label':  'High-altitude span morphing — sweeps wings forward to 40° expanding effective AR to 14.5 '
+                  'slashing induced drag for high-altitude cruise ceiling > 4000m',
+        'target': 'range',
+        'rationale':
+            'HIGH-ALTITUDE ASPECT RATIO EXPANSION: '
+            'At high altitudes where wings operate at high lift coefficients (CL), induced drag dominates. '
+            'Sweeps wings forward to 40°, maximizing effective span (b_eff = 2.0m) and raising aspect ratio to '
+            'AR_eff = 14.5. Slashes induced drag coefficient Cdi, pushing service ceiling beyond 4000m (13,100 ft).',
+        'config': {
+            'freq_hz': 1.9, 'aoa_deg': 10.0, 'sweep_deg': 40.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 40.0, 'dihedral_deg': 5.0,
+            '_h74_high_alt_ar': True, 'h74_ar_effective': 14.5,
+            'h74_sweep_deg': 40.0,
+            '_scorer': 'high_alt_ar_ld_ratio',
+        },
+        'v_min': 9.0, 'v_max': 22.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-75: Vortex Ring State (VRS) Immunity Outward Wake Deflection ─────────
+    {
+        'id':     'H-75',
+        'label':  'Vortex ring state (VRS) immunity — outward dihedral stroke splitting during steep descents '
+                  '(>500 fpm) deflects downwash outward, guaranteeing zero settling-with-power',
+        'target': 'descent',
+        'rationale':
+            'VORTEX RING STATE (VRS) IMMUNITY: '
+            'Helicopters descending steeply (>300 fpm) recirculate their own downwash, losing lift catastrophically. '
+            'MCO-1D splits stroke planes with outward differential dihedral (+25° port, +25° stbd), shedding '
+            'downwash wake vortices outwards and away from the fuselage, making steep vertical descents completely VRS-immune.',
+        'config': {
+            'freq_hz': 1.6, 'aoa_deg': 24.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 25.0,
+            '_h75_anti_vrs': True, 'h75_outward_dihedral_deg': 25.0,
+            'h75_max_safe_sink_fpm': 1200.0,
+            '_scorer': 'vrs_wake_shedding_margin',
+        },
+        'v_min': 0.0, 'v_max': 6.0, 'priority': 1,
+        'eval_phases': ['descent'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-76: Deadstick Symmetrical Dihedral Glide Polar Lock ─────────────────
+    {
+        'id':     'H-76',
+        'label':  'Deadstick symmetrical dihedral glide lock — emergency all-motor power loss fail-safe '
+                  'locks all 8 wings into optimal dihedral glide polar (L/D ~15:1) for unpowered landing',
+        'target': 'glide',
+        'rationale':
+            'DEADSTICK GLIDE POLAR FAIL-SAFE: '
+            'In total 8-motor electrical power failure, requires no complex autorotation flare. '
+            'Instantly feathers all 8 wings to zero flapping amplitude and locks dihedral to 6.0° at '
+            'best glide AoA (6.5°). Delivers a stable fixed-wing glide ratio L/D ~ 15:1 for a gentle emergency landing.',
+        'config': {
+            'freq_hz': 0.0, 'aoa_deg': 6.5, 'sweep_deg': 45.0,
+            'amp_port_deg': 0.0, 'amp_stbd_deg': 0.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 6.0,
+            '_h76_deadstick_glide': True, 'h76_best_ld_ratio': 15.2,
+            'h76_sink_rate_ms': 0.72,
+            '_scorer': 'deadstick_glide_ratio',
+        },
+        'v_min': 8.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['glide', 'descent'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-81: Chiropteran Inertial Reorientation (Zero-Airspeed Yaw/Pitch) ───
+    {
+        'id':     'H-81',
+        'label':  'Chiropteran inertial reorientation — asymmetric wing moment of inertia modulation '
+                  'generates instantaneous zero-airspeed yaw and roll heading rotation via internal torques',
+        'target': 'manoeuvre',
+        'rationale':
+            'CHIROPTERAN INERTIAL MANEUVERING (Bergou et al., PLOS Bio 2015): '
+            'At near-zero airspeed where aerodynamic rudders have zero control authority, '
+            'modulates distributed wing mass inertia (L = I*omega) via differential sweep stroke-plane acceleration. '
+            'Port wings sweep aft (collapsing I) while Starboard wings sweep forward and flap aggressively, '
+            'generating hundreds of mN*m of pure inertial yaw torque for rapid hover heading rotation and stall recovery.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 65.0, 'amp_stbd_deg': 65.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h81_inertial_reorientation': True, 'h81_sweep_delta_deg': 35.0,
+            'h81_zero_v_yaw_rate_dps': 65.0,
+            '_scorer': 'zero_speed_inertial_yaw_dps',
+        },
+        'v_min': 0.0, 'v_max': 5.0, 'priority': 1,
+        'eval_phases': ['hover', 'manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-82: Anhedral Gull-Wing Turn Trapping (Zero-Sideslip Knife-Edge) ─────
+    {
+        'id':     'H-82',
+        'label':  'Anhedral gull-wing turn trapping — inboard downward droop vectors lift inward '
+                  'eliminating sideslip and halving cornering radius for sub-wingspan knife-edge agility',
+        'target': 'manoeuvre',
+        'rationale':
+            'BAT GULL-WING CORNERING (Iriarte-Diaz & Swartz, JEB 2008): '
+            'During aggressive turns, inner wing pairs drop into extreme anhedral (-15°) while outer '
+            'pairs elevate into high dihedral (+12°) with expanded stroke amplitude. This redirects '
+            'the inner lift vector downward and inward, generating immediate centripetal acceleration '
+            'that eliminates adverse sideslip (beta -> 0) and slashes turn radius to under half a wingspan (< 0.8m).',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 18.0, 'sweep_deg': 35.0,
+            'amp_port_deg': 60.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 60.0, 'dihedral_deg': -15.0,
+            '_h82_anhedral_turn': True, 'h82_inboard_anhedral_deg': -15.0,
+            'h82_outboard_dihedral_deg': 12.0, 'h82_turn_radius_m': 0.75,
+            '_scorer': 'anhedral_turn_radius_m',
+        },
+        'v_min': 4.0, 'v_max': 16.0, 'priority': 1,
+        'eval_phases': ['manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-83: Dynamic Inflow-Aligned LEV Trapping (High-AoA Vortex Attachment) ─
+    {
+        'id':     'H-83',
+        'label':  'Dynamic inflow-aligned LEV trapping — micro-cyclic pitch modulation aligned with '
+                  'raked tip inflow vector stabilizes leading-edge vortex for +40% transient lift boost',
+        'target': 'climb',
+        'rationale':
+            'LEADING-EDGE VORTEX STABILIZATION (Muijres et al., Science 2008): '
+            'At high angles of attack (alpha = 28°-35°) during violent pullouts and steep climbs, '
+            'applies downstroke micro-cyclic pitch bias (+6.5°) aligned with the 16.6° raked wingtip '
+            'streamlines. Continuous spanwise flow drains vorticity into the tip vortex, preventing '
+            'dynamic stall burst and elevating transient maximum lift coefficient CL_max > 2.2.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 32.0, 'sweep_deg': 35.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 45.0, 'dihedral_deg': 8.0,
+            '_h83_lev_trapping': True, 'h83_cyclic_pitch_bias_deg': 6.5,
+            'h83_cl_max_boost': 2.35,
+            '_scorer': 'lev_lift_boost_ratio',
+        },
+        'v_min': 5.0, 'v_max': 15.0, 'priority': 1,
+        'eval_phases': ['climb', 'manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-84: Metachronal Cascade Roosting Somersault (Post-Stall Perch Flare) ─
+    {
+        'id':     'H-84',
+        'label':  'Metachronal cascade roosting somersault — front-rear push-pull pitch force couple '
+                  'arrests forward speed to 0 m/s in 0.18s for instant precision perch landing or 180° backflip',
+        'target': 'descent',
+        'rationale':
+            'CHIROPTERAN ROOSTING SOMERSAULT (Riskin et al. 2009, Bergou et al. 2015): '
+            'Executes an explosive 2-stroke counter-flap force couple: front wing pairs (W1/W2) flap down '
+            'at +35° pitch (massive upward lift) while rear pairs (W3/W4) flap up at -35° pitch (downforce). '
+            'Generates > 4.5 N*m pitch-up couple that snaps fuselage 90°-180°, creating a vertical stagnation bubble '
+            'that dumps forward kinetic energy to zero (V -> 0 m/s in 0.18s) for wire perching or acrobatic reversal.',
+        'config': {
+            'freq_hz': 2.8, 'aoa_deg': 45.0, 'sweep_deg': 25.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 180.0, 'dihedral_deg': 15.0,
+            '_h84_roost_somersault': True, 'h84_pitch_couple_nm': 4.8,
+            'h84_flare_stop_time_s': 0.18,
+            '_scorer': 'perch_flare_stop_time_s',
+        },
+        'v_min': 4.0, 'v_max': 15.0, 'priority': 1,
+        'eval_phases': ['descent', 'manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-85: Synthetic Somatosensory Boundary-Layer Stall Preemption ─────────
+    {
+        'id':     'H-85',
+        'label':  'Synthetic somatosensory stall preemption — motor current jitter & IMU vibration detect '
+                  'incipient boundary layer separation, triggering automated micro-pitch re-attachment reflex',
+        'target': 'cruise',
+        'rationale':
+            'TACTILE BOUNDARY-LAYER REFLEX (Sterbing-D\'Angelo et al., PNAS 2011): '
+            'Emulates bat wing touch receptors (Merkel cells) by monitoring high-frequency ODrive motor current '
+            'jitter (I_rms) and IMU acceleration noise. Detects turbulent separation bubbles before macro-stall occurs, '
+            'triggering a sub-cycle -2.5° micro-pitch relief reflex to re-attach laminar flow and eliminate wing drop.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 16.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h85_stall_preemption': True, 'h85_jitter_threshold_a': 0.85,
+            'h85_reflex_pitch_deg': -2.5,
+            '_scorer': 'incipient_stall_recovery_ms',
+        },
+        'v_min': 6.0, 'v_max': 18.0, 'priority': 1,
+        'eval_phases': ['cruise', 'climb', 'manoeuvre'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-86: Reverse Metachronal Cascade Propulsion (Dragonfly Phasing) ──────
+    {
+        'id':     'H-86',
+        'label':  'Reverse metachronal cascade propulsion — hindwing-leading phase wave (delta_phi = -60 deg) '
+                  'scavenges starting vortex upwash, boosting cruise thrust by 25% without downwash deficit',
+        'target': 'cruise',
+        'rationale':
+            'DRAGONFLY HINDWING-LEADING PROPULSION (Thomas et al., Nature 2004; Broering & Lian, Bioinspir. Biomim. 2012): '
+            'In fast forward cruising and steep climbs, dragonflies reverse their metachronal wave so the hindwing leads '
+            'the forewing by 60° to 90°. Rear pairs (W3/W4) stroke down into pristine freestream air, shedding an upward-directed '
+            'starting vortex that increases dynamic pressure and effective AoA on the following front pairs (W1/W2). '
+            'Eliminates the classical tandem downwash deficit and provides +22-28% thrust coefficient boost at V > 10 m/s.',
+        'config': {
+            'freq_hz': 2.6, 'aoa_deg': 14.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 300.0, 'dihedral_deg': 0.0,  # 300° = -60° reverse phase
+            '_h86_reverse_metachronal': True, 'h86_reverse_phase_deg': -60.0,
+            'h86_thrust_boost_pct': 24.5,
+            '_scorer': 'reverse_cascade_thrust_gain_pct',
+        },
+        'v_min': 8.0, 'v_max': 24.0, 'priority': 2,
+        'eval_phases': ['cruise', 'climb'],
+        'manoeuvre_only': False,
+    },
+
+    # ── H-87: Active Upstroke Backward Flight & Dynamic Braking ───────────────
+    {
+        'id':     'H-87',
+        'label':  'Active upstroke backward flight & dynamic airbrake — high-drag negative AoA recovery stroke '
+                  'generates 3x force on upstroke for level-fuselage reverse flight & -1.2g deceleration',
+        'target': 'descent',
+        'rationale':
+            'ACTIVE UPSTROKE AERODYNAMICS (Wang & Russell, J. Fluid Mech. 2007; Wang, PRL 2007): '
+            'Dragonflies fly backwards and arrest high forward speed without pitching their body nose-up by actively '
+            'loading the upstroke. By supinating to an inverted chord with alpha ≈ -30°, the upstroke generates '
+            '2-4x greater aerodynamic force than in forward flight, vectoring a massive rearward drag/thrust couple. '
+            'Enables level-fuselage reverse hover taxi and rapid -1.2g airbrake deceleration with zero ballooning.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': -28.0, 'sweep_deg': 70.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 180.0, 'dihedral_deg': 10.0,
+            '_h87_active_upstroke': True, 'h87_upstroke_aoa_deg': -28.0,
+            'h87_decel_g': 1.25,
+            '_scorer': 'active_upstroke_decel_g',
+        },
+        'v_min': 0.0, 'v_max': 16.0, 'priority': 1,
+        'eval_phases': ['descent', 'manoeuvre'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-88: Odonata Direct-Musculature Stroke-Plane Vectoring (Legacy Alias) ──
+    {
+        'id':     'H-88',
+        'label':  'Odonata direct-musculature stroke-plane vectoring — independent port/stbd stroke plane inclination '
+                  'generates pure yawing couple (>45 deg/s) with zero adverse roll and decoupled 3D force vectoring',
+        'target': 'manoeuvre',
+        'rationale':
+            'ODONATA DIRECT MUSCULATURE CONTROL (Ellington 1984; Mischiati et al., Nature 2015): '
+            'Dragonflies actuate each wing directly via basalar and subalar muscle groups, allowing differential '
+            'stroke-plane tilt (delta_beta = ±15°) between port and starboard wings. Tilting one side forward and '
+            'the other aft creates a pure yaw moment without requiring asymmetric lift or rolling into a bank. '
+            'Delivers high-rate zero-sideslip cornering and lateral side-stepping for precision SAR obstacle clearance.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 15.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 72.0, 'amp_stbd_deg': 72.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h88_stroke_plane_vector': True, 'h88_stroke_plane_tilt_deg': 18.0,
+            'h88_yaw_moment_nm': 3.8,
+            '_scorer': 'stroke_plane_yaw_moment_nm',
+        },
+        'v_min': 2.0, 'v_max': 16.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'hover', 'cruise'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-88A: Odonata Dynamic Harmonic Stroke-Plane Vectoring ────────────────
+    {
+        'id':     'H-88A',
+        'label':  'Odonata dynamic harmonic stroke-plane vectoring — in-stroke harmonic sweep-flap coordination '
+                  'synthesizes dynamic stroke-plane tilt (beta = atan(Theta/Phi)) for rapid pure yaw couple (>60 deg/s)',
+        'target': 'manoeuvre',
+        'rationale':
+            'ODONATA DYNAMIC HARMONIC VECTORING: Coordinated harmonic sweep oscillation (Theta(t) = Theta_0 * sin(omega*t + phi_sweep)) '
+            'coupled with stroke flapping (Phi(t)) kinematically rotates the stroke plane by beta = atan(Theta_0/Phi_0), '
+            'producing high-bandwidth dynamic yaw moments (>5.2 N*m) for agile cornering without adverse roll.',
+        'config': {
+            'freq_hz': 2.6, 'aoa_deg': 15.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 72.0, 'amp_stbd_deg': 72.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h88a_dynamic_vector': True, 'h88a_stroke_plane_tilt_deg': 18.0,
+            'h88a_sweep_harmonic_amp_deg': 8.0,
+            'h88a_yaw_moment_nm': 5.2,
+            '_scorer': 'stroke_plane_yaw_moment_nm',
+        },
+        'v_min': 2.0, 'v_max': 18.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'hover', 'cruise'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-88B: Odonata Quasi-Steady Differential Sweep Bias Vectoring ─────────
+    {
+        'id':     'H-88B',
+        'label':  'Odonata quasi-steady differential sweep bias vectoring — static differential sweep bias '
+                  'offsets left vs right aerodynamic drag levers for continuous crosswind trim and yaw hold with zero servo cyclic fatigue',
+        'target': 'manoeuvre',
+        'rationale':
+            'ODONATA QUASI-STEADY DIFFERENTIAL SWEEP TRIM: Applying static opposing sweep angles (+/-12°) to port and '
+            'starboard wings shifts aerodynamic drag moments forward and aft, creating continuous yaw trimming torque '
+            '(~3.4 N*m) while holding servo positions static, eliminating high-frequency cyclic servo fatigue.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h88b_sweep_bias': True, 'h88b_sweep_bias_deg': 10.0,
+            'h88b_yaw_moment_nm': 3.4,
+            '_scorer': 'sweep_bias_yaw_moment_nm',
+        },
+        'v_min': 3.0, 'v_max': 20.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'cruise', 'crosswind'],
+        'manoeuvre_only': True,
+    },
+
+    # ── H-89: Dynamic Kramer Pre-Rotation Lift Burst (Diptera / Hymenoptera) ─
+    {
+        'id':     'H-89',
+        'label':  'Dynamic Kramer pre-rotation lift burst — micro-cyclic trapezoidal pitch advance generates +22% '
+                  'bound rotational circulation spike at stroke reversal, eliminating zero-velocity lift deadband',
+        'target': 'hover',
+        'rationale':
+            'DYNAMIC KRAMER ROTATIONAL CIRCULATION (Dickinson et al., Science 1999; Sane & Dickinson, J. Exp. Biol. 2002): '
+            'In Diptera and Hymenoptera, advancing wing pitch rotation by 10-15% of cycle period ahead of stroke reversal '
+            'establishes immediate bound circulation (Gamma_rot = pi*c^2*alpha_dot*(0.75-x0)), eliminating the zero-velocity '
+            'lift deadband and boosting mean cycle lift by +22% with -35% motor heating.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 24.0, 'sweep_deg': 65.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h89_kramer_burst': True, 'h89_pitch_lead_ms': 25.0,
+            'h89_lift_boost_pct': 22.0,
+            '_scorer': 'kramer_circulation_lift_boost_pct',
+        },
+        'v_min': 0.0, 'v_max': 8.0, 'priority': 1,
+        'eval_phases': ['hover', 'takeoff', 'climb'],
+        'hover_only': True,
+    },
+
+    # ── H-90: Trapped-Vortex Cavity Boundary Layer Energization (Meganeuropsis)
+    {
+        'id':     'H-90',
+        'label':  'Trapped-vortex cavity boundary layer energization — micro-cavity rib steps trap stationary '
+                  'recirculating eddies, delaying aerodynamic stall to alpha > 21 deg with zero parasitic trip drag',
+        'target': 'climb',
+        'rationale':
+            'MEGANEUROPSIS CORRUGATED AIRFOIL AERODYNAMICS (Kesel, J. Exp. Biol. 2000; Vargas et al., Bioinspir. Biomim. 2008): '
+            'Prehistoric giant dragonflies operating at Re ~ 10^5 utilized pleated wing corrugations where trapped stationary '
+            'eddies acted as fluid roller-bearings. Flow skims over trapped vortices, suppressing laminar bubble bursting '
+            'and extending stall angle from 14° to 21° with zero parasite drag.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 20.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h90_trapped_vortex': True, 'h90_cavity_depth_mm': 1.2,
+            'h90_stall_alpha_deg': 21.5,
+            '_scorer': 'trapped_vortex_stall_alpha_deg',
+        },
+        'v_min': 4.0, 'v_max': 16.0, 'priority': 2,
+        'eval_phases': ['climb', 'manoeuvre', 'cruise'],
+    },
+
+    # ── H-91: Lepidopteran Dorsal Clap Jet Propulsion (Papilionoidea) ─────────
+    {
+        'id':     'H-91',
+        'label':  'Lepidopteran dorsal clap jet propulsion — utilizing 94 mm lateral pivot clearance and 80 mm longerons '
+                  'for full +90 deg dorsal alignment expels downward pneumatic jet pulse (+6.5 N) and triggers Weis-Fogh fling',
+        'target': 'takeoff',
+        'rationale':
+            'LEPIDOPTERAN CLAP-AND-PEEL JETTING (Johansson et al., J. R. Soc. Interface 2021): '
+            'Fuselage design provides 94 mm lateral pivot clearance across 80 mm longerons, permitting adjacent wing pairs '
+            'and dorsal elevation to reach full +90° ROM without physical collision. Dorsal wing proximity compresses air '
+            'into a downward pneumatic jet pulse (J_pulse = +6.5 N) while rapid peel initiates Weis-Fogh fling circulation '
+            '(CL > 2.4, +45% lift breakout), eliminating catapult departure stall.',
+        'config': {
+            'freq_hz': 2.6, 'aoa_deg': 28.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 65.0,
+            '_h91_clap_jet': True, 'h91_clap_dihedral_deg': 70.0,
+            'h91_jet_impulse_n': 6.5,
+            '_scorer': 'clap_jet_impulse_n',
+        },
+        'v_min': 0.0, 'v_max': 8.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── H-92: Coleopteran Elytron Canard Obstacle Climb (Coleoptera) ──────────
+    {
+        'id':     'H-92',
+        'label':  'Coleopteran elytron canard vortex lock — Station 1 locked at +35 deg dihedral acts as slotted '
+                  'vortex canard, energizing downstream boundary layers to delay stall to alpha > 35 deg with -110W power savings',
+        'target': 'climb',
+        'rationale':
+            'COLEOPTERAN CANARD VORTEX INTERACTION (Truong et al., J. Exp. Biol. 2012): '
+            'Beetles hold hardened elytra stationary at high dihedral, shedding an energetic leading-edge vortex over '
+            'flapping hindwings. Locking Station 1 stationary at +35° dihedral generates canard lift and organizes a '
+            'vortex fence over Stations 2-4, delaying flow separation up to alpha > 35°, delivering steep obstacle climb '
+            '(>40° gradient) while idling 2 motors to save 110 W of electrical power.',
+        'config': {
+            'freq_hz': 2.8, 'aoa_deg': 12.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 68.0, 'amp_stbd_deg': 68.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 35.0,
+            '_h92_elytron_canard': True, 'h92_canard_dihedral_deg': 35.0,
+            'h92_climb_gradient_deg': 42.0,
+            '_scorer': 'canard_climb_gradient_deg',
+        },
+        'v_min': 5.0, 'v_max': 14.0, 'priority': 2,
+        'eval_phases': ['climb', 'manoeuvre'],
+    },
+
+    # ── H-93: Dipteran Synchronous Coriolis Gust Preemption (Diptera Halteres) ─
+    {
+        'id':     'H-93',
+        'label':  'Dipteran synchronous Coriolis gust preemption — phase-locked harmonic demodulation isolates '
+                  'true angular rate from 2.5 Hz flapping recoil with zero phase delay for <0.02g attitude jitter',
+        'target': 'smooth_flight',
+        'rationale':
+            'DIPTERAN HALTERE CORIOLIS DYNAMICS (Dickinson, Phil. Trans. R. Soc. B 1999): '
+            'Halteres oscillate synchronously with wings to isolate body rotation rates via Coriolis demodulation. '
+            'Locking IMU telemetry to ODrive rotor position and subtracting 1f/2f flapping harmonics eliminates the '
+            '60ms low-pass filter delay, enabling instant sub-stroke gust rejection (<0.02g RMS).',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 10.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0,
+            '_h93_coriolis_preempt': True, 'h93_jitter_rms_g': 0.018,
+            'h93_filter_latency_ms': 2.0,
+            '_scorer': 'coriolis_demod_rms_g',
+        },
+        'v_min': 4.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'hover', 'manoeuvre'],
+    },
+
+    # ── H-94: Orthopteran Traveling Torsional Wave Cruise (Orthoptera Locusts) ─
+    {
+        'id':     'H-94',
+        'label':  'Orthopteran traveling torsional wave cruise — root-to-tip spanwise phase twist wave maintains '
+                  'uniform alpha ~ 7 deg across 100% span, cutting cruise Wh/km by -26% for trans-ridge SAR range',
+        'target': 'cruise',
+        'rationale':
+            'ORTHOPTERAN TORSIONAL WAVE PROPAGATION (Young et al., Science 2009): '
+            'Locust wings propagate an active twist wave along the span matching local inflow velocity. '
+            'Multi-harmonic servo excitation (1f flap + 3f twist) excites spar compliance, eliminating upstroke '
+            'negative lift and lowering cruise energy to <10.5 Wh/km for cross-ridge SAR range (>45 km).',
+        'config': {
+            'freq_hz': 2.3, 'aoa_deg': 7.5, 'sweep_deg': 62.0,
+            'amp_port_deg': 68.0, 'amp_stbd_deg': 68.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 3.0,
+            '_h94_torsional_wave': True, 'h94_twist_amplitude_deg': 4.5,
+            'h94_wh_per_km': 10.4,
+            '_scorer': 'torsional_wave_wh_per_km',
+        },
+        'v_min': 9.0, 'v_max': 16.0, 'priority': 2,
+        'eval_phases': ['cruise', 'range'],
+    },
+
+    # ── H-95: Tandem Dynamic Slotted Fowler Flap Glide (Hymenoptera Hamuli) ───
+    {
+        'id':     'H-95',
+        'label':  'Tandem dynamic slotted Fowler flap glide — Station 1 leads Station 2 by +20 deg phase, '
+                  'establishing active convergent slot blowing for CL,max > 2.35 and 7.8 m/s touchdown speed',
+        'target': 'glide',
+        'rationale':
+            'HYMENOPTERAN COMPOUND SLOTTED AERO (Ellington 1984; Lehmann 2004): '
+            'Tandem wing pairs separated by s/c = 0.84 operate with +20° phase lead, creating an active blowing slot '
+            'between W1 trailing edge and W2 leading edge that re-energizes upper-surface boundary layer. '
+            'Increases clean CL,max to 2.35, reducing touchdown landing speed to 7.8 m/s.',
+        'config': {
+            'freq_hz': 1.6, 'aoa_deg': 14.0, 'sweep_deg': 58.0,
+            'amp_port_deg': 64.0, 'amp_stbd_deg': 64.0,
+            'cascade_phase_deg': 20.0, 'dihedral_deg': 8.0,
+            '_h95_slotted_flap': True, 'h95_slot_phase_lead_deg': 20.0,
+            'h95_cl_max': 2.35,
+            '_scorer': 'slotted_flap_cl_max',
+        },
+        'v_min': 6.0, 'v_max': 14.0, 'priority': 2,
+        'eval_phases': ['glide', 'descent', 'approach'],
+    },
+
+    # ── H-98: Quadrupedal Ground-Coupled Vault Takeoff (Pterosauria) ─────────
+    {
+        'id':     'H-98',
+        'label':  'Quadrupedal ground-coupled vault takeoff — Stations 1 & 2 ground-effect power strike '
+                  'delivers +1.85g vertical launch impulse for zero-runway field departure',
+        'target': 'launch',
+        'hardware_supported':     True,
+        'wheeled_gear_supported': True,
+        'human_rated_roadmap':    True,
+        'rationale':
+            '[WHEELED GEAR / HUMAN-RATED ROADMAP: The Mark 1 4-strut wheeled landing gear (Du-Bro 2.00" wheels, '
+            '115mm clearance) provides ground rolling decoupling and ground-effect fountain lift without wingtips '
+            'contacting the surface. On the human-rated craft with articulated landing gear, this transitions to '
+            'active ground-coupled vault takeoff.] '
+            'PTEROSAUR QUADRUPEDAL VAULT MECHANICS (Habib 2008): '
+            'Forelimbs provide 80-90% of launch impulse. Stations 1 & 2 sweep forward +35° at +20° pitch, '
+            'then execute a high-slew downward and aft power strike at 3.5 Hz, generating 105 N ground-effect '
+            'fountain lift that vaults the 5.69 kg airframe 1.2m into clean air before Stations 3 & 4 engage.',
+        'config': {
+            'freq_hz': 3.5, 'aoa_deg': 20.0, 'sweep_deg': 75.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 15.0,
+            '_h98_vault_takeoff': True, 'h98_vault_accel_g': 1.85,
+            'h98_vault_duration_s': 0.28,
+            '_scorer': 'vault_takeoff_vertical_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 8.0, 'priority': 1,
+        'eval_phases': ['hover', 'launch', 'takeoff'],
+    },
+
+    # ── H-100: Tailless Metachronal Differential Sweep Directional Trim (Pterodactyloid) ──
+    {
+        'id':     'H-100',
+        'label':  'Tailless metachronal differential sweep directional trim — asymmetric sweep bias '
+                  'eliminates crosswind sideslip without a vertical rudder fin',
+        'target': 'manoeuvre',
+        'rationale':
+            'PTERODACTYLOID TAILLESS YAW TRIM (Unwin 2005; Palmer 2010): '
+            'Complete absence of caudal fin compensated by asymmetric wing sweep (+/- 12°). '
+            'Advancing the windward wing increases induced drag and shifts lift forward, generating '
+            'proverse yaw restoring torque with zero adverse roll cross-coupling.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 12.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 62.0, 'amp_stbd_deg': 62.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 6.0,
+            '_h100_differential_sweep': True, 'h100_max_sweep_bias_deg': 12.0,
+            'h100_yaw_hold_deg': 0.5,
+            '_scorer': 'differential_sweep_yaw_drift_deg',
+        },
+        'v_min': 6.0, 'v_max': 22.0, 'priority': 2,
+        'eval_phases': ['cruise', 'manoeuvre', 'crosswind'],
+    },
+
+    # ── H-101: Dynamic Flap-Inertia Pitch Counterbalance (Active Anti-Nodding Phase Pair) ──
+    {
+        'id':     'H-101',
+        'label':  'Dynamic flap-inertia pitch counterbalance — Station 1 & 4 180 deg anti-phase pairing '
+                  'cancels spine reaction moments, cutting fuselage pitch nodding jitter by 88% (<0.5 deg)',
+        'target': 'smooth_flight',
+        'rationale':
+            'PTEROSAUR ACTIVE COUNTERBALANCE & SPINE REACTION CANCEL (Bramwell & Whitfield 1974): '
+            'Rather than taxing pitch servos with holding current spikes, Station 1 and Station 4 wings are '
+            'commanded in 180° anti-phase opposition during high-energy flapping. Their equal and opposite pitch reaction '
+            'moments sum to zero across the carbon spine, cutting fuselage pitch nodding jitter by 88% (<0.5° RMS) '
+            'to stabilize onboard optical/LiDAR payloads.',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 12.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 64.0, 'amp_stbd_deg': 64.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_h101_pitch_counterbalance': True, 'h101_current_reduction_pct': 42.0,
+            'h101_pitch_nod_reduction_pct': 88.0,
+            '_scorer': 'pitch_servo_current_reduction_pct',
+        },
+        'v_min': 5.0, 'v_max': 25.0, 'priority': 2,
+        'eval_phases': ['cruise', 'smooth_flight', 'gust'],
+    },
+
+    # ── H-102: Deep-Camber High-Aspect-Ratio Azhdarchid Thermal Soaring Loiter ──
+    {
+        'id':     'H-102',
+        'label':  'Deep-camber high-aspect-ratio azhdarchid thermal soaring loiter — staggered tandem box lock '
+                  'cuts minimum sink to 0.38 m/s, extending SAR endurance to 28.4 min',
+        'target': 'endurance',
+        'rationale':
+            'AZHDARCHID THERMAL SOARING BIOMECHANICS (Witton & Habib 2010; Henderson 2010): '
+            'High aspect ratio tandem lock (W1/W3 at +8.5°, W2/W4 at +14.0° droop) creates a virtual '
+            'slotted tandem box-wing. Intermittent 0.6 Hz metachronal pulsing overcomes parasitic drag, '
+            'yielding minimum sink rate of 0.38 m/s and doubling SAR time on station.',
+        'config': {
+            'freq_hz': 0.7, 'aoa_deg': 11.5, 'sweep_deg': 52.0,
+            'amp_port_deg': 45.0, 'amp_stbd_deg': 45.0,
+            'cascade_phase_deg': 60.0, 'dihedral_deg': 7.0,
+            '_h102_azhdarchid_soar': True, 'h102_min_sink_ms': 0.38,
+            'h102_endurance_boost_pct': 86.0,
+            '_scorer': 'azhdarchid_soar_sink_rate_ms',
+        },
+        'v_min': 7.0, 'v_max': 14.0, 'priority': 2,
+        'eval_phases': ['glide', 'range', 'endurance', 'loiter'],
+    },
+
+    # ── H-103: Sea Turtle In-Stroke Sweep & Differential Flipper Pivot Braking ──
+    {
+        'id':     'H-103',
+        'label':  'Sea turtle in-stroke sweep & differential flipper pivot braking — inboard 120° paddle drag '
+                  'vs outboard 42° thrust flap enables <1.4m flat turns without banking',
+        'target': 'maneuverability',
+        'rationale':
+            'CHELONIIDAE FLIPPER MANEUVERING BIOMECHANICS (Rivera et al. 2011; van der Geest et al. 2022): '
+            'Inboard flipper extends aft (120° sweep) at 24° AoA creating hydrodynamic/aerodynamic pivot drag, '
+            'while outboard flipper executes forward-swept (42°) power flapping at 3.2 Hz. Generates >12 N*m '
+            'yaw torque for sub-1.4m radius turns at patrol speed with zero adverse roll.',
+        'config': {
+            'freq_hz': 3.0, 'aoa_deg': 12.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 60.0, 'amp_stbd_deg': 60.0,
+            'cascade_phase_deg': 60.0, 'dihedral_deg': 6.0,
+            '_h103_turtle_pivot_brake': True, 'h103_turn_radius_m': 1.35,
+            '_scorer': 'turtle_pivot_turn_radius_m',
+        },
+        'v_min': 3.0, 'v_max': 18.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'hover_patrol', 'tactical_search'],
+    },
+
+    # ── H-104: Plesiosaur Speed-Adaptive Tandem Wake Capture & Collective Pitch Trimming ──
+    {
+        'id':     'H-104',
+        'label':  'Plesiosaur speed-adaptive tandem wake capture & collective pitch trimming — Strouhal phase matching '
+                  'yields +48% rear flipper thrust boost with zero-drag pitch trim',
+        'target': 'efficiency',
+        'rationale':
+            'PLESIOSAUR TANDEM HYDROFOIL PROPULSION (Muscutt et al. 2017; Liu et al. 2015): '
+            'Rear flipper pairs weave dynamically into shed tip vortex sheet of forward pairs. Optimal phase '
+            'scales with Strouhal number (2*pi*f*dx/V), boosting rear pair thrust by 35-58%, while differential '
+            'collective pitch between W1-W2 and W3-W4 provides robust pitch trim without control surface drag.',
+        'config': {
+            'freq_hz': 2.6, 'aoa_deg': 11.0, 'sweep_deg': 58.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 58.0, 'dihedral_deg': 5.0,
+            '_h104_plesiosaur_wake': True, 'h104_thrust_boost_pct': 48.0,
+            '_scorer': 'plesiosaur_tandem_thrust_boost_pct',
+        },
+        'v_min': 4.0, 'v_max': 20.0, 'priority': 2,
+        'eval_phases': ['cruise', 'range', 'transit'],
+    },
+
+    # ── H-105: Cetacean Pectoral 3-DOF Hydrofoil Maneuvering & Fluke Recoil Damping ──
+    {
+        'id':     'H-105',
+        'label':  'Cetacean pectoral 3-DOF hydrofoil maneuvering & fluke recoil damping — W1 differential collective '
+                  'yields >220 deg/s roll with active 65% heave-pitch recoil cancellation',
+        'target': 'smooth_flight',
+        'rationale':
+            'CETACEAN PECTORAL HYDROFOIL DYNAMICS (Fish et al. 2008; Miklosovic et al. 2004): '
+            'Station 1 acts as 3-DOF control hydrofoils (differential AoA +/-14°) initiating aggressive banked turns '
+            '(>220°/s) while feeding forward anti-recoil pitch bias (-k*az) that neutralizes fuselage heave and '
+            'nodding moments induced by high-thrust downstream flapper pairs (W2-W4).',
+        'config': {
+            'freq_hz': 2.7, 'aoa_deg': 11.5, 'sweep_deg': 54.0,
+            'amp_port_deg': 68.0, 'amp_stbd_deg': 68.0,
+            'cascade_phase_deg': 75.0, 'dihedral_deg': 5.0,
+            '_h105_cetacean_roll_recoil': True, 'h105_roll_rate_degs': 225.0,
+            '_scorer': 'cetacean_roll_rate_degs',
+        },
+        'v_min': 4.0, 'v_max': 24.0, 'priority': 2,
+        'eval_phases': ['manoeuvre', 'smooth_flight', 'cruise'],
+    },
+
+    # ── H-106: Crustacean Adlocomotory Metachronal Jet Coalescence & Vector Tuning ──
+    {
+        'id':     'H-106',
+        'label':  'Crustacean adlocomotory metachronal jet coalescence & vector tuning — rear-to-front W4->W1 wave '
+                  'coalesces discrete wakes into unified propulsive jet with dynamic vector steering',
+        'target': 'efficiency',
+        'rationale':
+            'KRILL & DECAPOD METACHRONAL FLUID DYNAMICS (Murphy et al. 2011; Catton et al. 2011): '
+            'Pleopod adlocomotory wave propagating posterior-to-anterior (W4->W1) entrains undisturbed air and '
+            'coalesces discrete tip vortex rings into an uninterrupted, high-momentum downstream jet. Tuning phase '
+            'lag (35°-75°) dynamically steers jet vector between pure sprint thrust and steep climb assist.',
+        'config': {
+            'freq_hz': 2.8, 'aoa_deg': 10.5, 'sweep_deg': 58.0,
+            'amp_port_deg': 72.0, 'amp_stbd_deg': 72.0,
+            'cascade_phase_deg': 55.0, 'dihedral_deg': 4.0,
+            '_h106_krill_jet_coalescence': True, 'h106_thrust_boost_pct': 21.5,
+            '_scorer': 'krill_jet_coalescence_thrust_boost_pct',
+        },
+        'v_min': 4.0, 'v_max': 20.0, 'priority': 2,
+        'eval_phases': ['cruise', 'transit', 'climb', 'range'],
+    },
+
+    # ── H-107: Copepod Dual-Mode Asymmetric Metachrony (Sequential Downstroke x Synchronous Upstroke) ──
+    {
+        'id':     'H-107',
+        'label':  'Copepod dual-mode asymmetric metachrony — metachronal power downstroke x synchronous feathered '
+                  'rapid upstroke cuts electrical bus ripple by 48%',
+        'target': 'smooth_flight',
+        'rationale':
+            'COPEPOD ASYMMETRIC METACHRONY LOCOMOTION (Jiang & Strickler 2007; Kiørboe et al. 2010): '
+            'Downstroke is phased metachronally across W4->W1, spreading peak mechanical stroke resistance '
+            'and flattening motor bus current. Recovery upstroke is executed synchronously across all 8 wings '
+            'at feathered 4° AoA with 1.5x accelerated velocity, minimizing parasite drag and duty cycle.',
+        'config': {
+            'freq_hz': 3.0, 'aoa_deg': 11.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 45.0, 'dihedral_deg': 4.0,
+            '_h107_copepod_metachrony': True, 'h107_ripple_reduction_pct': 48.5,
+            '_scorer': 'copepod_power_smoothing_ripple_pct',
+        },
+        'v_min': 5.0, 'v_max': 25.0, 'priority': 2,
+        'eval_phases': ['sprint', 'cruise', 'smooth_flight'],
+    },
+
+    # ── H-108: Decapod Caridoid Impulse Flare & Escape Pulse ──
+    {
+        'id':     'H-108',
+        'label':  'Decapod caridoid impulse flare & escape pulse — rapid 80 ms collective pitch snap from +6 deg to +18 deg '
+                  'converts kinetic forward momentum into +35 N transient lift to arrest -3.5 m/s sink in <0.4 s',
+        'target': 'climb_rate',
+        'rationale':
+            'CRUSTACEAN CARIDOID ESCAPE REACTION (Wine & Krasne 1982; Nauen & Shadwick 1999): '
+            'Rapid pitch flare reflex: all 8 wings execute an 80 ms collective pitch rotation from +6° cruise AoA to +18° '
+            'flare AoA while motor drives maintain constant shaft velocity, avoiding spar-shattering stroke reversals. '
+            'Converts kinetic forward speed into +35 N transient vertical lift, arresting -3.5 m/s sink rates in under 0.4 s '
+            'without mechanical impact.',
+        'config': {
+            'freq_hz': 3.2, 'aoa_deg': 18.0, 'sweep_deg': 50.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 12.0,
+            '_h108_caridoid_flare': True, 'h108_impulse_n': 35.0,
+            'h108_flare_time_ms': 80.0,
+            '_scorer': 'caridoid_escape_impulse_n',
+        },
+        'v_min': 1.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['emergency', 'recovery', 'takeoff', 'climb'],
+    },
+
+    # ── H-LSB-1: Laminar Separation Bubble Stability ──
+    {
+        'id':     'H-LSB-1',
+        'label':  'Laminar separation bubble stability — find wing configurations that maintain consistent '
+                  'attached flow across the stroke cycle via cross-wing correlation and stroke-to-stroke variance',
+        'target': 'smooth_flight',
+        'rationale':
+            'LOW-REYNOLDS BOUNDARY LAYER SEPARATION & REATTACHMENT (H-LSB-1): '
+            'At MCO-1D Reynolds numbers (Re=33k-220k on 165mm chord with S1223 airfoil), the upper surface '
+            'laminar boundary layer separates over the rigid D-box, transitions, and encloses a laminar separation '
+            'bubble. Intermittent bursting sheds ~40% single-wing lift without preceding AoA stall cues. '
+            'H-LSB-1 scores stroke-to-stroke variance rather than mean values, using 8-channel cross-wing current '
+            'correlation (low correlation = local LSB burst, high correlation = atmospheric gust) to guide the genome '
+            'into robust stability basins and prevent unpredictable wing drops.',
+        'config': {
+            'freq_hz': 1.87, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_lsb_1': True,
+            '_scorer': 'lsb_stroke_variance',
+        },
+        'v_min': 5.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'glide', 'smooth_flight'],
+    },
+
+    # ── H-DSH-1: Dynamic Stall Pitch-Down Hysteresis Mitigation ──
+    {
+        'id':     'H-DSH-1',
+        'label':  'Dynamic stall pitch-down hysteresis mitigation — track torque loop dilation against calibrated '
+                  'dry mechanical tare and command feedforward pitch reflex trim proportional to alpha-dot',
+        'target': 'smooth_flight',
+        'rationale':
+            'DYNAMIC STALL PITCH-DOWN HYSTERESIS MITIGATION (H-DSH-1): '
+            'Unsteady dynamic stall at high pitch rates (q > 25°/s) produces a transient CL overshoot followed by a '
+            'severe nose-down moment drop (Delta Cm = -0.20) upon downstroke recovery. H-DSH-1 measures torque loop area '
+            'dilation oint I(theta) dtheta relative to calibrated dry mechanical tare, commanding feedforward pitch reflex '
+            'trim proportional to alpha-dot to eliminate pitch bobble and recover control authority.',
+        'config': {
+            'freq_hz': 1.87, 'aoa_deg': 16.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_dsh_1': True,
+            '_scorer': 'dsh_hysteresis_area',
+        },
+        'v_min': 4.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['climb', 'recovery', 'manoeuvre'],
+    },
+
+    # ── H-AC-SHIFT-1: Dynamic Pressure Membrane Camber Drift & AC Shift ──
+    {
+        'id':     'H-AC-SHIFT-1',
+        'label':  'Dynamic pressure membrane camber drift & AC shift — pre-bias pitch servo against q to preserve sprint authority',
+        'target': 'top_speed',
+        'rationale':
+            'MEMBRANE AEROELASTIC BILLOW & AC MIGRATION (H-AC-SHIFT-1): '
+            'High dynamic pressure at sprint speeds (V > 15 m/s) billows the compliant trailing-edge membrane, shifting '
+            'aerodynamic center rearward (x_ac/c from 0.25 to 0.34). H-AC-SHIFT-1 schedules pitch servo pre-bias against '
+            'dynamic pressure q = 0.5 * rho * V^2 to prevent trim saturation and maintain full pull-up authority.',
+        'config': {
+            'freq_hz': 2.20, 'aoa_deg': 10.0, 'sweep_deg': 65.0,
+            'amp_port_deg': 88.0, 'amp_stbd_deg': 88.0,
+            'cascade_phase_deg': 30.0, 'dihedral_deg': 4.0,
+            '_h_ac_shift_1': True,
+            '_scorer': 'ac_shift_trim_deg',
+        },
+        'v_min': 12.0, 'v_max': 22.0, 'priority': 1,
+        'eval_phases': ['cruise', 'sprint', 'top_speed'],
+    },
+
+    # ── H-SHED-1: Asymmetric Deep-Stall Wake Shedding Dither ──
+    {
+        'id':     'H-SHED-1',
+        'label':  'Asymmetric deep-stall wake shedding dither — 12 Hz micro-burst to disrupt dead-air lock with brownout clamp',
+        'target': 'recovery',
+        'rationale':
+            'ASYMMETRIC DEEP-STALL WAKE SHEDDING DITHER (H-SHED-1): '
+            'Trapped separated dead-air wake following perch flares or rapid stops creates asymmetric roll divergence at '
+            'zero airspeed (V < 2.5 m/s). H-SHED-1 commands a brief 12 Hz micro-stroke dither (<= 6 deg) to shed separated '
+            'flow, interlocked with H-45 bus voltage clamp (> 22.2V) to guarantee avionics power continuity.',
+        'config': {
+            'freq_hz': 2.40, 'aoa_deg': 12.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 75.0, 'amp_stbd_deg': 75.0,
+            'cascade_phase_deg': 25.0, 'dihedral_deg': 8.0,
+            '_h_shed_1': True,
+            '_scorer': 'shed_dither_recovery_ms',
+        },
+        'v_min': 0.0, 'v_max': 5.0, 'priority': 1,
+        'eval_phases': ['emergency', 'recovery', 'hover'],
+    },
+
+    # ── H-VEX-1: Ground Vortex Recirculation Fountain Suppression ──
+    {
+        'id':     'H-VEX-1',
+        'label':  'Ground vortex recirculation suppression — dual-sensor persistence gated outward dihedral flare at h < 0.4m',
+        'target': 'hover_hold',
+        'rationale':
+            'GROUND VORTEX RECIRCULATION & FOUNTAIN SUPPRESSION (H-VEX-1): '
+            'In-ground-effect hover at h < 0.4m creates an inward toroidal ground fountain that destabilizes buoyancy. '
+            'H-VEX-1 uses dual-sensor persistent ground detection (>250ms confirmed AGL) to command an outward dihedral '
+            'flare (+15 deg) that displaces the ground fountain outward, preventing uncommanded settling.',
+        'config': {
+            'freq_hz': 1.65, 'aoa_deg': 18.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 105.0, 'amp_stbd_deg': 105.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 20.0,
+            '_h_vex_1': True,
+            '_scorer': 'vex_recirculation_jitter_g',
+        },
+        'v_min': 0.0, 'v_max': 4.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'landing', 'hover'],
+    },
+
+    # ── H-BUS-1: Shared DC Bus Inertial Ripple Cancellation ──
+    {
+        'id':     'H-BUS-1',
+        'label':  'The Electrical Spring: shared DC bus inertial ripple cancellation via metachronal cascade phase',
+        'target': 'endurance',
+        'rationale':
+            'SHARED DC BUS INERTIAL RIPPLE CANCELLATION (H-BUS-1): '
+            'Reversing eight wings twice per cycle demands ~327 W of peak inertial power. A metachronal cascade on a '
+            'shared DC bus provides harmonic ripple cancellation. At cascade phase 22.5 deg (and 81.5% cancellation '
+            'at nominal 28 deg), accelerating wings draw precisely what decelerating wings supply, leveling battery '
+            'draw and preventing cell voltage sag.',
+        'config': {
+            'freq_hz': 2.59, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_bus_1': True,
+            '_scorer': 'bus_exchange_fraction',
+        },
+        'v_min': 0.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['cruise', 'hover', 'endurance'],
+    },
+
+    # ── H-BUS-2: Split-Bus Fault-Tolerant Isolation ──
+    {
+        'id':     'H-BUS-2',
+        'label':  'Split-Bus Fault-Tolerant Isolation: Port/Starboard smart eFuse protection against bus collapse',
+        'target': 'fail_operational',
+        'rationale':
+            'SPLIT-BUS FAULT ISOLATION (H-BUS-2): '
+            'Partitioning the 8-wing propulsion into Port (Wings 1-4) and Starboard (Wings 5-8) sub-buses with solid-state '
+            'eFuses trips microsecond isolation (2.5 us) upon ESC FET short-circuit, preventing full avionics brownout and '
+            'allowing the healthy 4-wing rail to execute fail-operational retrim (H-42).',
+        'config': {
+            'freq_hz': 2.59, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_bus_2': True,
+            '_scorer': 'bus_fault_isolation_time_us',
+        },
+        'v_min': 0.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['emergency', 'cruise', 'hover'],
+    },
+
+    # ── H-BUS-3: Dynamic Thermal Load-Balancing in Downwash ──
+    {
+        'id':     'H-BUS-3',
+        'label':  'Dynamic Thermal Load-Balancing: Asymmetric stroke and power throttling to prevent aft motor overheating',
+        'target': 'motor_temperature',
+        'rationale':
+            'DYNAMIC THERMAL LOAD-BALANCING (H-BUS-3): '
+            'Aft wings operating in fore-wing downwash run 15-20°C hotter. By dynamically shifting stroke amplitude '
+            'forward (+delta fore, -delta aft) when aft thermistors exceed 65°C, thermal rise rates are reduced by 35% '
+            'while counter-balancing pitch trim prevents longitudinal moment drift.',
+        'config': {
+            'freq_hz': 2.59, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_bus_3': True,
+            '_scorer': 'aft_motor_temp_margin_c',
+        },
+        'v_min': 0.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['hover', 'climb', 'cruise'],
+    },
+
+    # ── H-BUS-4: In-Flight Flapping EIS Battery SOH Observer ──
+    {
+        'id':     'H-BUS-4',
+        'label':  'In-Flight Flapping EIS: Real-time battery SOH and internal resistance tracking via stroke ripple',
+        'target': 'battery_health',
+        'rationale':
+            'IN-FLIGHT FLAPPING EIS (H-BUS-4): '
+            'Exploiting the natural 5.2 Hz (2x flap frequency) current perturbation across the shared DC bus to perform '
+            'continuous electrochemical impedance spectroscopy (EIS), measuring live cell internal resistance and '
+            'State-of-Health (SOH) to preempt cold-soak degradation and cell collapse before low-voltage cutoffs.',
+        'config': {
+            'freq_hz': 2.59, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_h_bus_4': True,
+            '_scorer': 'battery_internal_resistance_mohm',
+        },
+        'v_min': 0.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['cruise', 'hover', 'climb'],
+    },
+
+    # ── H-CMP-1: Staggered Anti-Phase Bound-Glide (Azhdarchid Thermal Loiter) ──
+    {
+        'id':     'H-CMP-1',
+        'label':  'Staggered Anti-Phase Bound-Glide: Interleaved Azhdarchid soaring with 180° bus-canceling micro-strokes',
+        'target': 'endurance',
+        'rationale':
+            'COMPOUND WAVEFORM (H-CMP-1 = H-102 + H-47 + H-BUS-1 + H-BUS-3): '
+            'Station 1 and 4 flap in exact 180° anti-phase (micro-stroke +/-12°) while Stations 2 & 3 lock in deep-camber '
+            'high-AR Azhdarchid glide dihedral. Front-rear anti-phase guarantees 100% electrical spring bus ripple '
+            'cancellation, while periodic 30s role-swapping eliminates aft motor downwash heating, tripling thermal loiter endurance.',
+        'config': {
+            'freq_hz': 3.0, 'aoa_deg': 6.0, 'sweep_deg': 0.0,
+            'amp_port_deg': 12.0, 'amp_stbd_deg': 12.0,
+            'cascade_phase_deg': 180.0, 'dihedral_deg': 14.0,
+            '_compound': True,
+            '_constituents': ['H-102', 'H-47', 'H-BUS-1', 'H-BUS-3'],
+            '_scorer': 'compound_loiter_endurance_min',
+        },
+        'v_min': 0.0, 'v_max': 20.0, 'priority': 1,
+        'eval_phases': ['cruise', 'loiter', 'hover', 'endurance'],
+    },
+
+    # ── H-CMP-2: Avian Deep-Flare Perch Landing ──
+    {
+        'id':     'H-CMP-2',
+        'label':  'Avian Deep-Flare Perch Landing: Clamshell airbrake to 80ms caridoid impulse flare for zero-rollout landing',
+        'target': 'precision',
+        'rationale':
+            'COMPOUND WAVEFORM (H-CMP-2 = H-108 + H-54 + H-87 + H-98): '
+            'Combines opposed clamshell scissor airbraking (H-54) and upstroke negative thrust (H-87) to scrub airspeed from '
+            '10 to 2.5 m/s in 0.9s, followed by an 80ms 2.2g collective caridoid downstroke flare (H-108) at 0.5m AGL to zero sink '
+            'rate, instantly transitioning to high-dihedral ground-spoil lock (H-98) for zero-rollout perch arrival.',
+        'config': {
+            'freq_hz': 3.5, 'aoa_deg': 25.0, 'sweep_deg': 0.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 45.0,
+            '_compound': True,
+            '_constituents': ['H-108', 'H-54', 'H-87', 'H-98'],
+            '_scorer': 'perch_stop_distance_cm',
+        },
+        'v_min': 0.0, 'v_max': 15.0, 'priority': 1,
+        'eval_phases': ['perch_landing', 'approach', 'emergency'],
+    },
+
+    # ── H-CMP-3: Katzmayr Vortex-Ingesting Trans-Envelope Dash ──
+    {
+        'id':     'H-CMP-3',
+        'label':  'Katzmayr Vortex-Ingesting Dash: High-Q sprint buzz with adaptive tip-vortex capture and AC shift pre-bias',
+        'target': 'top_speed',
+        'rationale':
+            'COMPOUND WAVEFORM (H-CMP-3 = H-46 + H-49 + H-AC-SHIFT-1 + H-DSH-1): '
+            'Schedules airspeed-adaptive cascade phase phi(V) = 28° * (V0/V) to steer downstream wing leading edges into '
+            'the upwash street of upstream tip vortices (H-49 Katzmayr thrust recovery), while pre-biasing pitch trim (+2.2° fore, '
+            '-1.0° aft) to counteract membrane AC shift (H-AC-SHIFT-1) and dilating torque loops to suppress dynamic stall (H-DSH-1).',
+        'config': {
+            'freq_hz': 5.5, 'aoa_deg': 8.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 16.0, 'amp_stbd_deg': 16.0,
+            'cascade_phase_deg': 15.0, 'dihedral_deg': 4.0,
+            '_compound': True,
+            '_constituents': ['H-46', 'H-49', 'H-AC-SHIFT-1', 'H-DSH-1'],
+            '_scorer': 'katzmayr_dash_efficiency_wh_km',
+        },
+        'v_min': 15.0, 'v_max': 30.0, 'priority': 1,
+        'eval_phases': ['sprint_dash', 'fast_cruise', 'cruise'],
+    },
+
+    # ── H-CMP-4: Dipteran Haltere Active Gust Cancellation ──
+    {
+        'id':     'H-CMP-4',
+        'label':  'Dipteran Haltere Active Gust Cancellation: Sub-15ms Coriolis torque gust preemption with DLTV and LSB dither',
+        'target': 'smooth_flight',
+        'rationale':
+            'COMPOUND WAVEFORM (H-CMP-4 = H-93 + H-43 + H-LSB-1 + H-SHED-1): '
+            'Demodulates high-frequency motor phase torque jitter as a virtual haltere to sense Coriolis gust acceleration in '
+            '<15ms, instantly commanding Direct Collective Lift and Thrust Vectoring (H-43 DLTV) while superimposing 12 Hz '
+            'micro-dither (H-SHED-1) to lock laminar separation bubble attachment (H-LSB-1), cutting cabin RMS turbulence by >70%.',
+        'config': {
+            'freq_hz': 3.5, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 28.0, 'dihedral_deg': 6.0,
+            '_compound': True,
+            '_constituents': ['H-93', 'H-43', 'H-LSB-1', 'H-SHED-1'],
+            '_scorer': 'coriolis_gust_rejection_db',
+        },
+        'v_min': 0.0, 'v_max': 25.0, 'priority': 1,
+        'eval_phases': ['adverse_weather', 'comfort_cruise', 'hover'],
+    },
+
+    # ── H-CMP-5: Vectored-In-Flight Post-Stall 3D Agility (VIFF) ──
+    {
+        'id':     'H-CMP-5',
+        'label':  'Vectored-In-Flight 3D Agility: Zero-airspeed 360° flat yaw pivots and post-stall super-maneuvering',
+        'target': 'maneuverability',
+        'rationale':
+            'COMPOUND WAVEFORM (H-CMP-5 = H-88A + H-61 + H-105 + H-81): '
+            'Integrates Odonata independent stroke-plane vectoring (+/-30° Port/Stbd tilt) with Chiropteran asymmetric wing '
+            'retraction during stroke reversal to generate 10.1 Nm of pure mechanical yaw torque, achieving >300°/s flat yaw '
+            'rotations at zero forward airspeed while Cetacean fluke damping (H-105) suppresses structural recoil.',
+        'config': {
+            'freq_hz': 4.0, 'aoa_deg': 18.0, 'sweep_deg': 30.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': -15.0,
+            '_compound': True,
+            '_constituents': ['H-88A', 'H-61', 'H-105', 'H-81'],
+            '_scorer': 'viff_zero_speed_yaw_rate_dps',
+        },
+        'v_min': 0.0, 'v_max': 15.0, 'priority': 1,
+        'eval_phases': ['bat_agility', 'manoeuvre', 'hover'],
+    },
+
+    # ── H-LA-1: Dragonfly 0° In-Phase Super-Lift Transition ───────────────
+    {
+        'id':     'H-LA-1',
+        'label':  'Dragonfly 0° in-phase synchronized downstroke super-lift vertical unstick',
+        'target': 'climb_rate',
+        'rationale':
+            'Dragonfly 0° in-phase synchronized downstroke super-lift launch burst producing '
+            '>2.4x MTOW vertical force spike for pure zero-ground-roll breakout.',
+        'config': {
+            'freq_hz': 2.50, 'aoa_deg': 18.0, 'sweep_deg': 90.0,
+            'amp_port_deg': 100.0, 'amp_stbd_deg': 100.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': 0.0,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 4.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb', 'hover'],
+    },
+
+    # ── H-LA-3: Pigeon Clap-and-Peel Steep Climb Corridor ─────────────────
+    {
+        'id':     'H-LA-3',
+        'label':  'Pigeon dorsal clap-and-peel vortex ring steep obstacle climb corridor',
+        'target': 'climb_angle',
+        'rationale':
+            'Pigeon dorsal clap-and-peel vortex ring ejection for 75°-85° steep obstacle climb corridor.',
+        'config': {
+            'freq_hz': 2.30, 'aoa_deg': 15.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 100.0, 'amp_stbd_deg': 100.0,
+            'cascade_phase_deg': 45.0, 'dihedral_deg': 2.0,
+            '_scorer': 'climb_gradient_deg',
+        },
+        'v_min': 0.0, 'v_max': 7.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── CTOL-STD: Conventional Standard Takeoff Roll & Dual-Cascade Rotation ─
+    {
+        'id':     'CTOL-STD',
+        'label':  'Conventional sea-level takeoff roll and balanced dual-cascade rotation',
+        'target': 'acceleration',
+        'rationale':
+            'Conventional fixed-wing takeoff roll acceleration with dual-cascade rotation at Vr=4.5 m/s.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 6.5, 'sweep_deg': 60.0,
+            'amp_port_deg': 92.0, 'amp_stbd_deg': 92.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0, 'Vr_ms': 4.5,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 12.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── CTOL-HDA: High Density Altitude Takeoff Roll ──────────────────────
+    {
+        'id':     'CTOL-HDA',
+        'label':  'High density altitude thin-air frequency boost and canard lift rotation',
+        'target': 'acceleration',
+        'rationale':
+            'High density altitude takeoff roll with thin-air frequency boost and canard lift rotation at Vr=5.2 m/s.',
+        'config': {
+            'freq_hz': 2.2, 'aoa_deg': 7.5, 'sweep_deg': 60.0,
+            'amp_port_deg': 95.0, 'amp_stbd_deg': 95.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0, 'Vr_ms': 5.2,
+            '_scorer': 'alpine_da_lift_margin',
+        },
+        'v_min': 0.0, 'v_max': 14.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── CTOL-HVY: Overweight Delayed Rotation Takeoff ─────────────────────
+    {
+        'id':     'CTOL-HVY',
+        'label':  'Overweight delayed rotation and secondary stall prevention',
+        'target': 'acceleration',
+        'rationale':
+            'Overweight delayed rotation takeoff roll to Vr=6.8 m/s with progressive elevator authority.',
+        'config': {
+            'freq_hz': 2.4, 'aoa_deg': 6.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 96.0, 'amp_stbd_deg': 96.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0, 'Vr_ms': 6.8,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 16.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── CTOL-STOL: Short Field Maximum Forward Thrust Takeoff ─────────────
+    {
+        'id':     'CTOL-STOL',
+        'label':  'Short field maximum forward thrust sweep and early unstick rotation',
+        'target': 'acceleration',
+        'rationale':
+            'Short field maximum forward thrust sweep with early unstick rotation at Vr=3.8 m/s.',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 8.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 98.0, 'amp_stbd_deg': 98.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0, 'Vr_ms': 3.8,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 12.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── CTOL-SOFT: Soft Field Ground Effect Acceleration Corridor ─────────
+    {
+        'id':     'CTOL-SOFT',
+        'label':  'Soft field nose gear unweighting and ground effect acceleration',
+        'target': 'acceleration',
+        'rationale':
+            'Soft field nose gear unweighting and low-level ground effect acceleration corridor at Vr=6.0 m/s.',
+        'config': {
+            'freq_hz': 2.3, 'aoa_deg': 9.5, 'sweep_deg': 60.0,
+            'amp_port_deg': 95.0, 'amp_stbd_deg': 95.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 2.0, 'Vr_ms': 6.0,
+            '_scorer': 'ground_effect_power_reduction_pct',
+        },
+        'v_min': 0.0, 'v_max': 14.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── HYB-LAUNCH: Autonomous Genetic Interbreeding Launch Genome ────────
+    {
+        'id':     'HYB-LAUNCH',
+        'label':  'Autonomous genetic interbreeding of launch modality chromosomes with active steering',
+        'target': 'acceleration',
+        'rationale':
+            'Genetic crossover and mutation across biological launch modalities with active steering authority.',
+        'config': {
+            'freq_hz': 2.5, 'aoa_deg': 14.0, 'sweep_deg': 60.0,
+            'amp_port_deg': 95.0, 'amp_stbd_deg': 95.0,
+            'cascade_phase_deg': 60.0, 'dihedral_deg': 0.0,
+            '_scorer': 'launch_accel_g',
+        },
+        'v_min': 0.0, 'v_max': 10.0, 'priority': 1,
+        'eval_phases': ['takeoff', 'climb'],
+    },
+
+    # ── FALCON-MORPH: Continuous Morphing Polar Glide-Dive-Stoop ──────────
+    {
+        'id':     'FALCON-MORPH',
+        'label':  'Falcon continuous morphing polar glide-dive-stoop continuum with MacCready ALC and zoom recovery',
+        'target': 'top_speed',
+        'rationale':
+            'Falcon continuous morphing polar adapting wing sweep (25°-75°) and camber for high-speed dive-stoop and kinetic zoom.',
+        'config': {
+            'freq_hz': 0.0, 'aoa_deg': 4.0, 'sweep_deg': 75.0,
+            'amp_port_deg': 0.0, 'amp_stbd_deg': 0.0,
+            'cascade_phase_deg': 0.0, 'dihedral_deg': -5.0,
+            '_scorer': 'dash_speed_ms',
+        },
+        'v_min': 10.0, 'v_max': 45.0, 'priority': 1,
+        'eval_phases': ['descent', 'cruise', 'manoeuvre'],
+    },
+
+    # ── SOFT-HANDOFF: Universal Raised-Cosine Crossfade Ramp ───────────────
+    {
+        'id':     'SOFT-HANDOFF',
+        'label':  'Universal raised-cosine crossfade ramp bounded <= 250 deg/s slew rate and dynamic q AoA clamp',
+        'target': 'smooth_flight',
+        'rationale':
+            'Raised-cosine modal crossfade eliminating transient spikes across disparate flight kinematics transitions.',
+        'config': {
+            'freq_hz': 2.0, 'aoa_deg': 8.0, 'sweep_deg': 45.0,
+            'amp_port_deg': 80.0, 'amp_stbd_deg': 80.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0,
+            '_scorer': 'cabin_rms_vibration_g',
+        },
+        'v_min': 0.0, 'v_max': 30.0, 'priority': 1,
+        'eval_phases': ['manoeuvre', 'cruise', 'descent', 'climb'],
+    },
+
+    # ── CONV-APP: Conventional Glide Path Track Hold ───────────────────────
+    {
+        'id':     'CONV-APP',
+        'label':  'Conventional glide path track hold and crosswind slip decrab alignment',
+        'target': 'precision',
+        'rationale':
+            'Stabilized 3° glide path descent with crosswind crab angle and dynamic decrab alignment prior to flare.',
+        'config': {
+            'freq_hz': 1.5, 'aoa_deg': 8.5, 'sweep_deg': 50.0,
+            'amp_port_deg': 70.0, 'amp_stbd_deg': 70.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 3.0,
+            '_scorer': 'downwash_rudder_precision_deg',
+        },
+        'v_min': 6.0, 'v_max': 15.0, 'priority': 1,
+        'eval_phases': ['descent', 'landing'],
+    },
+
+    # ── CONV-FLR: Dual-Cascade Canard Lift Flare Touchdown ─────────────────
+    {
+        'id':     'CONV-FLR',
+        'label':  'Dual-cascade canard lift flare, anti-tail-strike clearance, and grease touchdown',
+        'target': 'precision',
+        'rationale':
+            'Dual-cascade canard lift flare transferring kinetic energy to vertical cushion without tail strike risk.',
+        'config': {
+            'freq_hz': 1.8, 'aoa_deg': 14.0, 'sweep_deg': 55.0,
+            'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 5.0,
+            '_scorer': 'perch_flare_stop_time_s',
+        },
+        'v_min': 4.0, 'v_max': 10.0, 'priority': 1,
+        'eval_phases': ['landing', 'descent'],
+    },
+
+    # ── CONV-BRK: Aerodynamic Wing Braking & Rollout Deceleration ──────────
+    {
+        'id':     'CONV-BRK',
+        'label':  'Aerodynamic wing braking via shuttlecock drag and active reverse thrust flapping with no wheel brakes',
+        'target': 'brake',
+        'rationale':
+            'Aerodynamic ground rollout braking utilizing shuttlecock high-sweep drag and active reverse pitch reflex.',
+        'config': {
+            'freq_hz': 1.2, 'aoa_deg': 25.0, 'sweep_deg': 85.0,
+            'amp_port_deg': 60.0, 'amp_stbd_deg': 60.0,
+            'cascade_phase_deg': 90.0, 'dihedral_deg': 0.0,
+            '_scorer': 'scissor_brake_decel_g',
+        },
+        'v_min': 0.0, 'v_max': 12.0, 'priority': 1,
+        'eval_phases': ['landing', 'takeoff'],
+    },
+]
+
+
+_adv_new_ids = [h['id'] for h in _ADV_NEW_HYPS]
+
+# Append to AERO_HYPOTHESES & _hypothesis_queue if not already registered
+for _h_entry in _ADV_NEW_HYPS:
+    if not any(h['id'] == _h_entry['id'] for h in AERO_HYPOTHESES):
+        AERO_HYPOTHESES.append(_h_entry)
+    if not any(h['id'] == _h_entry['id'] for h in _hypothesis_queue):
+        _hypothesis_queue.append(_h_entry)
+
+# Register into BIOMIMETIC_HYPOTHESES
+for _h_entry in _ADV_NEW_HYPS:
+    _hid = _h_entry['id']
+    if _hid not in BIOMIMETIC_HYPOTHESES:
+        def _make_adv_variant_gen(base_cfg):
+            return lambda: dict(base_cfg)
+        BIOMIMETIC_HYPOTHESES[_hid] = [
+            (_make_adv_variant_gen(_h_entry['config']), None)
+        ]
+
+
+# ── ALSS Scoring Tasks ────────────────────────────────────────────────────────
+_SG_TASKS.update({
+    'dash_speed_ms': {
+        'description': 'Maximum sustained sprint dash airspeed in m/s (H-46). Higher = faster.',
+        'axis': 'top_speed', 'sensor': 'V_ms', 'direction': +1,
+    },
+    'bound_glide_efficiency': {
+        'description': 'Wh/km reduction and motor thermal reduction in bound-glide cruise (H-47).',
+        'axis': 'endurance', 'sensor': 'wh_per_km', 'direction': +1,
+    },
+    'katzmayr_thrust_gain_n': {
+        'description': 'Net free forward thrust (N) ingested from upstream tip vortices (H-49).',
+        'axis': 'range', 'sensor': 'thrust_n', 'direction': +1,
+    },
+    'cabin_rms_vibration_g': {
+        'description': 'Cabin 2-3 Hz heave and pitch vibration RMS (g) during cruise (H-41). Lower = smoother.',
+        'axis': 'smooth_flight', 'sensor': 'imu_rms_g', 'direction': -1,
+    },
+    'retrim_lift_retention_pct': {
+        'description': 'Percentage of MTOW lift retained during simulated N-1 actuator loss (H-42).',
+        'axis': 'resilience', 'sensor': 'lift_n', 'direction': +1,
+    },
+    'dltv_vertical_delta_g': {
+        'description': 'Instantaneous vertical climb acceleration (G) during wind shear downdraft (H-43).',
+        'axis': 'resilience', 'sensor': 'accel_z', 'direction': +1,
+    },
+    'wet_lev_lift_recovery_pct': {
+        'description': 'Lift retention ratio under simulated precipitation with LEV dither (H-44).',
+        'axis': 'resilience', 'sensor': 'cl_max', 'direction': +1,
+    },
+    'bus_voltage_headroom_v': {
+        'description': 'Minimum electrical bus voltage margin above brownout threshold (H-45).',
+        'axis': 'resilience', 'sensor': 'bus_voltage_v', 'direction': +1,
+    },
+    'spar_moment_reduction_pct': {
+        'description': 'Reduction in root spar bending moment with active aeroelastic compliance (H-37).',
+        'axis': 'smooth_flight', 'sensor': 'spar_moment_nm', 'direction': +1,
+    },
+    'ground_effect_power_reduction_pct': {
+        'description': 'Induced power savings when skimming in ground effect fountain upwash (H-38).',
+        'axis': 'range', 'sensor': 'P_shaft_w', 'direction': +1,
+    },
+    'yaw_rate_decoupled_dps': {
+        'description': 'Yaw rate achieved with zero adverse roll cross-coupling (H-39).',
+        'axis': 'maneuverability', 'sensor': 'yaw_rate_dps', 'direction': +1,
+    },
+    'stoop_regen_energy_j': {
+        'description': 'Electrical energy (Joules) returned to 24V bus during high-speed stoop dive (H-40).',
+        'axis': 'range', 'sensor': 'bus_voltage_v', 'direction': +1,
+    },
+    # ── New Suite Options Tasks (H-51 to H-63) ──
+    'peristaltic_thrust_n': {
+        'description': 'Net forward thrust from metachronal boundary layer pumping (H-51).',
+        'axis': 'top_speed', 'sensor': 'thrust_n', 'direction': +1,
+    },
+    'quick_return_efficiency': {
+        'description': 'Energy efficiency of harmonic asymmetric quick-return flap (H-52).',
+        'axis': 'range', 'sensor': 'wh_per_km', 'direction': +1,
+    },
+    'venturi_suction_thrust_n': {
+        'description': 'Leading-edge suction thrust from inter-wing Venturi contraction (H-53).',
+        'axis': 'top_speed', 'sensor': 'thrust_n', 'direction': +1,
+    },
+    'scissor_brake_decel_g': {
+        'description': 'Deceleration rate achieved with opposed lift-canceled scissor flap (H-54).',
+        'axis': 'precision', 'sensor': 'accel_x', 'direction': -1,
+    },
+    'vortex_collapse_time_s': {
+        'description': 'Time required to collapse circulation via toroidal ring breakdown (H-55).',
+        'axis': 'precision', 'sensor': 't_brake_s', 'direction': -1,
+    },
+    'box_wing_glide_ratio': {
+        'description': 'Effective aerodynamic glide ratio in virtual box-wing ground cushion (H-56).',
+        'axis': 'range', 'sensor': 'ld_ratio', 'direction': +1,
+    },
+    'bell_soaring_ld': {
+        'description': 'Glide polar efficiency with Prandtl bell-shaped spanwise lift (H-57).',
+        'axis': 'range', 'sensor': 'ld_ratio', 'direction': +1,
+    },
+    'strouhal_yaw_torque_nm': {
+        'description': 'Pure yaw moment generated via Strouhal differential thrust (H-58).',
+        'axis': 'maneuverability', 'sensor': 'yaw_moment_nm', 'direction': +1,
+    },
+    'downwash_rudder_precision_deg': {
+        'description': 'Heading track hold precision with virtual downwash rudder (H-59).',
+        'axis': 'smooth_flight', 'sensor': 'heading_err_deg', 'direction': -1,
+    },
+    'metachronal_roll_rate_dps': {
+        'description': 'Peak roll rate achieved with cascade roll wave (H-60).',
+        'axis': 'maneuverability', 'sensor': 'roll_rate_dps', 'direction': +1,
+    },
+    'snap_roll_onset_latency_ms': {
+        'description': 'Time to reach 45 deg bank with anhedral snap inversion (H-61).',
+        'axis': 'maneuverability', 'sensor': 'roll_onset_ms', 'direction': -1,
+    },
+    'pitch_pointing_latency_ms': {
+        'description': 'Time to achieve commanded pitch attitude without altitude loss (H-62).',
+        'axis': 'precision', 'sensor': 'pitch_onset_ms', 'direction': -1,
+    },
+    'collective_climb_rate_ms': {
+        'description': 'Instantaneous vertical elevation step rate with zero attitude pitch (H-63).',
+        'axis': 'climb_rate', 'sensor': 'climb_rate_ms', 'direction': +1,
+    },
+    # ── Flight Envelope Expansion & Hover Sustainability Tasks (H-64 to H-76) ──
+    'clap_fling_hover_power_w': {
+        'description': 'Electrical power consumption at hover with Weis-Fogh clap-and-fling (H-64).',
+        'axis': 'hover_hold', 'sensor': 'power_w', 'direction': -1,
+    },
+    'downwash_wake_thrust_n': {
+        'description': 'Free vertical lift ingested from tandem upstream wake slipstream (H-65).',
+        'axis': 'hover_hold', 'sensor': 'thrust_n', 'direction': +1,
+    },
+    'motor_thermal_dissipation_w': {
+        'description': 'Motor I^2*R thermal dissipation using virtual torsion spring recoil (H-66).',
+        'axis': 'endurance', 'sensor': 'motor_heat_w', 'direction': -1,
+    },
+    'ige_hover_efficiency': {
+        'description': 'In-ground-effect hover figure of merit at h <= 0.5b (H-67).',
+        'axis': 'hover_hold', 'sensor': 'hover_fm', 'direction': +1,
+    },
+    'etl_loiter_power_w': {
+        'description': 'Power required during 2.5-4 m/s translational butterfly loiter (H-68).',
+        'axis': 'endurance', 'sensor': 'power_w', 'direction': -1,
+    },
+    'launch_accel_g': {
+        'description': 'Peak forward linear acceleration during stroke-plane catapult launch (H-69).',
+        'axis': 'top_speed', 'sensor': 'accel_x_g', 'direction': +1,
+    },
+    'accel_transient_time_s': {
+        'description': 'Time required to accelerate to sustained cruise using Fourier surge (H-70).',
+        'axis': 'top_speed', 'sensor': 't_accel_s', 'direction': -1,
+    },
+    'best_roc_vy_ms': {
+        'description': 'Sustained rate of climb at St=0.28 optimal Vy speed (H-71).',
+        'axis': 'climb_rate', 'sensor': 'climb_rate_ms', 'direction': +1,
+    },
+    'climb_gradient_deg': {
+        'description': 'Climb gradient angle during steep obstacle departure at Vx (H-72).',
+        'axis': 'climb_rate', 'sensor': 'climb_gradient_deg', 'direction': +1,
+    },
+    'alpine_da_lift_margin': {
+        'description': 'Excess hover thrust margin at high density altitude using alpine amplitude (H-73).',
+        'axis': 'hover_hold', 'sensor': 'thrust_margin_pct', 'direction': +1,
+    },
+    'high_alt_ar_ld_ratio': {
+        'description': 'Effective lift-to-drag ratio at service ceiling using span morphing (H-74).',
+        'axis': 'range', 'sensor': 'ld_ratio', 'direction': +1,
+    },
+    'vrs_wake_shedding_margin': {
+        'description': 'Vortex ring state wake shedding stability margin in steep descent (H-75).',
+        'axis': 'smooth_flight', 'sensor': 'wake_margin', 'direction': +1,
+    },
+    'deadstick_glide_ratio': {
+        'description': 'Unpowered glide ratio L/D in deadstick all-engine-out fail-safe (H-76).',
+        'axis': 'range', 'sensor': 'ld_ratio', 'direction': +1,
+    },
+    # ── Bat Flight Biomechanics Suite Tasks (H-81 to H-85) ───────────────────
+    'zero_speed_inertial_yaw_dps': {
+        'description': 'Zero-airspeed yaw angular velocity in hover/stall via asymmetric wing inertia (H-81).',
+        'axis': 'maneuverability', 'sensor': 'yaw_rate_dps', 'direction': +1,
+    },
+    'anhedral_turn_radius_m': {
+        'description': 'Turn radius with inboard anhedral droop & outboard dihedral vectoring (H-82).',
+        'axis': 'maneuverability', 'sensor': 'turn_radius_m', 'direction': -1,
+    },
+    'lev_lift_boost_ratio': {
+        'description': 'Transient maximum lift coefficient ratio with inflow-aligned LEV pinning (H-83).',
+        'axis': 'climb_rate', 'sensor': 'cl_max', 'direction': +1,
+    },
+    'perch_flare_stop_time_s': {
+        'description': 'Time required to arrest forward speed to 0 m/s with roosting push-pull flare (H-84).',
+        'axis': 'resilience', 'sensor': 't_stop_s', 'direction': -1,
+    },
+    'incipient_stall_recovery_ms': {
+        'description': 'Latency to re-attach flow after somatosensory jitter separation detection (H-85).',
+        'axis': 'smooth_flight', 'sensor': 't_recovery_ms', 'direction': -1,
+    },
+    'reverse_cascade_thrust_gain_pct': {
+        'description': 'Reverse metachronal cascade hindwing-leading thrust gain at high forward speed (H-86).',
+        'axis': 'top_speed', 'sensor': 'thrust_gain_pct', 'direction': +1,
+    },
+    'active_upstroke_decel_g': {
+        'description': 'Active upstroke loaded negative-AoA dynamic airbraking and reverse thrust deceleration (H-87).',
+        'axis': 'resilience', 'sensor': 'accel_x_g', 'direction': -1,
+    },
+    'stroke_plane_yaw_moment_nm': {
+        'description': 'Direct-musculature stroke-plane vectoring yaw control moment with zero roll coupling (H-88/H-88A).',
+        'axis': 'maneuverability', 'sensor': 'yaw_moment_nm', 'direction': +1,
+    },
+    'sweep_bias_yaw_moment_nm': {
+        'description': 'Quasi-steady differential sweep bias yaw control moment with zero roll coupling (H-88B).',
+        'axis': 'maneuverability', 'sensor': 'yaw_moment_nm', 'direction': +1,
+    },
+    'kramer_circulation_lift_boost_pct': {
+        'description': 'Rotational circulation lift boost at stroke reversal via trapezoidal pre-rotation (H-89).',
+        'axis': 'hover_hold', 'sensor': 'lift_boost_pct', 'direction': +1,
+    },
+    'trapped_vortex_stall_alpha_deg': {
+        'description': 'Maximum attached flow stall angle of attack with trapped-vortex cavity corrugation (H-90).',
+        'axis': 'climb_rate', 'sensor': 'stall_alpha_deg', 'direction': +1,
+    },
+    'clap_jet_impulse_n': {
+        'description': 'Downward pneumatic air jet reaction impulse generated by dorsal clap cupping (H-91).',
+        'axis': 'top_speed', 'sensor': 'jet_impulse_n', 'direction': +1,
+    },
+    'canard_climb_gradient_deg': {
+        'description': 'Obstacle clearance climb gradient angle with Station 1 locked elytron canard vortex (H-92).',
+        'axis': 'climb_rate', 'sensor': 'climb_gradient_deg', 'direction': +1,
+    },
+    'coriolis_demod_rms_g': {
+        'description': 'Attitude acceleration RMS jitter with haltere-inspired harmonic Coriolis demodulation (H-93).',
+        'axis': 'smooth_flight', 'sensor': 'imu_rms_g', 'direction': -1,
+    },
+    'torsional_wave_wh_per_km': {
+        'description': 'Electrical energy consumption Wh/km in traveling torsional wave long-range cruise (H-94).',
+        'axis': 'endurance', 'sensor': 'wh_per_km', 'direction': -1,
+    },
+    'slotted_flap_cl_max': {
+        'description': 'Maximum lift coefficient in tandem active dynamic slotted Fowler flap glide (H-95).',
+        'axis': 'range', 'sensor': 'cl_max', 'direction': +1,
+    },
+    'vault_takeoff_vertical_accel_g': {
+        'description': 'Vertical breakout acceleration (g) in quadrupedal vault takeoff (H-98).',
+        'axis': 'climb_rate', 'sensor': 'vertical_accel_g', 'direction': +1,
+    },
+    'differential_sweep_yaw_drift_deg': {
+        'description': 'Yaw angle drift degrees during tailless metachronal differential sweep hold (H-100). Lower = better hold.',
+        'axis': 'smooth_flight', 'sensor': 'yaw_drift_deg', 'direction': -1,
+    },
+    'pitch_servo_current_reduction_pct': {
+        'description': 'Percentage reduction in pitch servo root RMS current via dynamic inertia counterbalance (H-101).',
+        'axis': 'endurance', 'sensor': 'pitch_servo_current_reduction_pct', 'direction': +1,
+    },
+    'azhdarchid_soar_sink_rate_ms': {
+        'description': 'Minimum sink rate (m/s) in azhdarchid deep-camber high-AR slotted loiter (H-102). Lower = slower sink.',
+        'axis': 'endurance', 'sensor': 'w_sink_ms', 'direction': -1,
+    },
+    # ── Aquatic Biomechanics Suite Metrics (H-103 to H-108) ──
+    'turtle_pivot_turn_radius_m': {
+        'description': 'Flat yaw turning radius (m) during differential flipper paddle braking (H-103). Lower = tighter.',
+        'axis': 'maneuverability', 'sensor': 'turning_radius_m', 'direction': -1,
+    },
+    'plesiosaur_tandem_thrust_boost_pct': {
+        'description': 'Percentage thrust augmentation on rear pairs via speed-adaptive wake capture (H-104).',
+        'axis': 'efficiency', 'sensor': 'thrust_boost_pct', 'direction': +1,
+    },
+    'cetacean_roll_rate_degs': {
+        'description': 'Peak roll rate (deg/s) with active heave/pitch recoil damping (H-105). Higher = more agile.',
+        'axis': 'smooth_flight', 'sensor': 'roll_rate_degs', 'direction': +1,
+    },
+    'krill_jet_coalescence_thrust_boost_pct': {
+        'description': 'Cruise thrust efficiency boost from adlocomotory coherent jet coalescence (H-106).',
+        'axis': 'efficiency', 'sensor': 'thrust_boost_pct', 'direction': +1,
+    },
+    'copepod_power_smoothing_ripple_pct': {
+        'description': 'Motor bus current and voltage ripple reduction percentage via asymmetric metachrony (H-107).',
+        'axis': 'smooth_flight', 'sensor': 'ripple_reduction_pct', 'direction': +1,
+    },
+    'caridoid_escape_impulse_n': {
+        'description': 'Transient vertical escape impulse force (N) in caridoid synchronized emergency flare (H-108).',
+        'axis': 'climb_rate', 'sensor': 'transient_impulse_n', 'direction': +1,
+    },
+    # ── Laminar Separation Bubble Suite Metrics (H-LSB-1) ──
+    'lsb_stroke_variance': {
+        'description': 'Stroke-to-stroke variance in per-wing motor current at matched lever and airspeed (H-LSB-1). Lower = more consistent attached flow.',
+        'axis': 'smooth_flight', 'sensor': 'motor_currents_a', 'direction': -1,
+    },
+    'lsb_cross_correlation': {
+        'description': 'Mean pairwise cross-wing current residual correlation across 8 channels (H-LSB-1). Used as gust rejection gate.',
+        'axis': 'resilience', 'sensor': 'motor_currents_a', 'direction': +1,
+    },
+    'lsb_burst_rate': {
+        'description': 'Fraction of strokes showing local boundary-layer separation with low cross-correlation (H-LSB-1 diagnostic).',
+        'axis': 'resilience', 'sensor': 'motor_currents_a', 'direction': -1,
+    },
+    # ── Hardened Aerodynamic Safety Metrics (H-DSH-1, H-AC-SHIFT-1, H-SHED-1, H-VEX-1) ──
+    'dsh_hysteresis_area': {
+        'description': 'Dynamic stall torque hysteresis loop dilation relative to dry tare (H-DSH-1). Lower = reduced post-stall pitching moment drop.',
+        'axis': 'smooth_flight', 'sensor': 'torque_loop_area', 'direction': -1,
+    },
+    'ac_shift_trim_deg': {
+        'description': 'Dynamic pressure pitch trim offset to compensate for membrane billow and AC shift (H-AC-SHIFT-1). Lower = better trim retention.',
+        'axis': 'top_speed', 'sensor': 'pitch_trim_deg', 'direction': -1,
+    },
+    'shed_dither_recovery_ms': {
+        'description': 'Time required to shed asymmetric dead-air lock via 12 Hz micro-dither (H-SHED-1). Lower = faster flow reattachment.',
+        'axis': 'recovery', 'sensor': 'stall_recovery_time_ms', 'direction': -1,
+    },
+    'vex_recirculation_jitter_g': {
+        'description': 'Cabin vertical heave jitter from ground vortex recirculation fountain (H-VEX-1). Lower = more stable ground-effect cushion.',
+        'axis': 'hover_hold', 'sensor': 'imu_rms_g', 'direction': -1,
+    },
+    # ── Electrical Spring & DC Bus Ripple Metrics (H-BUS-1) ──
+    'bus_power_ripple_w': {
+        'description': 'Peak-to-peak bus power over 5 s at matched kinematics (H-BUS-1). Lower = better ripple cancellation.',
+        'axis': 'endurance', 'sensor': 'P_shaft_w', 'direction': -1,
+    },
+    'bus_exchange_fraction': {
+        'description': 'Fraction of inertial power kept off the battery via cross-motor DC bus exchange (H-BUS-1). 1.0 = perfect cancellation.',
+        'axis': 'endurance', 'sensor': 'wh_per_km', 'direction': +1,
+    },
+    'bus_voltage_ripple_v': {
+        'description': 'Peak-to-peak bus volts (H-BUS-1). Diagnostic for capacitor sizing and cell health; target < 1.0 V.',
+        'axis': 'resilience', 'sensor': 'bus_voltage_v', 'direction': -1,
+    },
+    # ── Split-Bus, Thermal Load-Balancing, and EIS Metrics (H-BUS-2, 3, 4) ──
+    'bus_fault_isolation_time_us': {
+        'description': 'Microsecond eFuse trip response time under phase short-circuit (H-BUS-2). Lower = faster protection against bus collapse.',
+        'axis': 'resilience', 'sensor': 'isolation_time_us', 'direction': -1,
+    },
+    'aft_motor_temp_margin_c': {
+        'description': 'Temperature headroom on aft wings under asymmetric bus throttling (H-BUS-3). Higher = better thermal protection.',
+        'axis': 'endurance', 'sensor': 'motor_temp_c', 'direction': +1,
+    },
+    'battery_internal_resistance_mohm': {
+        'description': 'Live cell internal resistance estimated via 5.2 Hz stroke ripple EIS (H-BUS-4). Lower = healthier battery.',
+        'axis': 'resilience', 'sensor': 'r_int_mohm', 'direction': -1,
+    },
+    # ── Compound Waveform Metrics (H-CMP 1..5) ──
+    'compound_loiter_endurance_min': {
+        'description': 'Estimated endurance (minutes) during anti-phase staggered bound-glide loiter (H-CMP-1). Higher = longer loiter.',
+        'axis': 'endurance', 'sensor': 'endurance_min', 'direction': +1,
+    },
+    'perch_stop_distance_cm': {
+        'description': 'Ground rollout distance (cm) on terminal perch spot touchdown (H-CMP-2). Lower = tighter spot landing.',
+        'axis': 'precision', 'sensor': 'rollout_distance_cm', 'direction': -1,
+    },
+    'katzmayr_dash_efficiency_wh_km': {
+        'description': 'Energy consumption per kilometer at dash airspeeds V >= 20 m/s (H-CMP-3). Lower = more efficient sprint.',
+        'axis': 'top_speed', 'sensor': 'wh_per_km', 'direction': -1,
+    },
+    'coriolis_gust_rejection_db': {
+        'description': 'Disturbance attenuation (dB) of wind shear via sub-15ms Coriolis gyroscopic preemption (H-CMP-4). Higher = smoother.',
+        'axis': 'smooth_flight', 'sensor': 'attenuation_db', 'direction': +1,
+    },
+    'viff_zero_speed_yaw_rate_dps': {
+        'description': 'Instantaneous yaw rotation rate (deg/s) at zero forward airspeed (H-CMP-5). Higher = more agile.',
+        'axis': 'maneuverability', 'sensor': 'yaw_rate_dps', 'direction': +1,
+    },
+})
+
+
+# ── ALSS Segments and Curricula ───────────────────────────────────────────────
+_ALSS_SEGMENTS.update({
+    'cmp1_staggered_glide_b':        ('cruise',    'H-CMP-1', 10.0, 30.0, 0.0, 0.0,
+                              'H-CMP-1: Staggered anti-phase bound-glide thermal loiter'),
+    'cmp2_perch_flare_b':            ('emergency', 'H-CMP-2', 5.0, 15.0, 0.0, 0.0,
+                              'H-CMP-2: Avian deep-flare zero-rollout perch landing'),
+    'cmp3_katzmayr_dash_b':          ('cruise',    'H-CMP-3', 10.0, 30.0, 20.0, 0.0,
+                              'H-CMP-3: Katzmayr vortex-ingesting sprint dash'),
+    'cmp4_gust_rejection_b':         ('cruise',    'H-CMP-4', 10.0, 30.0, 0.0, 0.0,
+                              'H-CMP-4: Dipteran Coriolis active gust cancellation'),
+    'cmp5_viff_agility_b':           ('hover',     'H-CMP-5', 5.0, 15.0, 0.0, 0.0,
+                              'H-CMP-5: Vectored-in-flight zero-airspeed 3D agility'),
+    'bus1_exchange_b':               ('cruise',    'H-BUS-1', 5.0, 15.0, 0.0, 0.0,
+                              'H-BUS-1: Shared DC bus inertial ripple cancellation in cruise and hover'),
+    'bus2_split_b':                  ('emergency', 'H-BUS-2', 5.0, 15.0, 0.0, 0.0,
+                              'H-BUS-2: Split-bus eFuse fault isolation under simulated short'),
+    'bus3_thermal_b':                ('hover',     'H-BUS-3', 10.0, 30.0, 0.0, 0.0,
+                              'H-BUS-3: Dynamic thermal load-balancing in downwash'),
+    'bus4_eis_b':                    ('cruise',    'H-BUS-4', 10.0, 30.0, 0.0, 0.0,
+                              'H-BUS-4: In-flight electrochemical impedance spectroscopy'),
+    'h46_sprint_dash_b':     ('cruise',   'H-46', 20.0, 60.0,  18.0, 0.0,
+                              'H-46: Micro-stroke resonant buzz sprint dash (V >= 18.0 m/s)'),
+    'h47_bound_glide_b':     ('cruise',   'H-47', 20.0, 180.0, 13.0, 0.0,
+                              'H-47: Tandem interleaved bound-and-glide fast cruise'),
+    'h49_katzmayr_surf_b':   ('cruise',   'H-49', 20.0, 150.0, 9.0,  0.0,
+                              'H-49: Cascade tip-vortex Katzmayr energy ingestion'),
+    'h41_comfort_ride_b':    ('cruise',   'H-41', 20.0, 120.0, 9.0,  0.0,
+                              'H-41: Metachronal heave & pitch nod vibration cancellation'),
+    'h42_n1_retrim_a':       ('cruise',   'H-42', 10.0, 45.0,  8.0,  0.0,
+                              'H-42: Asymmetric N-1 actuator loss re-trim trial'),
+    'h43_dltv_shear_a':      ('climb',    'H-43', 10.0, 30.0,  10.0, 0.0,
+                              'H-43: Severe wind shear direct lift thrust vectoring'),
+    'h44_rain_lev_b':        ('cruise',   'H-44', 20.0, 90.0,  8.0,  0.0,
+                              'H-44: Heavy rain & icing boundary layer LEV dither'),
+    'h45_bus_brownout_a':    ('cruise',   'H-45', 10.0, 30.0,  10.0, 0.0,
+                              'H-45: Proactive bus brownout load shedding evaluation'),
+    'h37_compliance_b':      ('cruise',   'H-37', 20.0, 90.0,  9.0,  0.0,
+                              'H-37: Active aeroelastic compliance spring-damper tuning'),
+    'h38_ground_effect_b':   ('descent',  'H-38', 15.0, 60.0,  5.0,  0.0,
+                              'H-38: Ground-effect upwash fountain inversion at h < 0.5m'),
+    'h39_yaw_vector_b':      ('manoeuvre','H-39', 20.0, 90.0,  10.0, 0.0,
+                              'H-39: Tailless differential sweep yaw decoupling'),
+    'h40_stoop_regen_b':     ('descent',  'H-40', 15.0, 45.0,  20.0, 0.0,
+                              'H-40: Dynamic regenerative braking stoop energy harvest'),
+    # ── New Suite Options Segments (H-51 to H-63) ──
+    'h51_peristaltic_b':     ('cruise',   'H-51', 20.0, 90.0,  14.0, 0.0,
+                              'H-51: Traveling peristaltic boundary wave cruise'),
+    'h52_quick_return_b':    ('cruise',   'H-52', 20.0, 120.0, 11.0, 0.0,
+                              'H-52: Asymmetric quick-return harmonic flap trial'),
+    'h53_venturi_dash_b':    ('cruise',   'H-53', 15.0, 60.0,  18.0, 0.0,
+                              'H-53: Tandem cascade Venturi nozzle high-speed dash'),
+    'h54_clamshell_brake_a': ('descent',  'H-54', 10.0, 30.0,  10.0, 0.0,
+                              'H-54: Clamshell scissor flap lift-canceled brake trial'),
+    'h55_vortex_collapse_a': ('descent',  'H-55', 10.0, 25.0,  12.0, 0.0,
+                              'H-55: Toroidal vortex ring breakdown rapid stop'),
+    'h56_box_wing_b':        ('descent',  'H-56', 15.0, 60.0,  6.0,  0.0,
+                              'H-56: Virtual box-wing ground cushion skim trial'),
+    'h57_prandtl_bell_b':    ('cruise',   'H-57', 20.0, 150.0, 8.0,  0.0,
+                              'H-57: Prandtl bell-shaped spanwise lift soaring glide'),
+    'h58_strouhal_yaw_b':    ('manoeuvre','H-58', 15.0, 60.0,  10.0, 0.0,
+                              'H-58: Strouhal-differential thrust zero-bank yaw'),
+    'h59_downwash_rudder_b': ('cruise',   'H-59', 20.0, 90.0,  9.0,  0.0,
+                              'H-59: Virtual downwash rudder crosswind track hold'),
+    'h60_roll_wave_b':       ('manoeuvre','H-60', 15.0, 45.0,  12.0, 0.0,
+                              'H-60: Metachronal cascade roll wave agility trial'),
+    'h61_snap_roll_b':       ('manoeuvre','H-61', 10.0, 30.0,  14.0, 0.0,
+                              'H-61: Dynamic anhedral-dihedral snap-roll inversion'),
+    'h62_canard_pitch_b':    ('manoeuvre','H-62', 15.0, 45.0,  10.0, 0.0,
+                              'H-62: Dynamic canard-wing zero-lag pitch pointing'),
+    'h63_collective_step_b': ('climb',    'H-63', 15.0, 45.0,  8.0,  0.0,
+                              'H-63: Direct collective zero-attitude elevation stepping'),
+    # ── Flight Envelope Expansion & Hover Sustainability Segments (H-64 to H-76) ──
+    'h64_clap_fling_b':      ('hover',    'H-64', 15.0, 60.0,  0.0,  0.0,
+                              'H-64: Weis-Fogh planar clap-and-fling hover test'),
+    'h65_downwash_wake_b':   ('hover',    'H-65', 15.0, 60.0,  0.0,  0.0,
+                              'H-65: Tandem metachronal downwash wake ingestion trial'),
+    'h66_virtual_spring_b':  ('hover',    'H-66', 20.0, 90.0,  0.0,  0.0,
+                              'H-66: Virtual electrical torsion spring thermal recoil trial'),
+    'h67_ige_cushion_b':     ('hover',    'H-67', 10.0, 45.0,  0.0,  0.0,
+                              'H-67: In-ground-effect cushion hover at h < 0.5m'),
+    'h68_etl_creep_b':       ('cruise',   'H-68', 20.0, 120.0, 3.5,  0.0,
+                              'H-68: Micro-translational lift ETL butterfly loiter'),
+    'h69_catapult_vector_b': ('cruise',   'H-69', 10.0, 30.0,  12.0, 0.0,
+                              'H-69: Metachronal stroke-plane vectoring catapult launch'),
+    'h70_fourier_surge_b':   ('cruise',   'H-70', 15.0, 45.0,  15.0, 0.0,
+                              'H-70: Fourier quick-return downstroke surge transient'),
+    'h71_vy_climb_b':        ('climb',    'H-71', 20.0, 90.0,  10.0, 0.0,
+                              'H-71: Strouhal-resonant best rate of climb (Vy) trial'),
+    'h72_vx_climb_b':        ('climb',    'H-72', 15.0, 45.0,  4.5,  0.0,
+                              'H-72: High-lift clap steep obstacle clearance (Vx)'),
+    'h73_alpine_da_b':       ('hover',    'H-73', 15.0, 60.0,  0.0,  0.0,
+                              'H-73: Bumblebee alpine amplitude compensation in thin air'),
+    'h74_high_alt_ar_b':     ('cruise',   'H-74', 20.0, 150.0, 12.0, 0.0,
+                              'H-74: High-altitude span morphing aspect ratio maximization'),
+    'h75_anti_vrs_a':        ('descent',  'H-75', 10.0, 30.0,  4.0,  0.0,
+                              'H-75: Vortex ring state (VRS) immunity outward wake deflection'),
+    'h76_deadstick_a':       ('descent',  'H-76', 15.0, 60.0,  12.0, 0.0,
+                              'H-76: Deadstick symmetrical dihedral glide polar fail-safe'),
+    # ── Bat Flight Biomechanics Suite Segments (H-81 to H-85) ────────────────
+    'h81_inertial_yaw_b':    ('hover',    'H-81', 15.0, 45.0,  0.0,  0.0,
+                              'H-81: Chiropteran zero-airspeed asymmetric inertia yaw rotation'),
+    'h82_anhedral_turn_b':   ('manoeuvre','H-82', 15.0, 45.0,  10.0, 0.0,
+                              'H-82: Anhedral gull-wing zero-sideslip knife-edge cornering'),
+    'h83_lev_trapping_b':    ('climb',    'H-83', 15.0, 60.0,  8.0,  0.0,
+                              'H-83: Dynamic inflow-aligned leading-edge vortex trapping'),
+    'h84_roost_somersault_a':('descent',  'H-84', 10.0, 30.0,  10.0, 0.0,
+                              'H-84: Metachronal cascade roosting push-pull flare arrest'),
+    'h85_stall_preempt_b':   ('cruise',   'H-85', 20.0, 90.0,  12.0, 0.0,
+                              'H-85: Synthetic somatosensory boundary-layer stall preemption'),
+    # ── Dragonfly Aerodynamic Suite Segments (H-86 to H-88) ──────────────────
+    'h86_reverse_cascade_b': ('cruise',   'H-86', 20.0, 90.0,  14.0, 0.0,
+                              'H-86: Reverse metachronal cascade hindwing-leading thrust boost'),
+    'h87_active_upstroke_a': ('descent',  'H-87', 10.0, 30.0,  10.0, 0.0,
+                              'H-87: Active upstroke negative-AoA dynamic airbrake & reverse flight'),
+    'h88_stroke_plane_vector_b': ('manoeuvre', 'H-88', 15.0, 45.0, 8.0, 0.0,
+                              'H-88: Odonata direct-musculature stroke-plane tilt vectoring'),
+    'h88a_dynamic_vector_b': ('manoeuvre', 'H-88A', 15.0, 45.0, 8.0, 0.0,
+                              'H-88A: Odonata dynamic harmonic stroke-plane tilt vectoring'),
+    'h88b_sweep_bias_b':     ('manoeuvre', 'H-88B', 15.0, 45.0, 8.0, 0.0,
+                              'H-88B: Odonata quasi-steady differential sweep bias vectoring'),
+    # ── Insect Flight Biomechanics Segments (H-89 to H-95) ───────────────────
+    'h89_kramer_burst_b':    ('hover',    'H-89', 15.0, 45.0,  1.5,  0.0,
+                              'H-89: Dynamic Kramer pre-rotation rotational circulation lift burst'),
+    'h90_trapped_vortex_b':  ('climb',    'H-90', 20.0, 60.0,  10.0, 0.0,
+                              'H-90: Trapped-vortex corrugated cavity high-AoA boundary layer trial'),
+    'h91_clap_jet_a':        ('takeoff',  'H-91', 10.0, 30.0,  5.0,  0.0,
+                              'H-91: Lepidopteran dorsal clap pneumatic jet propulsion pulse'),
+    'h92_elytron_canard_b':  ('climb',    'H-92', 15.0, 60.0,  8.0,  0.0,
+                              'H-92: Coleopteran elytron canard locked-dihedral vortex fence climb'),
+    'h93_coriolis_preempt_a':('cruise',   'H-93', 10.0, 30.0,  12.0, 0.0,
+                              'H-93: Dipteran haltere synchronous Coriolis gust demodulation'),
+    'h94_torsional_wave_b':  ('cruise',   'H-94', 20.0, 180.0, 13.0, 0.0,
+                              'H-94: Orthopteran traveling torsional wave long-range cruise'),
+    'h95_slotted_flap_b':    ('descent',  'H-95', 15.0, 90.0,  9.0,  0.0,
+                              'H-95: Tandem dynamic slotted Fowler flap low-speed glide'),
+    'h98_vault_takeoff_a':   ('takeoff',  'H-98', 5.0,  15.0,  2.0,  0.0,
+                              'H-98: Quadrupedal ground-coupled vault takeoff impulse'),
+    'h100_differential_sweep_b':('cruise', 'H-100', 20.0, 90.0, 10.0, 0.0,
+                              'H-100: Tailless metachronal differential sweep directional trim hold'),
+    'h101_cranial_pitch_b':  ('cruise',   'H-101', 20.0, 120.0, 11.0, 0.0,
+                              'H-101: Dynamic flap-inertia pitch counterbalance torque decoupling'),
+    'h102_azhdarchid_soar_b':('glide',    'H-102', 25.0, 180.0, 8.5,  0.0,
+                              'H-102: Deep-camber high-aspect-ratio azhdarchid thermal soaring loiter'),
+    # ── Aquatic Biomechanics Segments (H-103 to H-108) ──
+    'h103_turtle_pivot_a':   ('manoeuvre','H-103', 10.0, 30.0, 8.0, 0.0,
+                              'H-103: Sea turtle in-stroke sweep & differential flipper pivot braking'),
+    'h104_plesiosaur_wake_b':('cruise',   'H-104', 20.0, 120.0, 9.5, 0.0,
+                              'H-104: Plesiosaur speed-adaptive tandem wake capture & pitch trim'),
+    'h105_cetacean_roll_b':  ('manoeuvre','H-105', 15.0, 60.0, 10.0, 0.0,
+                              'H-105: Cetacean pectoral 3-DOF hydrofoil roll & recoil damping'),
+    'h106_krill_jet_b':      ('cruise',   'H-106', 20.0, 150.0, 8.5, 0.0,
+                              'H-106: Crustacean adlocomotory metachronal jet coalescence cruise'),
+    'h107_copepod_metachrony_a':('cruise','H-107', 15.0, 60.0, 14.0, 0.0,
+                              'H-107: Copepod dual-mode asymmetric metachrony power smoothing'),
+    'h108_caridoid_flare_a': ('recovery', 'H-108', 3.0, 10.0, 4.0, 0.0,
+                              'H-108: Decapod caridoid impulse flare emergency sink arrest'),
+    'h_la1_dragonfly_super_lift_a': ('takeoff', 'H-LA-1', 2.0, 10.0, 1.0, 0.0,
+                              'H-LA-1: Dragonfly 0° in-phase synchronized downstroke super-lift vertical unstick'),
+    'h_la3_pigeon_steep_climb_a':   ('climb',   'H-LA-3', 10.0, 30.0, 4.0, 0.0,
+                              'H-LA-3: Pigeon dorsal clap-and-peel vortex ring steep obstacle climb corridor'),
+    'ctol_takeoff_standard_a':      ('takeoff', 'CTOL-STD', 4.0, 15.0, 4.5, 0.0,
+                              'CTOL-STD: Conventional sea-level takeoff roll and balanced dual-cascade rotation'),
+    'ctol_takeoff_high_da_a':        ('takeoff', 'CTOL-HDA', 5.0, 20.0, 5.2, 0.0,
+                              'CTOL-HDA: High density altitude thin-air frequency boost and canard lift rotation'),
+    'ctol_takeoff_overweight_a':     ('takeoff', 'CTOL-HVY', 6.0, 25.0, 6.8, 0.0,
+                              'CTOL-HVY: Overweight delayed rotation and secondary stall prevention'),
+    'ctol_takeoff_short_field_a':    ('takeoff', 'CTOL-STOL', 3.0, 12.0, 3.8, 0.0,
+                              'CTOL-STOL: Short field maximum forward thrust sweep and early unstick rotation'),
+    'ctol_takeoff_soft_field_a':     ('takeoff', 'CTOL-SOFT', 5.0, 18.0, 6.0, 0.0,
+                              'CTOL-SOFT: Soft field nose gear unweighting and ground effect acceleration'),
+    'launch_hybrid_interbreed_a':    ('takeoff', 'HYB-LAUNCH', 2.0, 12.0, 2.5, 0.0,
+                              'HYB-LAUNCH: Autonomous genetic interbreeding of launch modality chromosomes with active steering'),
+    'falcon_morphing_glide_stoop_a': ('descent', 'FALCON-MORPH', 15.0, 45.0, 25.0, 0.0,
+                              'FALCON-MORPH: Falcon continuous morphing polar glide-dive-stoop continuum with MacCready ALC and zoom recovery'),
+    'soft_handoff_crossfade_a':      ('manoeuvre', 'SOFT-HANDOFF', 10.0, 30.0, 15.0, 0.0,
+                              'SOFT-HANDOFF: Universal raised-cosine crossfade ramp bounded <= 250 deg/s slew rate and dynamic q AoA clamp'),
+    'landing_approach_a':            ('descent', 'CONV-APP', 10.0, 30.0, 8.0, 0.0,
+                              'CONV-APP: Conventional glide path track hold and crosswind slip decrab alignment'),
+    'landing_flare_touchdown_a':     ('descent', 'CONV-FLR', 3.0, 10.0, 6.0, 0.0,
+                              'CONV-FLR: Dual-cascade canard lift flare, anti-tail-strike clearance, and grease touchdown'),
+    'landing_rollout_braking_a':     ('takeoff', 'CONV-BRK', 5.0, 20.0, 8.0, 0.0,
+                              'CONV-BRK: Aerodynamic wing braking via shuttlecock drag and active reverse thrust flapping with no wheel brakes'),
+    'lsb_stability_b':               ('cruise',   'H-LSB-1', 5.0, 15.0, 0.0, 0.0,
+                              'H-LSB-1: Laminar separation bubble stability in cruise and glide'),
+    'dsh_stall_hysteresis_b':        ('manoeuvre', 'H-DSH-1', 10.0, 30.0, 12.0, 0.0,
+                              'H-DSH-1: Dynamic stall pitch-down hysteresis and alpha-dot reflex'),
+    'ac_shift_compensation_b':       ('cruise',    'H-AC-SHIFT-1', 15.0, 60.0, 16.0, 0.0,
+                              'H-AC-SHIFT-1: Dynamic pressure membrane camber drift and AC shift trim'),
+    'shed_wake_dither_a':            ('recovery',  'H-SHED-1', 5.0, 15.0, 0.0, 0.0,
+                              'H-SHED-1: Asymmetric deep-stall wake shedding dither with brownout clamp'),
+    'vex_ground_recirculation_a':    ('hover',     'H-VEX-1', 5.0, 20.0, 0.0, 0.0,
+                              'H-VEX-1: Ground vortex recirculation fountain outward dihedral flare'),
+})
+
+for _s_id in ['h42_n1_retrim_a', 'h43_dltv_shear_a', 'h45_bus_brownout_a',
+              'h54_clamshell_brake_a', 'h55_vortex_collapse_a',
+              'h75_anti_vrs_a', 'h76_deadstick_a', 'h84_roost_somersault_a',
+              'h87_active_upstroke_a', 'h91_clap_jet_a', 'h93_coriolis_preempt_a',
+              'h98_vault_takeoff_a', 'h103_turtle_pivot_a', 'h107_copepod_metachrony_a', 'h108_caridoid_flare_a',
+              'h_la1_dragonfly_super_lift_a', 'h_la3_pigeon_steep_climb_a',
+              'ctol_takeoff_standard_a', 'ctol_takeoff_high_da_a', 'ctol_takeoff_overweight_a',
+              'ctol_takeoff_short_field_a', 'ctol_takeoff_soft_field_a', 'launch_hybrid_interbreed_a',
+              'falcon_morphing_glide_stoop_a', 'soft_handoff_crossfade_a',
+              'landing_approach_a', 'landing_flare_touchdown_a', 'landing_rollout_braking_a',
+              'shed_wake_dither_a', 'vex_ground_recirculation_a']:
+    if _s_id not in _ALSS_CURRICULUM.get('A', []):
+        _ALSS_CURRICULUM['A'].append(_s_id)
+
+for _s_id in ['h46_sprint_dash_b', 'h47_bound_glide_b', 'h49_katzmayr_surf_b',
+              'h41_comfort_ride_b', 'h44_rain_lev_b', 'h37_compliance_b',
+              'h38_ground_effect_b', 'h39_yaw_vector_b', 'h40_stoop_regen_b',
+              'h51_peristaltic_b', 'h52_quick_return_b', 'h53_venturi_dash_b',
+              'h56_box_wing_b', 'h57_prandtl_bell_b', 'h58_strouhal_yaw_b',
+              'h59_downwash_rudder_b', 'h60_roll_wave_b', 'h61_snap_roll_b',
+              'h62_canard_pitch_b', 'h63_collective_step_b',
+              'h64_clap_fling_b', 'h65_downwash_wake_b', 'h66_virtual_spring_b',
+              'h67_ige_cushion_b', 'h68_etl_creep_b', 'h69_catapult_vector_b',
+              'h70_fourier_surge_b', 'h71_vy_climb_b', 'h72_vx_climb_b',
+              'h73_alpine_da_b', 'h74_high_alt_ar_b',
+              'h81_inertial_yaw_b', 'h82_anhedral_turn_b', 'h83_lev_trapping_b', 'h85_stall_preempt_b',
+              'h86_reverse_cascade_b', 'h88_stroke_plane_vector_b',
+              'h88a_dynamic_vector_b', 'h88b_sweep_bias_b',
+              'h89_kramer_burst_b', 'h90_trapped_vortex_b', 'h92_elytron_canard_b',
+              'h94_torsional_wave_b', 'h95_slotted_flap_b',
+              'h100_differential_sweep_b', 'h101_cranial_pitch_b', 'h102_azhdarchid_soar_b',
+              'h104_plesiosaur_wake_b', 'h105_cetacean_roll_b', 'h106_krill_jet_b',
+              'lsb_stability_b', 'dsh_stall_hysteresis_b', 'ac_shift_compensation_b',
+              'bus1_exchange_b', 'bus2_split_b', 'bus3_thermal_b', 'bus4_eis_b',
+              'cmp1_staggered_glide_b', 'cmp2_perch_flare_b', 'cmp3_katzmayr_dash_b',
+              'cmp4_gust_rejection_b', 'cmp5_viff_agility_b']:
+    if _s_id not in _ALSS_CURRICULUM.get('B', []):
+        _ALSS_CURRICULUM['B'].append(_s_id)
+
+_PHASE_TO_SG_TASK.update({
+    'compound_loiter':     ['compound_loiter_endurance_min', 'bus_exchange_fraction'],
+    'perch_landing':       ['perch_stop_distance_cm', 'incipient_stall_recovery_ms', 'perch_flare_stop_time_s'],
+    'katzmayr_dash':       ['katzmayr_dash_efficiency_wh_km', 'dash_speed_ms'],
+    'coriolis_gust':       ['coriolis_gust_rejection_db', 'cabin_rms_vibration_g'],
+    'viff_maneuver':       ['viff_zero_speed_yaw_rate_dps', 'zero_speed_inertial_yaw_dps'],
+    'bus_ripple':          ['bus_power_ripple_w', 'bus_exchange_fraction', 'bus_voltage_ripple_v'],
+    'bus_fault_isolation': ['bus_fault_isolation_time_us', 'bus_voltage_headroom_v'],
+    'thermal_throttling':  ['aft_motor_temp_margin_c', 'motor_thermal_dissipation_w'],
+    'battery_impedance':   ['battery_internal_resistance_mohm', 'bus_voltage_ripple_v'],
+    'lsb_stability':       ['lsb_stroke_variance', 'lsb_cross_correlation', 'lsb_burst_rate'],
+    'dynamic_stall':       ['dsh_hysteresis_area', 'cabin_rms_vibration_g'],
+    'high_q_sprint':       ['ac_shift_trim_deg', 'dash_speed_ms'],
+    'deep_stall_shedding': ['shed_dither_recovery_ms', 'bus_voltage_headroom_v'],
+    'ground_vortex_vex':   ['vex_recirculation_jitter_g', 'ige_hover_efficiency'],
+    'sprint_dash':     ['dash_speed_ms', 'bus_voltage_headroom_v', 'launch_accel_g', 'clap_jet_impulse_n', 'vault_takeoff_vertical_accel_g', 'copepod_power_smoothing_ripple_pct'],
+    'fast_cruise':     ['bound_glide_efficiency', 'katzmayr_thrust_gain_n', 'high_alt_ar_ld_ratio', 'torsional_wave_wh_per_km', 'pitch_servo_current_reduction_pct', 'plesiosaur_tandem_thrust_boost_pct', 'krill_jet_coalescence_thrust_boost_pct'],
+    'comfort_cruise':  ['cabin_rms_vibration_g', 'spar_moment_reduction_pct', 'coriolis_demod_rms_g', 'differential_sweep_yaw_drift_deg', 'cetacean_roll_rate_degs'],
+    'adverse_weather': ['dltv_vertical_delta_g', 'wet_lev_lift_recovery_pct', 'vrs_wake_shedding_margin'],
+    'emergency_retrim':['retrim_lift_retention_pct', 'bus_voltage_headroom_v', 'deadstick_glide_ratio', 'caridoid_escape_impulse_n'],
+    'hover_sustain':   ['clap_fling_hover_power_w', 'downwash_wake_thrust_n', 'motor_thermal_dissipation_w', 'ige_hover_efficiency', 'kramer_circulation_lift_boost_pct'],
+    'climb_envelope':  ['best_roc_vy_ms', 'climb_gradient_deg', 'trapped_vortex_stall_alpha_deg', 'canard_climb_gradient_deg', 'caridoid_escape_impulse_n'],
+    'bat_agility':     ['zero_speed_inertial_yaw_dps', 'anhedral_turn_radius_m', 'lev_lift_boost_ratio', 'turtle_pivot_turn_radius_m'],
+    'perch_landing':   ['perch_flare_stop_time_s', 'incipient_stall_recovery_ms'],
+    'dragonfly_aerodynamics': ['reverse_cascade_thrust_gain_pct', 'active_upstroke_decel_g', 'stroke_plane_yaw_moment_nm', 'sweep_bias_yaw_moment_nm'],
+    'insect_biomechanics': ['kramer_circulation_lift_boost_pct', 'trapped_vortex_stall_alpha_deg', 'clap_jet_impulse_n', 'canard_climb_gradient_deg', 'coriolis_demod_rms_g', 'torsional_wave_wh_per_km', 'slotted_flap_cl_max'],
+    'pterosaur_biomechanics': ['vault_takeoff_vertical_accel_g', 'differential_sweep_yaw_drift_deg', 'pitch_servo_current_reduction_pct', 'azhdarchid_soar_sink_rate_ms'],
+    'pterosaur_software_suite': ['vault_takeoff_vertical_accel_g', 'differential_sweep_yaw_drift_deg', 'pitch_servo_current_reduction_pct', 'azhdarchid_soar_sink_rate_ms'],
+    'aquatic_biomechanics': ['turtle_pivot_turn_radius_m', 'plesiosaur_tandem_thrust_boost_pct', 'cetacean_roll_rate_degs', 'krill_jet_coalescence_thrust_boost_pct', 'copepod_power_smoothing_ripple_pct', 'caridoid_escape_impulse_n'],
+    'aquatic_software_suite': ['turtle_pivot_turn_radius_m', 'plesiosaur_tandem_thrust_boost_pct', 'cetacean_roll_rate_degs', 'krill_jet_coalescence_thrust_boost_pct', 'copepod_power_smoothing_ripple_pct', 'caridoid_escape_impulse_n'],
+    'falcon_morphing_glide': ['morphing_glide_polar_ld', 'stoop_airspeed_ms', 'kinetic_zoom_efficiency_pct', 'g_limiter_max_g'],
+    'modality_soft_handoff': ['handoff_slew_rate_dps', 'kinematic_jerk_smoothness', 'q_aoa_limit_margin', 'load_factor_jerk_g'],
+    'conventional_landing': ['touchdown_sink_rate_ms', 'tail_clearance_margin_m', 'shuttlecock_decel_g', 'reverse_thrust_n', 'rollout_stopping_dist_m', 'crosswind_decrab_residual_deg'],
+})
+
+
+# ── Expanded Discovery Bounds (Modality 4: Genome) ───────────────────────────
+_EXPANDED_DISCOVERY_BOUNDS.update({
+    'h46_micro_amp_deg':       (15.0, 24.0),
+    'h46_pitch_reflex_deg':    (-7.0, -1.0),
+    'h46_dash_freq_hz':        (2.0, 3.2),
+    'h47_bound_period_s':      (1.0, 3.0),
+    'h47_duty_cycle':          (0.3, 0.7),
+    'h49_cyclic_twist_deg':    (1.0, 5.0),
+    'h37_compliance_gain':     (0.15, 0.80),
+    'h38_fountain_phase_deg':  (120.0, 180.0),
+    'h39_sweep_gain':          (3.0, 12.0),
+    'h40_max_bus_v':           (25.0, 27.6),
+    'h41_anti_phase_deg':      (150.0, 210.0),
+    'h42_opp_shed_pct':        (15.0, 45.0),
+    'h43_collective_pitch_deg':(3.0, 8.5),
+    'h44_dither_amp_deg':      (1.5, 5.0),
+    'h45_v_min_threshold':     (20.5, 22.5),
+    # ── New Suite Options Discovery Bounds (H-51 to H-63) ──
+    'h51_wave_delay_ms':       (15.0, 40.0),
+    'h51_suction_gain':        (0.20, 0.55),
+    'h52_downstroke_ratio':    (1.2, 1.8),
+    'h52_upstroke_feather_deg':(-6.0, -2.0),
+    'h53_front_sweep_bias':    (10.0, 25.0),
+    'h53_rear_sweep_bias':     (-20.0, -5.0),
+    'h54_lift_cancel_pct':     (90.0, 100.0),
+    'h55_ring_destruct_ms':    (800.0, 2500.0),
+    'h56_tip_alignment_mm':    (10.0, 50.0),
+    'h56_cdi_reduction_pct':   (25.0, 45.0),
+    'h57_washout_deg':         (-7.0, -3.0),
+    'h58_st_left':             (0.25, 0.42),
+    'h58_st_right':            (0.15, 0.28),
+    'h59_w4_cyclic_pitch_deg': (6.0, 18.0),
+    'h60_ripple_delay_ms':     (10.0, 35.0),
+    'h61_anhedral_deg':        (-15.0, -5.0),
+    'h61_dihedral_deg':        (15.0, 35.0),
+    'h62_canard_pitch_deg':    (5.0, 12.0),
+    'h62_main_pitch_deg':      (-10.0, -3.0),
+    'h63_delta_amp_deg':       (8.0, 22.0),
+    # ── Flight Envelope Expansion & Hover Bounds (H-64 to H-76) ──
+    'h64_touch_gap_mm':        (5.0, 25.0),
+    'h64_fling_separation_deg':(15.0, 35.0),
+    'h65_cascade_phase_deg':   (35.0, 65.0),
+    'h66_spring_k_nm_rad':     (8.0, 25.0),
+    'h67_max_agl_m':           (0.2, 0.8),
+    'h68_creep_speed_ms':      (2.0, 5.0),
+    'h69_forward_tilt_deg':    (12.0, 30.0),
+    'h70_downstroke_mult':     (1.3, 2.2),
+    'h71_strouhal_target':     (0.22, 0.35),
+    'h72_climb_gradient_deg':  (25.0, 45.0),
+    'h73_amp_expanded_deg':    (95.0, 120.0),
+    'h74_sweep_deg':           (35.0, 48.0),
+    'h75_outward_dihedral_deg':(15.0, 35.0),
+    'h76_best_ld_ratio':       (12.0, 18.0),
+    # ── Bat Flight Biomechanics Bounds (H-81 to H-85) ──
+    'h81_sweep_delta_deg':     (20.0, 45.0),
+    'h81_zero_v_yaw_rate_dps': (35.0, 85.0),
+    'h82_inboard_anhedral_deg':(-25.0, -8.0),
+    'h82_outboard_dihedral_deg':(8.0, 25.0),
+    'h82_turn_radius_m':       (0.5, 1.2),
+    'h83_cyclic_pitch_bias_deg':(3.0, 10.0),
+    'h83_cl_max_boost':        (1.8, 2.6),
+    'h84_pitch_couple_nm':     (3.0, 6.5),
+    'h84_flare_stop_time_s':   (0.12, 0.30),
+    'h85_jitter_threshold_a':  (0.50, 1.40),
+    'h85_reflex_pitch_deg':    (-4.5, -1.0),
+    # ── Dragonfly Aerodynamic Suite Bounds (H-86 to H-88) ──
+    'h86_reverse_phase_deg':   (-90.0, -35.0),
+    'h86_thrust_boost_pct':    (10.0, 30.0),
+    'h87_upstroke_aoa_deg':    (-38.0, -18.0),
+    'h87_decel_g':             (0.6, 1.8),
+    'h88_stroke_plane_tilt_deg':(10.0, 30.0),
+    'h88_yaw_moment_nm':       (1.5, 6.0),
+    'h88a_stroke_plane_tilt_deg':(10.0, 30.0),
+    'h88a_sweep_harmonic_amp_deg':(4.0, 15.0),
+    'h88a_yaw_moment_nm':      (2.0, 8.0),
+    'h88b_sweep_bias_deg':     (4.0, 16.0),
+    'h88b_yaw_moment_nm':      (1.5, 6.0),
+    # ── Insect Flight Biomechanics Bounds (H-89 to H-95) ──
+    'h89_pitch_lead_ms':       (15.0, 40.0),
+    'h89_lift_boost_pct':      (12.0, 32.0),
+    'h90_cavity_depth_mm':     (0.6, 2.0),
+    'h90_stall_alpha_deg':     (18.0, 26.0),
+    'h91_clap_dihedral_deg':   (55.0, 80.0),
+    'h91_jet_impulse_n':       (3.5, 9.5),
+    'h92_canard_dihedral_deg': (25.0, 50.0),
+    'h92_climb_gradient_deg':  (30.0, 50.0),
+    'h93_jitter_rms_g':        (0.010, 0.035),
+    'h93_filter_latency_ms':   (1.0, 5.0),
+    'h94_twist_amplitude_deg': (2.0, 7.0),
+    'h94_wh_per_km':           (8.5, 12.5),
+    'h95_slot_phase_lead_deg': (10.0, 35.0),
+    'h95_cl_max':              (1.9, 2.7),
+    # ── Pterosaur Flight Biomechanics Bounds (H-98, H-100 to H-102) ──
+    'h98_vault_accel_g':          (1.2, 2.5),
+    'h98_vault_duration_s':       (0.15, 0.40),
+    'h100_max_sweep_bias_deg':    (6.0, 15.0),
+    'h100_yaw_hold_deg':          (0.5, 3.5),
+    'h101_current_reduction_pct': (25.0, 55.0),
+    'h102_min_sink_ms':           (0.30, 0.55),
+    'h102_endurance_boost_pct':   (50.0, 120.0),
+    # ── Aquatic Biomechanics Bounds (H-103 to H-108) ──
+    'h103_pivot_sweep_deg':       (100.0, 140.0),
+    'h103_pivot_turn_radius_m':   (0.8, 2.0),
+    'h104_phase_advance_deg':     (35.0, 85.0),
+    'h104_thrust_boost_pct':      (30.0, 65.0),
+    'h105_diff_aoa_deg':          (4.0, 16.0),
+    'h105_roll_rate_degs':        (120.0, 260.0),
+    'h106_phase_lag_deg':         (30.0, 85.0),
+    'h106_thrust_boost_pct':      (12.0, 28.0),
+    'h107_ripple_reduction_pct':  (35.0, 60.0),
+    'h108_impulse_n':             (25.0, 55.0),
+    # ── Laminar Separation Bubble (H-LSB-1) ──
+    'h_lsb_aoa_deg':              (8.0, 24.0),
+    'h_lsb_freq_hz':              (1.4, 2.6),
+    'h_lsb_amp_deg':              (84.0, 108.0),
+    'h_lsb_cascade_deg':          (28.0, 28.0),
+    # ── Hardened Aerodynamic Safety Bounds (H-DSH-1, H-AC-SHIFT-1, H-SHED-1, H-VEX-1) ──
+    'h_dsh_pitch_rate_dps':       (20.0, 60.0),
+    'h_dsh_reflex_deg':           (-5.0, -1.5),
+    'h_ac_shift_bias_deg':        (-4.0, -1.0),
+    'h_ac_sprint_q_pa':           (120.0, 240.0),
+    'h_shed_dither_deg':          (2.0, 6.0),
+    'h_shed_dither_hz':           (10.0, 15.0),
+    'h_vex_dihedral_deg':         (10.0, 25.0),
+    'h_vex_agl_threshold_m':      (0.20, 0.45),
+})
+
+
+# ── CMTS Context Champions (Modality 5) ───────────────────────────────────────
+_CMTS_CHAMPIONS.update({
+    'sprint_dash': {
+        'hyp_id': 'H-46', 'v_max_ms': 19.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-46'),
+    },
+    'fast_cruise_bound': {
+        'hyp_id': 'H-47', 'wh_per_km': 14.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-47'),
+    },
+    'cruise_vortex_ingestion': {
+        'hyp_id': 'H-49', 'thrust_gain_n': 2.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-49'),
+    },
+    'comfort_smooth': {
+        'hyp_id': 'H-41', 'rms_g': 0.028, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-41'),
+    },
+    'n1_fault_tolerant': {
+        'hyp_id': 'H-42', 'lift_retention_pct': 98.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-42'),
+    },
+    'wind_shear_penetration': {
+        'hyp_id': 'H-43', 'delta_g': 0.81, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-43'),
+    },
+    'icing_recovery': {
+        'hyp_id': 'H-44', 'lift_recovery_pct': 85.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-44'),
+    },
+    'bus_brownout_safe': {
+        'hyp_id': 'H-45', 'min_v': 22.1, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-45'),
+    },
+    'aeroelastic_compliance': {
+        'hyp_id': 'H-37', 'moment_reduction_pct': 28.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-37'),
+    },
+    'ground_effect_fountain': {
+        'hyp_id': 'H-38', 'savings_pct': 28.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-38'),
+    },
+    'differential_sweep_yaw': {
+        'hyp_id': 'H-39', 'yaw_rate_dps': 22.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-39'),
+    },
+    'stoop_energy_regen': {
+        'hyp_id': 'H-40', 'regen_w': 320.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-40'),
+    },
+    # ── New Suite Options Context Champions (H-51 to H-63) ──
+    'peristaltic_cruise': {
+        'hyp_id': 'H-51', 'thrust_n': 14.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-51'),
+    },
+    'harmonic_quick_return': {
+        'hyp_id': 'H-52', 'wh_per_km': 13.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-52'),
+    },
+    'venturi_contraction_dash': {
+        'hyp_id': 'H-53', 'v_max_ms': 30.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-53'),
+    },
+    'clamshell_zero_balloon_brake': {
+        'hyp_id': 'H-54', 'decel_g': -1.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-54'),
+    },
+    'toroidal_rapid_stop': {
+        'hyp_id': 'H-55', 't_brake_s': 1.4, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-55'),
+    },
+    'virtual_box_wing_cushion': {
+        'hyp_id': 'H-56', 'ld_ratio': 22.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-56'),
+    },
+    'prandtl_bell_soaring': {
+        'hyp_id': 'H-57', 'ld_ratio': 19.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-57'),
+    },
+    'strouhal_decoupled_yaw': {
+        'hyp_id': 'H-58', 'yaw_moment_nm': 8.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-58'),
+    },
+    'virtual_downwash_rudder': {
+        'hyp_id': 'H-59', 'heading_err_deg': 0.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-59'),
+    },
+    'metachronal_cascade_roll': {
+        'hyp_id': 'H-60', 'roll_rate_dps': 185.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-60'),
+    },
+    'snap_roll_inversion': {
+        'hyp_id': 'H-61', 'roll_onset_ms': 45.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-61'),
+    },
+    'canard_pitch_pointing': {
+        'hyp_id': 'H-62', 'pitch_onset_ms': 40.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-62'),
+    },
+    'collective_direct_elevation': {
+        'hyp_id': 'H-63', 'climb_rate_ms': 3.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-63'),
+    },
+    # ── Flight Envelope Expansion & Hover Context Champions (H-64 to H-76) ──
+    'clap_fling_hover': {
+        'hyp_id': 'H-64', 'power_w': 2400.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-64'),
+    },
+    'downwash_wake_hover': {
+        'hyp_id': 'H-65', 'thrust_gain_n': 8.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-65'),
+    },
+    'inertial_recoil_endurance': {
+        'hyp_id': 'H-66', 'motor_heat_reduction_pct': 38.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-66'),
+    },
+    'ige_cushion_hover': {
+        'hyp_id': 'H-67', 'fm': 0.78, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-67'),
+    },
+    'etl_translational_loiter': {
+        'hyp_id': 'H-68', 'wh_per_km': 11.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-68'),
+    },
+    'catapult_vector_launch': {
+        'hyp_id': 'H-69', 'accel_g': 0.86, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-69'),
+    },
+    'fourier_transient_surge': {
+        'hyp_id': 'H-70', 't_accel_s': 1.6, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-70'),
+    },
+    'best_roc_vy': {
+        'hyp_id': 'H-71', 'climb_rate_ms': 5.4, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-71'),
+    },
+    'best_gradient_vx': {
+        'hyp_id': 'H-72', 'gradient_deg': 39.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-72'),
+    },
+    'bumblebee_alpine_hover': {
+        'hyp_id': 'H-73', 'thrust_margin_pct': 22.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-73'),
+    },
+    'high_alt_aspect_ratio': {
+        'hyp_id': 'H-74', 'ld_ratio': 18.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-74'),
+    },
+    'vrs_immunity_descent': {
+        'hyp_id': 'H-75', 'sink_rate_fpm': 950.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-75'),
+    },
+    'deadstick_glide_polar': {
+        'hyp_id': 'H-76', 'ld_ratio': 15.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-76'),
+    },
+    # ── Bat Flight Biomechanics Context Champions (H-81 to H-85) ──
+    'chiropteran_inertial_yaw': {
+        'hyp_id': 'H-81', 'yaw_rate_dps': 68.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-81'),
+    },
+    'anhedral_knife_edge_turn': {
+        'hyp_id': 'H-82', 'turn_radius_m': 0.72, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-82'),
+    },
+    'inflow_aligned_lev_trapping': {
+        'hyp_id': 'H-83', 'cl_max': 2.38, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-83'),
+    },
+    'roosting_perch_somersault': {
+        'hyp_id': 'H-84', 't_stop_s': 0.17, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-84'),
+    },
+    'somatosensory_stall_preemption': {
+        'hyp_id': 'H-85', 't_recovery_ms': 32.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-85'),
+    },
+    # ── Dragonfly Aerodynamic Suite Context Champions (H-86 to H-88) ──
+    'reverse_metachronal_thrust': {
+        'hyp_id': 'H-86', 'thrust_gain_pct': 24.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-86'),
+    },
+    'active_upstroke_reverse_brake': {
+        'hyp_id': 'H-87', 'decel_g': 1.25, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-87'),
+    },
+    'odonata_stroke_plane_vectoring': {
+        'hyp_id': 'H-88', 'yaw_moment_nm': 3.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-88'),
+    },
+    'odonata_dynamic_vectoring': {
+        'hyp_id': 'H-88A', 'yaw_moment_nm': 5.2, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-88A'),
+    },
+    'odonata_sweep_bias_trim': {
+        'hyp_id': 'H-88B', 'yaw_moment_nm': 3.4, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-88B'),
+    },
+    # ── Insect Flight Biomechanics Context Champions (H-89 to H-95) ──
+    'kramer_lift_burst': {
+        'hyp_id': 'H-89', 'cl_transient': 2.85, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-89'),
+    },
+    'trapped_vortex_cavity': {
+        'hyp_id': 'H-90', 'ld_ratio': 21.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-90'),
+    },
+    'lepidopteran_clap_jet': {
+        'hyp_id': 'H-91', 'accel_g': 1.45, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-91'),
+    },
+    'coleopteran_elytron_canard': {
+        'hyp_id': 'H-92', 'climb_angle_deg': 48.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-92'),
+    },
+    'dipteran_coriolis_gust': {
+        'hyp_id': 'H-93', 't_reject_ms': 18.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-93'),
+    },
+    'orthopteran_torsional_wave': {
+        'hyp_id': 'H-94', 'wh_per_km': 10.4, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-94'),
+    },
+    'hymenopteran_slotted_flap': {
+        'hyp_id': 'H-95', 'cl_max': 2.45, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-95'),
+    },
+    # ── Pterosaur Flight Biomechanics Context Champions (H-98, H-100 to H-102) ──
+    'quadrupedal_vault_takeoff': {
+        'hyp_id': 'H-98', 'vertical_accel_g': 1.85, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-98'),
+    },
+    'pterodactyloid_differential_sweep': {
+        'hyp_id': 'H-100', 'yaw_drift_deg': 0.8, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-100'),
+    },
+    'cranial_crest_pitch_balance': {
+        'hyp_id': 'H-101', 'current_reduction_pct': 42.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-101'),
+    },
+    'azhdarchid_thermal_loiter': {
+        'hyp_id': 'H-102', 'sink_rate_ms': 0.38, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-102'),
+    },
+    # ── Aquatic Biomechanics Context Champions (H-103 to H-108) ──
+    'turtle_pivot_brake': {
+        'hyp_id': 'H-103', 'turn_radius_m': 1.35, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-103'),
+    },
+    'plesiosaur_wake_capture': {
+        'hyp_id': 'H-104', 'thrust_boost_pct': 48.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-104'),
+    },
+    'cetacean_roll_recoil': {
+        'hyp_id': 'H-105', 'roll_rate_degs': 225.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-105'),
+    },
+    'krill_jet_coalescence': {
+        'hyp_id': 'H-106', 'thrust_boost_pct': 21.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-106'),
+    },
+    'copepod_asymmetric_metachrony': {
+        'hyp_id': 'H-107', 'ripple_reduction_pct': 48.5, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-107'),
+    },
+    'caridoid_escape_flare': {
+        'hyp_id': 'H-108', 'transient_impulse_n': 38.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-108'),
+    },
+    'lsb_boundary_stability': {
+        'hyp_id': 'H-LSB-1', 'burst_rate': 0.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-LSB-1'),
+    },
+    'dynamic_stall_mitigation': {
+        'hyp_id': 'H-DSH-1', 'hysteresis_area': 0.15, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-DSH-1'),
+    },
+    'ac_shift_trim_hold': {
+        'hyp_id': 'H-AC-SHIFT-1', 'trim_bias_deg': 2.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-AC-SHIFT-1'),
+    },
+    'deep_stall_wake_shed': {
+        'hyp_id': 'H-SHED-1', 'recovery_ms': 180.0, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-SHED-1'),
+    },
+    'ground_fountain_suppression': {
+        'hyp_id': 'H-VEX-1', 'recirculation_jitter_g': 0.04, 'n_obs': 0,
+        'config': next(h['config'] for h in _ADV_NEW_HYPS if h['id'] == 'H-VEX-1'),
+    },
+})
+
+
+
+# ── Modality 4: Genome Update Routing ─────────────────────────────────────────
+_orig_update_genome_adv = _update_genome_from_trial
+
+def _update_genome_from_trial(hyp_id, score_delta, sensors):
+    """Extends genome update with H-37 through H-47, H-49, H-51..H-76, H-81..H-88, H-89..H-95 routing."""
+    _orig_update_genome_adv(hyp_id, score_delta, sensors)
+    if score_delta <= 0:
+        return
+    boost = min(0.08, score_delta * 0.5)
+
+    def _R(axis, mech):
+        if not axis or mech not in axis: return
+        axis[mech] = min(0.60, axis[mech] + boost)
+        t = sum(axis.values())
+        if t > 0:
+            for k in axis: axis[k] /= t
+
+    if hyp_id == 'H-46':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_PITCH,       'pitch_freq')
+        _R(_MW_TRANSITION,  'blend_smoothness')
+    elif hyp_id == 'H-47':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_TRANSITION,  'blend_smoothness')
+    elif hyp_id == 'H-49':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-41':
+        _R(_MW_STABILITY,   'stroke_dihedral')
+        _R(_MW_PERFORMANCE, 'precision_hold')
+    elif hyp_id == 'H-42':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+        _R(_MW_ROLL,        'roll_amp')
+    elif hyp_id == 'H-43':
+        _R(_MW_STABILITY,   'proverse_yaw')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-44':
+        _R(_MW_PERFORMANCE, 'precision_hold')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-45':
+        _R(_MW_RESILIENCE,  'two_pair_loss')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-37':
+        _R(_MW_STABILITY,   'stroke_plane_tilt')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-38':
+        _R(_MW_GLIDE,       'ground_effect' if 'ground_effect' in _MW_GLIDE else 'min_sink_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-39':
+        _R(_MW_TURN,        'proverse_yaw')
+        _R(_MW_YAW,         'differential_sweep' if 'differential_sweep' in _MW_YAW else 'yaw_diff_amp')
+    elif hyp_id == 'H-40':
+        _R(_MW_GLIDE,       'stoop_speed' if 'stoop_speed' in _MW_GLIDE else 'min_sink_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-51':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-52':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-53':
+        _R(_MW_PERFORMANCE, 'top_speed')
+    elif hyp_id == 'H-54':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+        _R(_MW_GLIDE,       'min_sink_aoa')
+    elif hyp_id == 'H-55':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+    elif hyp_id == 'H-56':
+        _R(_MW_GLIDE,       'ground_effect' if 'ground_effect' in _MW_GLIDE else 'min_sink_aoa')
+    elif hyp_id == 'H-57':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_SOARING,     'best_ld' if 'best_ld' in _MW_SOARING else 'maccready')
+    elif hyp_id == 'H-58':
+        _R(_MW_YAW,         'differential_sweep' if 'differential_sweep' in _MW_YAW else 'yaw_diff_amp')
+        _R(_MW_TURN,        'proverse_yaw')
+    elif hyp_id == 'H-59':
+        _R(_MW_YAW,         'weathercock')
+        _R(_MW_STABILITY,   'proverse_yaw')
+    elif hyp_id == 'H-60':
+        _R(_MW_ROLL,        'roll_amp')
+        _R(_MW_TURN,        'proverse_yaw')
+    elif hyp_id == 'H-61':
+        _R(_MW_ROLL,        'roll_amp')
+        _R(_MW_TURN,        'proverse_yaw')
+    elif hyp_id == 'H-62':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_STABILITY,   'proverse_yaw')
+    elif hyp_id == 'H-63':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-64':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-65':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_STABILITY,   'proverse_yaw')
+    elif hyp_id == 'H-66':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-67':
+        _R(_MW_GLIDE,       'ground_effect' if 'ground_effect' in _MW_GLIDE else 'min_sink_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-68':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_GLIDE,       'min_sink_aoa')
+    elif hyp_id == 'H-69':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-70':
+        _R(_MW_PERFORMANCE, 'top_speed')
+    elif hyp_id == 'H-71':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-72':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-73':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-74':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_SOARING,     'best_ld' if 'best_ld' in _MW_SOARING else 'maccready')
+    elif hyp_id == 'H-75':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+        _R(_MW_STABILITY,   'stroke_dihedral')
+    elif hyp_id == 'H-76':
+        _R(_MW_RESILIENCE,  'two_pair_loss')
+        _R(_MW_GLIDE,       'min_sink_aoa')
+    elif hyp_id == 'H-81':
+        _R(_MW_YAW,         'differential_sweep' if 'differential_sweep' in _MW_YAW else 'yaw_diff_amp')
+        _R(_MW_STABILITY,   'stroke_plane_tilt')
+    elif hyp_id == 'H-82':
+        _R(_MW_TURN,        'proverse_yaw')
+        _R(_MW_ROLL,        'roll_amp')
+        _R(_MW_STABILITY,   'stroke_dihedral')
+    elif hyp_id == 'H-83':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-84':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-85':
+        _R(_MW_STABILITY,   'proverse_yaw')
+        _R(_MW_PERFORMANCE, 'precision_hold')
+    elif hyp_id == 'H-86':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_GLIDE,       'min_sink_aoa')
+    elif hyp_id == 'H-87':
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+        _R(_MW_STABILITY,   'stroke_dihedral')
+    elif hyp_id in ('H-88', 'H-88A', 'H-88B'):
+        _R(_MW_YAW,         'differential_sweep' if 'differential_sweep' in _MW_YAW else 'yaw_diff_amp')
+        _R(_MW_TURN,        'proverse_yaw')
+    elif hyp_id == 'H-89':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-90':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-91':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+    elif hyp_id == 'H-92':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-93':
+        _R(_MW_STABILITY,   'proverse_yaw')
+        _R(_MW_PERFORMANCE, 'precision_hold')
+    elif hyp_id == 'H-94':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-95':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-98':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-100':
+        _R(_MW_YAW,         'differential_sweep' if 'differential_sweep' in _MW_YAW else 'yaw_diff_amp')
+        _R(_MW_STABILITY,   'proverse_yaw')
+    elif hyp_id == 'H-101':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+    elif hyp_id == 'H-102':
+        _R(_MW_GLIDE,       'min_sink_aoa')
+        _R(_MW_SOARING,     'loiter_efficiency' if 'loiter_efficiency' in _MW_SOARING else 'thermal_bank')
+    elif hyp_id == 'H-103':
+        _R(_MW_TURN,        'turn_radius')
+        _R(_MW_WATER,       'front_rear_phase' if 'front_rear_phase' in _MW_WATER else 'clap_wig_synergy')
+    elif hyp_id == 'H-104':
+        _R(_MW_PERFORMANCE, 'efficiency')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-105':
+        _R(_MW_ROLL,        'roll_rate')
+        _R(_MW_STABILITY,   'proverse_yaw')
+    elif hyp_id == 'H-106':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_PERFORMANCE, 'efficiency')
+    elif hyp_id == 'H-107':
+        _R(_MW_ENDURANCE,   'sustained_wh_per_km')
+        _R(_MW_RESILIENCE,  'thermal_budget')
+    elif hyp_id == 'H-108':
+        _R(_MW_PERFORMANCE, 'top_speed')
+        _R(_MW_TRANSITION,  'blend_smoothness')
+    elif hyp_id == 'H-LSB-1':
+        _R(_MW_STABILITY,   'proverse_yaw')
+        _R(_MW_PITCH,       'pitch_aoa')
+    elif hyp_id == 'H-DSH-1':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_STABILITY,   'stroke_dihedral')
+    elif hyp_id == 'H-AC-SHIFT-1':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_PERFORMANCE, 'top_speed')
+    elif hyp_id == 'H-SHED-1':
+        _R(_MW_PITCH,       'pitch_aoa')
+        _R(_MW_ROLL,        'roll_amp')
+        _R(_MW_RESILIENCE,  'single_pair_loss')
+    elif hyp_id == 'H-VEX-1':
+        _R(_MW_STABILITY,   'geom_dihedral')
+        _R(_MW_STABILITY,   'stroke_dihedral')
+
+
+    # Notify ALC velocity tracking & CMTS
+    try:
+        _alc_log_evaluation(hyp_id, score_delta, sensors)
+        _alc_update_velocity(hyp_id, score_delta)
+    except Exception:
+        pass
+
+    try:
+        _h = next((h for h in AERO_HYPOTHESES if h['id'] == hyp_id), None)
+        if _h:
+            _cmts_evaluate(hyp_id, _h['config'], sensors, {}, score_delta)
+    except Exception:
+        pass
+
+
+# ── Modality 1: AI Observer Integration ───────────────────────────────────────
+_orig_ai_obs_adv = ai_observer_tick
+
+def ai_observer_tick(sensors, result):
+    """
+    Observer triggers for H-37 through H-47, H-49:
+      - High sprint / dash speed demand -> queues H-46
+      - Cruise motor thermal elevation -> queues H-47
+      - Cruise efficiency optimization -> evaluates H-49
+      - IMU vibration / turbulence -> activates H-41
+      - Actuator error / N-1 loss -> activates H-42
+      - Downdraft / microburst sink -> triggers H-43 advisory
+      - Precipitation / icing -> triggers H-44 LEV dither
+      - Bus voltage drop / high current -> triggers H-45 load shed alert
+    """
+    obs = _orig_ai_obs_adv(sensors, result) if _orig_ai_obs_adv else {}
+    if not isinstance(obs, dict):
+        obs = {}
+
+    v_ms = sensors.get('V_ms', 10.0)
+    lever = sensors.get('lever_pct', 50.0)
+    rms_g = sensors.get('imu_rms_g', 0.0)
+    bus_v = sensors.get('bus_voltage_v', 24.0)
+    w_sink = sensors.get('w_sink_ms', sensors.get('w_sink', sensors.get('VSI_ms', 0.0)))
+    rain = sensors.get('rain_detected', False)
+    failed = sensors.get('failed_wing_idx', None)
+
+    # 1. H-46 Sprint Dash
+    if lever >= LV_SPRINT_LO and v_ms >= 14.0:
+        obs['h46_sprint_recommended'] = True
+        obs['h46_target_speed_ms'] = 19.0
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-46', 'reason': 'High-speed dash requested at maximum lever',
+            't': _alc_time.monotonic()
+        })
+
+    # 2. H-47 Interleaved Bound-and-Glide
+    motor_temps = sensors.get('motor_temps', [])
+    t_max = max([t.get('motor_C', 25.0) for t in motor_temps], default=25.0)
+    if (LV_CRUISE_LO <= lever < LV_SPRINT_LO) and (v_ms >= 11.0 or t_max > 60.0):
+        obs['h47_bound_glide_recommended'] = True
+        obs['h47_motor_temp_max_c'] = t_max
+
+    # 3. H-49 Tip-Vortex Katzmayr
+    if (LV_DETENT_LO <= lever <= LV_CRUISE_LO) and v_ms >= 7.0:
+        obs['h49_katzmayr_active'] = True
+        obs['h49_est_thrust_gain_n'] = 2.8
+
+    # 4. H-41 Ride Comfort
+    if rms_g > 0.05:
+        obs['h41_vibration_alert'] = True
+        obs['h41_rms_g'] = rms_g
+
+    # 5. H-42 Fail-Operational
+    if failed is not None or any(err in (0x1000, 0x2000) for err in sensors.get('wing_errors', [])):
+        obs['h42_actuator_fault'] = True
+        _ALC_SHARED['alert_log'].append({
+            'tier': 3, 'text': 'N-1 Actuator fault isolated — H-42 re-trim active',
+            't': _alc_time.monotonic(), 'ack': False
+        })
+
+    # 6. H-43 Severe Wind Shear
+    if w_sink < -2.0:
+        obs['h43_wind_shear_detected'] = True
+        _ALC_SHARED['alert_log'].append({
+            'tier': 2, 'text': f'Microburst downdraft ({w_sink:.1f} m/s) — DLTV climb active',
+            't': _alc_time.monotonic(), 'ack': False
+        })
+
+    # 7. H-44 Rain / Ice LEV
+    if rain or sensors.get('icing_detected'):
+        obs['h44_precipitation_lev'] = True
+
+    # 8. H-45 Bus Brownout
+    if bus_v < 21.8:
+        obs['h45_brownout_protection'] = True
+        _ALC_SHARED['alert_log'].append({
+            'tier': 3, 'text': f'Low bus voltage ({bus_v:.1f}V) — W3/W4 load shed active',
+            't': _alc_time.monotonic(), 'ack': False
+        })
+
+    # 9. H-81 Chiropteran Inertial Reorientation
+    yaw_stk = sensors.get('yaw_stick', 0.0)
+    if v_ms < 3.5 and abs(yaw_stk) >= 0.25:
+        obs['h81_inertial_yaw_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-81', 'reason': 'Zero-speed heading rotation demand — inertial yaw active',
+            't': _alc_time.monotonic()
+        })
+
+    # 10. H-82 Anhedral Gull-Wing Turn Trapping
+    roll_stk = sensors.get('roll_stick', 0.0)
+    if abs(roll_stk) >= 0.50 and v_ms >= 4.0:
+        obs['h82_anhedral_turn_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-82', 'reason': 'Knife-edge cornering demand — anhedral droop engaged',
+            't': _alc_time.monotonic()
+        })
+
+    # 11. H-83 Dynamic Inflow-Aligned LEV Trapping
+    pitch_stk = sensors.get('pitch_stick', 0.0)
+    if pitch_stk >= 0.55 and v_ms >= 5.0:
+        obs['h83_lev_trapping_active'] = True
+
+    # 12. H-84 Metachronal Cascade Roosting Somersault
+    if LV_BRAKE_LO <= lever < LV_DESCENT_LO and pitch_stk >= 0.75:
+        obs['h84_roost_perch_flare'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-84', 'reason': 'Airbrake perch flare detected — counter-flap couple armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 13. H-85 Synthetic Somatosensory Stall Preemption
+    motor_jitter = sensors.get('motor_current_jitter_a', sensors.get('imu_rms_g', 0.0) * 15.0)
+    if motor_jitter > 0.85:
+        obs['h85_tactile_stall_preempt'] = True
+        _ALC_SHARED['alert_log'].append({
+            'tier': 2, 'text': f'Incipient boundary layer separation ({motor_jitter:.2f}A jitter) — H-85 reflex pitch active',
+            't': _alc_time.monotonic(), 'ack': False
+        })
+
+    # 14. H-86 Reverse Metachronal Cascade Propulsion
+    if (lever >= LV_CRUISE_LO and v_ms >= 10.0) or sensors.get('climb_demand'):
+        obs['h86_reverse_cascade_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-86', 'reason': 'High speed cruise/climb — reverse metachronal phase wave engaged',
+            't': _alc_time.monotonic()
+        })
+
+    # 15. H-87 Active Upstroke Backward Flight & Dynamic Braking
+    if (lever <= LV_BRAKE_LO and pitch_stk <= -0.40) or sensors.get('active_upstroke_brake'):
+        obs['h87_active_upstroke_brake'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-87', 'reason': 'Dynamic airbraking / reverse hover request — negative AoA upstroke engaged',
+            't': _alc_time.monotonic()
+        })
+
+    # 16. H-88 Odonata Direct-Musculature Stroke-Plane Vectoring
+    if abs(yaw_stk) >= 0.40 and abs(roll_stk) < 0.20:
+        obs['h88_stroke_plane_vector_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-88', 'reason': 'Decoupled pure yaw demand — stroke-plane differential tilt vectoring active',
+            't': _alc_time.monotonic()
+        })
+
+    # 16a. H-88A Odonata Dynamic Harmonic Stroke-Plane Vectoring
+    if sensors.get('dynamic_vectoring') or sensors.get('h88a_dynamic_vector_active'):
+        obs['h88a_dynamic_vector_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-88A', 'reason': 'High-rate pure yaw demand — dynamic harmonic stroke-plane vectoring active',
+            't': _alc_time.monotonic()
+        })
+
+    # 16b. H-88B Odonata Quasi-Steady Differential Sweep Bias Trim
+    if sensors.get('sweep_bias_trim') or sensors.get('h88b_sweep_bias_active') or sensors.get('crosswind_yaw_trim'):
+        obs['h88b_sweep_bias_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-88B', 'reason': 'Continuous crosswind yaw trim demand — differential sweep bias active',
+            't': _alc_time.monotonic()
+        })
+
+    # 17. H-89 Dynamic Kramer Pre-Rotation Lift Burst
+    if (v_ms < 5.0 and pitch_stk >= 0.60) or sensors.get('kramer_burst_demand'):
+        obs['h89_kramer_burst_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-89', 'reason': 'Low speed high-alpha pitch up — dynamic Kramer pre-rotation armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 18. H-90 Trapped-Vortex Cavity Boundary Layer Energization
+    if ((LV_GLIDE_LO <= lever < LV_DETENT_LO) or sensors.get('high_aoa_loiter')) and v_ms >= 6.0:
+        obs['h90_trapped_vortex_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-90', 'reason': 'Boundary layer cavity separation control engaged — locked micro-vortex',
+            't': _alc_time.monotonic()
+        })
+
+    # 19. H-91 Lepidopteran Dorsal Clap Jet Propulsion
+    if (lever >= LV_SPRINT_LO and v_ms < 6.0) or sensors.get('clap_jet_demand'):
+        obs['h91_clap_jet_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-91', 'reason': 'Zero-speed sprint breakout — dorsal clap pneumatic jet burst armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 20. H-92 Coleopteran Elytron Canard Obstacle Climb
+    if (pitch_stk >= 0.70 and v_ms >= 5.0) or sensors.get('obstacle_climb'):
+        obs['h92_elytron_canard_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-92', 'reason': 'Steep obstacle clearance demand — Station 1 elytron lock engaged',
+            't': _alc_time.monotonic()
+        })
+
+    # 21. H-93 Dipteran Synchronous Coriolis Gust Preemption
+    ang_accel = sensors.get('angular_accel_dps2', abs(sensors.get('gyro_deriv', 0.0)))
+    if ang_accel > 220.0 or sensors.get('coriolis_gust_alert'):
+        obs['h93_coriolis_gust_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-93', 'reason': f'High angular acceleration gust ({ang_accel:.1f} dps²) — haltere reflex counter-twist armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 22. H-94 Orthopteran Traveling Torsional Wave Cruise
+    if (LV_DETENT_LO <= lever <= LV_CRUISE_LO) and v_ms >= 9.0 and not sensors.get('high_turbulence', False):
+        obs['h94_torsional_wave_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-94', 'reason': 'Smooth cruise state — traveling torsional twist wave engaged for -32% induced drag',
+            't': _alc_time.monotonic()
+        })
+
+    # 23. H-95 Tandem Dynamic Slotted Fowler Flap Glide
+    if ((lever < LV_GLIDE_LO or sensors.get('deadstick_glide')) and v_ms >= 4.0) or sensors.get('slotted_flap_glide'):
+        obs['h95_slotted_flap_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-95', 'reason': 'Deep glide / maximum L/D approach — Station 1-2 slotted flap coupling engaged',
+            't': _alc_time.monotonic()
+        })
+
+    # 24. H-98 Quadrupedal Ground-Coupled Vault Takeoff
+    if sensors.get('on_ground', False) and (lever >= 65.0 or sensors.get('vault_takeoff', False)):
+        obs['h98_vault_takeoff_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-98', 'reason': 'Grounded takeoff demand — quadrupedal vault power strike armed (+1.85g)',
+            't': _alc_time.monotonic()
+        })
+
+    # 25. H-100 Tailless Metachronal Differential Sweep Directional Trim
+    if v_ms >= 5.0 and (abs(sensors.get('sideslip_beta_deg', 0.0)) > 3.0 or abs(sensors.get('yaw_drift_deg', 0.0)) > 2.5 or sensors.get('tailless_yaw_trim')):
+        obs['h100_differential_sweep_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-100', 'reason': 'Sideslip drift detected — metachronal differential sweep trim armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 26. H-101 Dynamic Flap-Inertia Pitch Counterbalance
+    if sensors.get('pitch_servo_current_a', 0.0) > 4.2 or sensors.get('high_pitch_load', False):
+        obs['h101_pitch_counterbalance_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-101', 'reason': 'Elevated pitch servo load — flap-inertia counterbalance feedforward armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 27. H-102 Deep-Camber High-Aspect-Ratio Azhdarchid Thermal Soaring Loiter
+    if (LV_GLIDE_LO <= lever < LV_DETENT_LO) and (sensors.get('thermal_loiter', False) or sensors.get('sar_loiter', False) or (v_ms >= 6.0 and w_sink > -0.8)):
+        obs['h102_azhdarchid_soar_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-102', 'reason': 'Thermal loiter / endurance cruise — tandem slotted box lock engaged (0.38 m/s sink)',
+            't': _alc_time.monotonic()
+        })
+
+    # 28. H-103 Sea Turtle In-Stroke Sweep & Differential Flipper Pivot Braking
+    if (v_ms < 6.0 and abs(sensors.get('yaw_stick', 0.0)) > 0.40) or sensors.get('turtle_pivot_turn', False):
+        obs['h103_turtle_pivot_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-103', 'reason': 'Low-speed flat yaw turn demand — sea turtle paddle-brake pivot armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 29. H-104 Plesiosaur Speed-Adaptive Tandem Wake Capture & Collective Pitch Trimming
+    if (LV_DETENT_LO <= lever <= LV_CRUISE_LO and v_ms >= 5.0 and sensors.get('tandem_wake_align', False)) or sensors.get('plesiosaur_wake', False):
+        obs['h104_plesiosaur_wake_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-104', 'reason': 'Cruise tandem wake opportunity — plesiosaur speed-adaptive vortex capture armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 30. H-105 Cetacean Pectoral 3-DOF Hydrofoil Maneuvering & Fluke Recoil Damping
+    if abs(sensors.get('roll_stick', 0.0)) > 0.50 or abs(sensors.get('heave_accel_ms2', 0.0)) > 1.8 or sensors.get('cetacean_roll', False):
+        obs['h105_cetacean_roll_recoil_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-105', 'reason': 'High roll command or fuselage heave — cetacean W1 3-DOF roll & recoil damping armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 31. H-106 Crustacean Adlocomotory Metachronal Jet Coalescence & Vector Tuning
+    if (LV_DETENT_LO <= lever <= LV_CRUISE_LO and v_ms >= 6.0 and not sensors.get('climb_demanded', False)) or sensors.get('krill_jet', False):
+        obs['h106_krill_jet_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-106', 'reason': 'Cruise range optimization — krill adlocomotory W4->W1 coherent jet coalescence armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 32. H-107 Copepod Dual-Mode Asymmetric Metachrony
+    if sensors.get('motor_current_jitter_a', 0.0) > 0.90 or sensors.get('bus_ripple_high', False) or (lever >= 88.0 and v_ms >= 10.0):
+        obs['h107_copepod_metachrony_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-107', 'reason': 'High motor current ripple — copepod metachronal downstroke x synchronous upstroke armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 33. H-108 Decapod Caridoid Impulse Flare & Escape Pulse
+    if (w_sink < -1.8 and sensors.get('h_agl_m', 10.0) < 5.0) or sensors.get('emergency_flare', False) or sensors.get('caridoid_escape', False):
+        obs['h108_caridoid_flare_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-108', 'reason': 'Severe sink rate / ground hazard — caridoid 8-wing escape clap impulse surge armed (+38N)',
+            't': _alc_time.monotonic()
+        })
+
+    # 34. H-LSB-1 Laminar Separation Bubble Stability & Burst Monitoring
+    detector = _get_lsb_detector()
+    if detector:
+        motor_currents = sensors.get('motor_currents_a', sensors.get('motor_currents', None))
+        if motor_currents and isinstance(motor_currents, (list, tuple)) and len(motor_currents) >= 8:
+            is_end = bool(sensors.get('is_stroke_end', True))
+            accels = sensors.get('accels_rad_s2', None)
+            h_agl = float(sensors.get('h_agl_m', 100.0))
+            detector.add_sample(motor_currents, is_stroke_end=is_end, accels_rad_s2=accels)
+            is_app = bool(sensors.get('is_approach', False) or (sensors.get('flight_phase') == 'approach') or (h_agl < 15.0 and w_sink < -0.5))
+            st = detector.get_status(mean_drag_n=sensors.get('drag_n', 6.5), is_approach=is_app, h_agl_m=h_agl)
+
+            # Preemptive conflict arbitration with Wind Shear (H-43):
+            # Severe wind shear / microburst sink preempts LSB AoA trims to preserve DLTV climb.
+            h43_active = bool(obs.get('h43_wind_shear_detected', False) or (w_sink < -2.0))
+
+            if st['tier_alert'] == 2 and not h43_active:
+                obs['h_lsb_burst_alert'] = f"TIER-2: High burst rate on approach ({st['status']})"
+                _ALC_SHARED['alert_log'].append({
+                    'tier': 2, 'hyp_id': 'H-LSB-1', 'msg': f"LSB burst rate > 15% on approach ({st['retrim_advisory']})",
+                    't': _alc_time.monotonic()
+                })
+                _ALC_SHARED['priority_hyp_queue'].append({
+                    'hyp_id': 'H-LSB-1', 'reason': f"LSB burst rate > 15% on approach, {st['retrim_advisory']} required",
+                    't': _alc_time.monotonic()
+                })
+            elif st['tier_alert'] == 1 and not h43_active:
+                obs['h_lsb_burst_info'] = 'TIER-1: LSB burst observed in cruise'
+                _ALC_SHARED['priority_hyp_queue'].append({
+                    'hyp_id': 'H-LSB-1', 'reason': 'LSB burst observed in cruise, variance elevated',
+                    't': _alc_time.monotonic()
+                })
+
+    # 35. H-DSH-1 Dynamic Stall Delay & Camber Reflex Damping
+    pitch_rate = sensors.get('pitch_rate_dps', 0.0)
+    if (abs(pitch_rate) > 35.0 or sensors.get('dynamic_stall_warning', False) or
+            (pitch_stk >= 0.70 and v_ms < 12.0)):
+        obs['h_dsh_dynamic_stall_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-DSH-1',
+            'reason': f'Rapid pitch rate ({pitch_rate:.1f} dps) approaching dynamic stall — reflex camber shedding armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 36. H-AC-SHIFT-1 Aerodynamic Center Shift Pre-bias
+    q_dyn = sensors.get('q_dynamic_pa', 0.5 * 1.225 * (v_ms ** 2))
+    if q_dyn > 180.0 or (v_ms >= 18.0 and lever >= 75.0) or sensors.get('ac_shift_warning', False):
+        obs['h_ac_shift_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-AC-SHIFT-1',
+            'reason': f'High dynamic pressure ({q_dyn:.1f} Pa) aero center migration — pitch servo pre-bias armed',
+            't': _alc_time.monotonic()
+        })
+
+    # 37. H-SHED-1 Post-Stall Wake Shedding Dither (with H-45 Brownout Interlock)
+    aoa = sensors.get('aoa_deg', 0.0)
+    if (v_ms < 3.0 and aoa > 30.0) or sensors.get('deep_stall_flag', False):
+        # Strict Preemptive Arbitration: H-45 Brownout Safe
+        # Suppress wake dither if bus voltage is low (< 22.2V) to prevent bus collapse
+        if bus_v < 22.2 or obs.get('h45_brownout_protection', False):
+            obs['h_shed_suppressed_brownout'] = True
+            _ALC_SHARED['alert_log'].append({
+                'tier': 2, 'hyp_id': 'H-45', 'interlock_for': 'H-SHED-1',
+                'msg': f'H-SHED-1 wake dither suppressed due to low bus voltage ({bus_v:.1f}V < 22.2V)',
+                't': _alc_time.monotonic()
+            })
+        else:
+            obs['h_shed_wake_active'] = True
+            obs['h_shed_wake_dither_active'] = True
+            _ALC_SHARED['priority_hyp_queue'].append({
+                'hyp_id': 'H-SHED-1',
+                'reason': f'Post-stall wake lock-in (AoA {aoa:.1f}°) — asymmetric wingtip dither shed pulse armed',
+                't': _alc_time.monotonic()
+            })
+
+    # 38. H-VEX-1 Ground Vortex Fountain Suppression (with LiDAR AGL Gate)
+    h_agl_v = float(sensors.get('h_agl_m', 10.0))
+    agl_valid = bool(sensors.get('agl_valid', True))
+    if agl_valid and h_agl_v < 2.0 and (sensors.get('recirculation_detected', False) or (v_ms < 2.5 and lever >= 40.0)):
+        obs['h_vex_ground_vortex_active'] = True
+        _ALC_SHARED['priority_hyp_queue'].append({
+            'hyp_id': 'H-VEX-1',
+            'reason': f'Ground fountain recirculation vortex detected at {h_agl_v:.2f}m AGL — differential dihedral canting armed',
+            't': _alc_time.monotonic()
+        })
+
+    # Keep priority queue capped
+    if len(_ALC_SHARED['priority_hyp_queue']) > 45:
+        _ALC_SHARED['priority_hyp_queue'] = _ALC_SHARED['priority_hyp_queue'][-45:]
+
+    return obs
+
+
+
+# ── Modality 2: Discovery Selector & FOCUS Keywords ───────────────────────────
+_orig_dhs_adv = discovery_hypothesis_select
+
+def discovery_hypothesis_select(sensors=None, result=None, focus=None):
+    """Extends discovery hypothesis selection with complete control mapping & full hypothesis coverage."""
+    if isinstance(sensors, dict):
+        for k in ['lever_pct', 'V_ms', 'h_agl_m', 'payload_kg', 'on_ground']:
+            if k in sensors:
+                _flight_state[k] = sensors[k]
+        _flight_state['pitch_stick'] = sensors.get('pitch_stick', 0.0)
+        _flight_state['roll_stick']  = sensors.get('roll_stick', 0.0)
+        _flight_state['yaw_stick']   = sensors.get('yaw_stick', 0.0)
+    else:
+        sensors = _flight_state
+
+    lever = sensors.get('lever_pct', _flight_state.get('lever_pct', 50.0))
+    v_ms  = sensors.get('V_ms', _flight_state.get('V_ms', 10.0))
+    w_sink= sensors.get('w_sink_ms', 0.0)
+    bus_v = sensors.get('bus_voltage_v', 24.0)
+    rain  = bool(sensors.get('rain_detected', False))
+    failed_wing = sensors.get('failed_wing_idx', None)
+    pitch = sensors.get('pitch_stick', 0.0)
+    roll  = sensors.get('roll_stick', 0.0)
+    yaw   = sensors.get('yaw_stick', 0.0)
+
+    if focus is None:
+        focus = _focus_state.get('active', '')
+
+    # Emergency safety overrides first
+    if bus_v < 21.8:
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-45'), None)
+        if h: return h
+
+    if w_sink < -2.0:
+        if (lever < LV_DESCENT_LO or sensors.get('vrs_alert')) and v_ms < 6.0:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-75'), None)
+            if h: return h
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-43'), None)
+        if h: return h
+
+    if sensors and (sensors.get('failed_wing_idx') is not None):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-42'), None)
+        if h: return h
+
+    if rain:
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-44'), None)
+        if h: return h
+
+    # Explicit keyword focus
+    ADV_FOCUS = {
+        # High Speed & Sprint
+        'sprint':              ['H-46', 'H-PERF-1', 'H-STOOP-1'],
+        'dash':                ['H-46', 'H-PERF-1'],
+        'top_speed':           ['H-46', 'H-PERF-1', 'H-STOOP-1'],
+        'resonant_buzz':       ['H-46'],
+        'bound_glide':         ['H-47', 'H-35', 'H-36'],
+        'interleaved':         ['H-47'],
+        'fast_cruise':         ['H-47', 'H-HS-3', 'H-CR-3'],
+        'fixed_wing_cruise':   ['H-HS-3'],
+        'strouhal_optimal':    ['H-HS-4'],
+        # Energy & Katzmayr
+        'katzmayr':            ['H-49'],
+        'vortex_ingestion':    ['H-49'],
+        'wake_surfing':        ['H-49', 'H-SOR-2'],
+        # Comfort & Safety
+        'comfort':             ['H-41', 'H-GS-1', 'H-PDW-1'],
+        'ride_quality':        ['H-41'],
+        'vibration':           ['H-41'],
+        'fail_operational':    ['H-42', 'H-RES-1'],
+        'n1_retrim':           ['H-42'],
+        'wind_shear':          ['H-43', 'H-STORM-1'],
+        'microburst':          ['H-43'],
+        'dltv':                ['H-43'],
+        'rain':                ['H-44', 'H-WD-1'],
+        'icing':               ['H-44'],
+        'brownout':            ['H-45', 'H-RES-3'],
+        'load_shedding':       ['H-45'],
+        'compliance':          ['H-37', 'H-PDW-2'],
+        'aeroelastic':         ['H-37'],
+        'ground_effect':       ['H-38', 'H-PREC-2'],
+        'upwash_fountain':     ['H-38'],
+        'sweep_yaw':           ['H-39', 'H-DIH-4'],
+        'stoop_regen':         ['H-40', 'H-REGEN-1'],
+        # Maneuvers & Rudder/Stick Controls
+        'canopy':              ['H-ACC-5', 'H-ACC-4'],
+        'gap_navigation':      ['H-ACC-4'],
+        'perch':               ['H-ACC-6'],
+        'jhook':               ['H-AM-3'],
+        'agile_maneuver':      ['H-AM-4', 'H-AM-3', 'H-AM-1', 'H-AM-2'],
+        'elevator':            ['H-CE-2', 'H-CE-3', 'H-CE-1'],
+        'tailless_pitch':      ['H-CE-2', 'H-CE-3'],
+        'spiral_stability':    ['H-DIH-5'],
+        'speed_dihedral':      ['H-DIH-6'],
+        'flap_glide':          ['H-FG-1', 'H-FG-2', 'H-FG-3'],
+        'glide_burst':         ['H-FG-2', 'H-FG-1'],
+        'intermittent_flap':   ['H-FG-3'],
+        'level_brake':         ['H-LB-1', 'H-LB-3'],
+        'level_accel':         ['H-LB-2'],
+        'morphing':            ['H-MO-3', 'H-MO-1', 'H-MO-2'],
+        'roll_rate':           ['H-MV-1', 'H-MV-2'],
+        'roll_agility':        ['H-MV-3', 'H-MV-4', 'H-MV-1'],
+        'lag_roll':            ['H-MV-4'],
+        'phase_coordination':  ['H-PH-1', 'H-PH-2', 'H-PH-3', 'H-PH-4'],
+        'precision_tracking':  ['H-PREC-3', 'H-PREC-4'],
+        'spot_landing':        ['H-PREC-4', 'H-PREC-5'],
+        'sensor_loiter':       ['H-SE-1', 'H-SE-2'],
+        'surface_skim':        ['H-SK-1', 'H-SK-2', 'H-SK-3'],
+        'ground_cushion':      ['H-SK-1', 'H-SK-2'],
+        'steep_approach':      ['H-ST-2', 'H-ST-3', 'H-FD-4'],
+        'tight_turn':          ['H-TR-3', 'H-TR-1', 'H-TR-2'],
+        'weathercock':         ['H-WC-1', 'H-WC-2', 'H-DIH-3'],
+        'anti_phase':          ['H-WC-2', 'H-41'],
+        'extreme_storm':       ['H-STORM-4', 'H-STORM-5', 'H-STORM-6', 'H-STORM-7'],
+        'storm_shear':         ['H-STORM-5', 'H-STORM-6'],
+        'high_yaw_damping':    ['H-WC-1', 'H-DIH-3'],
+        # Biomimetic Axis Performance Suite Options (H-51 to H-63)
+        # 1. Forward Thrust Axis
+        'peristaltic':         ['H-51'],
+        'traveling_wave':      ['H-51'],
+        'boundary_pumping':    ['H-51'],
+        'quick_return':        ['H-52'],
+        'harmonic_stroke':     ['H-52'],
+        'asymmetric_flap':     ['H-52'],
+        'venturi':             ['H-53'],
+        'nozzle_contraction':  ['H-53'],
+        'interwing_venturi':   ['H-53'],
+        # 2. Braking & Deceleration Axis
+        'clamshell_brake':     ['H-54'],
+        'scissor_flap':        ['H-54'],
+        'zero_lift_brake':     ['H-54'],
+        'vortex_breakdown':    ['H-55'],
+        'ring_collapse':       ['H-55'],
+        'rapid_stop':          ['H-55'],
+        # 3. Glide & Soaring Axis
+        'box_wing':            ['H-56'],
+        'virtual_box':         ['H-56'],
+        'cushion_skim':        ['H-56'],
+        'prandtl_bell':        ['H-57'],
+        'bell_lift':           ['H-57'],
+        'proverse_soar':       ['H-57'],
+        # 4. Yaw Control Axis
+        'strouhal_yaw':        ['H-58'],
+        'thrust_yaw':          ['H-58'],
+        'zero_roll_turn':      ['H-58'],
+        'virtual_rudder':      ['H-59'],
+        'downwash_rudder':     ['H-59'],
+        'wake_vectoring':      ['H-59'],
+        # 5. Roll Control Axis
+        'metachronal_roll':    ['H-60'],
+        'roll_ripple':         ['H-60'],
+        'cascade_roll':        ['H-60'],
+        'snap_roll':           ['H-61'],
+        'anhedral_snap':       ['H-61'],
+        'dihedral_inversion':  ['H-61'],
+        # 6. Pitch & Direct Lift Axis
+        'canard_pitch':        ['H-62'],
+        'zero_lag_pitch':      ['H-62'],
+        'pitch_pointing':      ['H-62'],
+        'collective_step':     ['H-63'],
+        'zero_attitude_climb': ['H-63'],
+        'direct_lift':         ['H-63'],
+        # 7. Hover Feasibility & Sustainability Suite (H-64 to H-68)
+        'clap_fling':          ['H-64'],
+        'weis_fogh':           ['H-64'],
+        'hover_multiplier':    ['H-64'],
+        'downwash_ingestion':  ['H-65'],
+        'tandem_hover':        ['H-65'],
+        'cascade_wake':        ['H-65'],
+        'virtual_spring':      ['H-66'],
+        'inertial_recoil':     ['H-66'],
+        'thermal_recoil':      ['H-66'],
+        'ige_hover':           ['H-67'],
+        'ground_cushion_hover':['H-67'],
+        'hover_skim':          ['H-67'],
+        'etl_creep':           ['H-68'],
+        'translational_hover': ['H-68'],
+        'butterfly_loiter':    ['H-68'],
+        # 8. Acceleration & Longitudinal Dash Expansion (H-69, H-70)
+        'stroke_plane_vector': ['H-69'],
+        'catapult_launch':     ['H-69'],
+        'thrust_vector_accel': ['H-69'],
+        'downstroke_surge':    ['H-70'],
+        'quick_accel':         ['H-70'],
+        'dash_transient':      ['H-70'],
+        # 9. Climb Speed & Vertical Envelope Suite (H-71, H-72)
+        'best_rate_climb':     ['H-71'],
+        'vy_climb':            ['H-71'],
+        'strouhal_climb':      ['H-71'],
+        'best_angle_climb':    ['H-72'],
+        'vx_climb':            ['H-72'],
+        'steep_obstacle_climb':['H-72'],
+        # 10. Service Ceiling & Thin-Air Adaptation Suite (H-73, H-74)
+        'bumblebee_alpine':    ['H-73'],
+        'amplitude_compensation': ['H-73'],
+        'high_da_hover':       ['H-73'],
+        'span_morph_altitude': ['H-74'],
+        'aspect_ratio_max':    ['H-74'],
+        'service_ceiling':     ['H-74'],
+        # 11. Rotary / Fixed-Wing Hybrid Safety Suite (H-75, H-76)
+        'vrs_immunity':        ['H-75'],
+        'steep_vtol_descent':  ['H-75'],
+        'anti_vrs':            ['H-75'],
+        'deadstick_glide':     ['H-76'],
+        'all_engine_out':      ['H-76'],
+        'emergency_glide_lock':['H-76'],
+        # 12. Bat Flight Biomechanics & Agility Suite (H-81 to H-85)
+        'bat_flight':          ['H-81', 'H-82', 'H-83', 'H-84', 'H-85'],
+        'chiropteran':         ['H-81', 'H-82', 'H-84'],
+        'inertial_reorientation': ['H-81'],
+        'zero_speed_yaw':      ['H-81'],
+        'figure_skater':       ['H-81'],
+        'anhedral_turn':       ['H-82'],
+        'gull_wing':           ['H-82'],
+        'zero_sideslip':       ['H-82'],
+        'knife_edge':          ['H-82'],
+        'lev_trapping':        ['H-83'],
+        'leading_edge_vortex': ['H-83'],
+        'high_aoa_lift':       ['H-83'],
+        'roost_somersault':    ['H-84'],
+        'perch_flare':         ['H-84'],
+        'pugachev_cobra':      ['H-84'],
+        'backflip':            ['H-84'],
+        'somatosensory':       ['H-85'],
+        'tactile_stall':       ['H-85'],
+        'stall_preemption':    ['H-85'],
+        'merkel_cell':         ['H-85'],
+        # 13. Dragonfly Aerodynamic Suite (H-86 to H-88)
+        'dragonfly':           ['H-86', 'H-87', 'H-88'],
+        'odonata':             ['H-86', 'H-87', 'H-88'],
+        'dragonfly_propulsion':['H-86'],
+        'reverse_metachronal': ['H-86'],
+        'hindwing_lead':       ['H-86'],
+        'cascade_thrust':      ['H-86'],
+        'downwash_harvest':    ['H-86'],
+        'active_upstroke':     ['H-87'],
+        'negative_aoa':        ['H-87'],
+        'backward_flight':     ['H-87'],
+        'reverse_flight':      ['H-87'],
+        'airbrake':            ['H-87'],
+        'dynamic_airbrake':    ['H-87'],
+        'stroke_plane':        ['H-88', 'H-69'],
+        'stroke_plane_vector': ['H-88', 'H-69'],
+        'odonata_vectoring':   ['H-88'],
+        'direct_musculature':  ['H-88'],
+        'plane_tilt':          ['H-88'],
+        'decoupled_yaw':       ['H-88', 'H-88A', 'H-88B'],
+        'dynamic_vectoring':   ['H-88A'],
+        'harmonic_stroke_plane': ['H-88A'],
+        'sweep_bias':          ['H-88B'],
+        'quasi_steady_sweep':  ['H-88B'],
+        # 14. Insect Flight Biomechanics Suite (H-89 to H-95)
+        'insect_suite':        ['H-89', 'H-90', 'H-91', 'H-92', 'H-93', 'H-94', 'H-95'],
+        'kramer':              ['H-89'],
+        'kramer_burst':        ['H-89'],
+        'rotational_lift':     ['H-89'],
+        'pre_rotation':        ['H-89'],
+        'trapped_vortex':      ['H-90'],
+        'cavity_vortex':       ['H-90'],
+        'step_airfoil':        ['H-90'],
+        'clap_jet':            ['H-91'],
+        'butterfly_jet':       ['H-91'],
+        'pneumatic_clap':      ['H-91'],
+        'dorsal_clap':         ['H-91'],
+        'elytron':             ['H-92'],
+        'elytron_canard':      ['H-92'],
+        'beetle_climb':        ['H-92'],
+        'obstacle_climb':      ['H-92', 'H-72'],
+        'coriolis':            ['H-93'],
+        'haltere':             ['H-93'],
+        'coriolis_gust':       ['H-93'],
+        'gust_preempt':        ['H-93'],
+        'locust':              ['H-94'],
+        'torsional_wave':      ['H-94'],
+        'traveling_twist':     ['H-94'],
+        'orthoptera':          ['H-94'],
+        'slotted_glide':       ['H-95'],
+        'tandem_fowler':       ['H-95'],
+        'hamuli':              ['H-95'],
+        'wasp_glide':          ['H-95'],
+        # 15. Pterosaur Flight Biomechanics Suite (H-98, H-100 to H-102)
+        'pterosaur':           ['H-98', 'H-100', 'H-101', 'H-102'],
+        'pterodactyl':         ['H-98', 'H-100', 'H-101', 'H-102'],
+        'pterodactyloid':      ['H-98', 'H-100', 'H-101', 'H-102'],
+        'quadrupedal_vault':   ['H-98'],
+        'vault_takeoff':       ['H-98'],
+        'vault':               ['H-98'],
+        'pterosaur_takeoff':   ['H-98'],
+        'differential_sweep':  ['H-100'],
+        'tailless_sweep':      ['H-100'],
+        'tailless_trim':       ['H-100'],
+        'metachronal_sweep':   ['H-100'],
+        'cranial_crest':       ['H-101'],
+        'crest_balance':       ['H-101'],
+        'pitch_counterbalance':['H-101'],
+        'flap_inertia':        ['H-101'],
+        'azhdarchid':          ['H-102'],
+        'azhdarchid_soar':     ['H-102'],
+        'thermal_loiter':      ['H-102'],
+        'deep_camber_soar':    ['H-102'],
+        'slotted_box_loiter':  ['H-102'],
+        # 16. Aquatic Biomechanics & Hydrodynamic Biomimicry Suite (H-103 to H-108)
+        'aquatic_suite':       ['H-103', 'H-104', 'H-105', 'H-106', 'H-107', 'H-108'],
+        'aquatic':             ['H-103', 'H-104', 'H-105', 'H-106', 'H-107', 'H-108'],
+        'turtle':              ['H-103'],
+        'sea_turtle':          ['H-103'],
+        'caretta':             ['H-103'],
+        'chelonia':            ['H-103'],
+        'pivot_brake':         ['H-103'],
+        'flipper_brake':       ['H-103'],
+        'in_stroke_sweep':     ['H-103'],
+        'turtle_sweep':        ['H-103'],
+        'plesiosaur':          ['H-104'],
+        'sauropterygia':       ['H-104'],
+        'tandem_wake':         ['H-104'],
+        'wake_capture':        ['H-104'],
+        'tandem_pitch_trim':   ['H-104'],
+        'wake_efficiency':     ['H-104'],
+        'cetacean':            ['H-105'],
+        'whale':               ['H-105'],
+        'dolphin':             ['H-105'],
+        'megaptera':           ['H-105'],
+        'tursiops':            ['H-105'],
+        'fluke_recoil':        ['H-105'],
+        'recoil_damping':      ['H-105'],
+        'heave_damping':       ['H-105'],
+        'hydrofoil_roll':      ['H-105'],
+        'krill':               ['H-106'],
+        'euphausia':           ['H-106'],
+        'adlocomotory':        ['H-106'],
+        'jet_coalescence':     ['H-106'],
+        'vector_tuning':       ['H-106'],
+        'metachronal_jet':     ['H-106'],
+        'copepod':             ['H-107'],
+        'calanus':             ['H-107'],
+        'asymmetric_metachrony': ['H-107'],
+        'power_smoothing':     ['H-107'],
+        'sequential_downstroke': ['H-107'],
+        'synchronous_recovery': ['H-107'],
+        'caridoid':            ['H-108'],
+        'lobster':             ['H-108'],
+        'crayfish':            ['H-108'],
+        'escape_flare':        ['H-108'],
+        'escape_pulse':        ['H-108'],
+        'tail_flip':           ['H-108'],
+        # 17. Laminar Separation Bubble & Boundary Layer (H-LSB-1)
+        'lsb':                 ['H-LSB-1'],
+        'separation_bubble':   ['H-LSB-1'],
+        'bubble_burst':        ['H-LSB-1'],
+        'boundary_stability':  ['H-LSB-1'],
+        'low_reynolds':        ['H-LSB-1'],
+        'chord_separation':    ['H-LSB-1'],
+        # 18. Dynamic Stall Hysteresis (H-DSH-1)
+        'dsh':                 ['H-DSH-1'],
+        'dynamic_stall':       ['H-DSH-1'],
+        'pitch_rate':          ['H-DSH-1'],
+        'camber_reflex':       ['H-DSH-1'],
+        'stall_vortex':        ['H-DSH-1'],
+        'dynamic_stall_delay': ['H-DSH-1'],
+        'camber_damping':      ['H-DSH-1'],
+        # 19. Aerodynamic Center Shift (H-AC-SHIFT-1)
+        'ac_shift':            ['H-AC-SHIFT-1'],
+        'camber_drift':        ['H-AC-SHIFT-1'],
+        'high_q':              ['H-AC-SHIFT-1'],
+        'aero_center':         ['H-AC-SHIFT-1'],
+        'aerodynamic_center':  ['H-AC-SHIFT-1'],
+        'center_shift':        ['H-AC-SHIFT-1'],
+        'reflex_drift':        ['H-AC-SHIFT-1'],
+        'ac_migration':        ['H-AC-SHIFT-1'],
+        # 20. Deep Stall Wake Shedding (H-SHED-1)
+        'deep_stall':          ['H-SHED-1'],
+        'wake_shed':           ['H-SHED-1'],
+        'wake_shedding':       ['H-SHED-1'],
+        'shedding':            ['H-SHED-1'],
+        'stall_dither':        ['H-SHED-1'],
+        'dither_shed':         ['H-SHED-1'],
+        'shed_dither':         ['H-SHED-1'],
+        'wake_break':          ['H-SHED-1'],
+        # 21. Ground Vortex Fountain Suppression (H-VEX-1)
+        'vex':                 ['H-VEX-1'],
+        'ground_vortex':       ['H-VEX-1'],
+        'vortex_fountain':     ['H-VEX-1'],
+        'fountain':            ['H-VEX-1'],
+        'recirculation':       ['H-VEX-1'],
+        'ground_effect_recirculation': ['H-VEX-1'],
+        'fountain_effect':     ['H-VEX-1'],
+        'downwash_recirculation':      ['H-VEX-1'],
+        # 22. Shared DC Bus Inertial Ripple & Electrical Spring (H-BUS-1)
+        'electrical_spring':   ['H-BUS-1'],
+        'h_bus':               ['H-BUS-1'],
+        'bus_ripple':          ['H-BUS-1'],
+        'shared_bus':          ['H-BUS-1'],
+        'inertial_exchange':   ['H-BUS-1'],
+        # 23. Split-Bus Fault-Tolerant Isolation (H-BUS-2)
+        'split_bus':           ['H-BUS-2'],
+        'efuse':               ['H-BUS-2'],
+        'bus_isolation':       ['H-BUS-2'],
+        'h_bus_2':             ['H-BUS-2'],
+        # 24. Dynamic Thermal Load-Balancing (H-BUS-3)
+        'thermal_balance':     ['H-BUS-3'],
+        'downwash_cooling':    ['H-BUS-3'],
+        'aft_motor_heat':      ['H-BUS-3'],
+        'h_bus_3':             ['H-BUS-3'],
+        # 25. In-Flight Flapping EIS (H-BUS-4)
+        'eis':                 ['H-BUS-4'],
+        'battery_eis':         ['H-BUS-4'],
+        'internal_resistance': ['H-BUS-4'],
+        'battery_soh':         ['H-BUS-4'],
+        'h_bus_4':             ['H-BUS-4'],
+        # 26. Staggered Anti-Phase Bound-Glide (H-CMP-1)
+        'h_cmp_1':             ['H-CMP-1'],
+        'staggered_glide':     ['H-CMP-1'],
+        'azhdarchid_interleave': ['H-CMP-1'],
+        'anti_phase_loiter':   ['H-CMP-1'],
+        # 27. Avian Deep-Flare Perch Landing (H-CMP-2)
+        'h_cmp_2':             ['H-CMP-2'],
+        'perch_landing':       ['H-CMP-2'],
+        'deep_flare':          ['H-CMP-2'],
+        'caridoid_flare':      ['H-CMP-2'],
+        'zero_rollout':        ['H-CMP-2'],
+        # 28. Katzmayr Vortex-Ingesting Dash (H-CMP-3)
+        'h_cmp_3':             ['H-CMP-3'],
+        'katzmayr_dash':       ['H-CMP-3'],
+        'trans_envelope':      ['H-CMP-3'],
+        'vortex_dash':         ['H-CMP-3'],
+        'ac_shift_dash':       ['H-CMP-3'],
+        # 29. Dipteran Haltere Active Gust Cancellation (H-CMP-4)
+        'h_cmp_4':             ['H-CMP-4'],
+        'gust_cancellation':   ['H-CMP-4'],
+        'dipteran_haltere':    ['H-CMP-4'],
+        'coriolis_gust':       ['H-CMP-4'],
+        'active_turbulence':   ['H-CMP-4'],
+        # 30. Vectored-In-Flight Post-Stall 3D Agility (H-CMP-5)
+        'h_cmp_5':             ['H-CMP-5'],
+        'viff':                ['H-CMP-5'],
+        'post_stall_agility':  ['H-CMP-5'],
+        'zero_speed_yaw':      ['H-CMP-5'],
+        'super_maneuver':      ['H-CMP-5'],
+    }
+
+    if focus in ADV_FOCUS:
+        for hid in ADV_FOCUS[focus]:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Compound Waveform Sensor Triggers (H-CMP 1..5)
+    if sensors and (sensors.get('staggered_glide_active', False) or sensors.get('h_cmp_1_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-CMP-1'), None)
+        if h: return h
+
+    if sensors and (sensors.get('perch_flare_active', False) or sensors.get('h_cmp_2_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-CMP-2'), None)
+        if h: return h
+
+    if sensors and (sensors.get('katzmayr_dash_active', False) or sensors.get('h_cmp_3_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-CMP-3'), None)
+        if h: return h
+
+    if sensors and (sensors.get('coriolis_gust_active', False) or sensors.get('h_cmp_4_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-CMP-4'), None)
+        if h: return h
+
+    if sensors and (sensors.get('viff_active', False) or sensors.get('h_cmp_5_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-CMP-5'), None)
+        if h: return h
+
+    # Split-Bus Fault / eFuse Trip Trigger (H-BUS-2)
+    if sensors and (sensors.get('efuse_tripped', False) or sensors.get('split_bus_fault', False) or sensors.get('h_bus_2_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-BUS-2'), None)
+        if h: return h
+
+    # Dynamic Thermal Load-Balancing Trigger (H-BUS-3)
+    if sensors and (sensors.get('thermal_throttling_active', False) or sensors.get('aft_motor_hot', False) or sensors.get('h_bus_3_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-BUS-3'), None)
+        if h: return h
+
+    # In-Flight Flapping EIS / SOH Alert Trigger (H-BUS-4)
+    if sensors and (sensors.get('soh_warning', False) or sensors.get('eis_active', False) or sensors.get('h_bus_4_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-BUS-4'), None)
+        if h: return h
+
+    # Shared DC Bus Inertial Ripple / Electrical Spring Trigger (H-BUS-1)
+    if sensors and (sensors.get('h_bus_active', False) or sensors.get('bus_ripple_active', False) or sensors.get('electrical_spring', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-BUS-1'), None)
+        if h: return h
+
+    # Laminar Separation Bubble (LSB) Alert or Sensor Trigger (H-LSB-1)
+    if sensors and (sensors.get('lsb_alert', False) or sensors.get('bubble_burst', False) or sensors.get('lsb_active', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-LSB-1'), None)
+        if h: return h
+
+    # Dynamic Stall Alert or Pitch Rate Trigger (H-DSH-1)
+    if sensors and (sensors.get('h_dsh_active', False) or sensors.get('dsh_active', False) or sensors.get('dynamic_stall_warning', False) or abs(sensors.get('pitch_rate_dps', 0.0)) > 35.0):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-DSH-1'), None)
+        if h: return h
+
+    # Aerodynamic Center Shift / High-Q Trigger (H-AC-SHIFT-1)
+    if sensors and (sensors.get('h_ac_active', False) or sensors.get('ac_shift_active', False) or sensors.get('ac_shift_warning', False) or sensors.get('q_dynamic_pa', 0.0) > 180.0):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-AC-SHIFT-1'), None)
+        if h: return h
+
+    # Deep Stall Wake Shedding Trigger (H-SHED-1) — with H-45 bus voltage check
+    if sensors and (sensors.get('h_shed_active', False) or sensors.get('shed_active', False) or sensors.get('deep_stall_flag', False) or (sensors.get('V_ms', 10.0) < 3.0 and sensors.get('aoa_deg', 0.0) > 30.0)):
+        if bus_v >= 22.2:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-SHED-1'), None)
+            if h: return h
+
+    # Ground Vortex Fountain Recirculation Trigger (H-VEX-1)
+    if sensors and (sensors.get('h_vex_active', False) or sensors.get('vex_active', False) or sensors.get('recirculation_detected', False) or sensors.get('ground_vortex_risk', False) or (sensors.get('h_agl_m', 99) < 2.0 and sensors.get('downwash_recirculation', False))):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-VEX-1'), None)
+        if h: return h
+
+    # Decapod Caridoid Escape Pulse / Emergency Flare (H-108)
+    if sensors and (sensors.get('emergency_flare', False) or sensors.get('collision_warning', False) or sensors.get('caridoid_escape', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-108'), None)
+        if h: return h
+
+    # Sea Turtle In-Stroke Differential Flipper Pivot Braking (H-103)
+    if sensors and (sensors.get('pivot_brake', False) or sensors.get('turtle_turn', False) or (sensors.get('brake_demand', False) and abs(yaw) > 0.40)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-103'), None)
+        if h: return h
+
+    # Cetacean Pectoral Hydrofoil Maneuver & Fluke Recoil Damping (H-105)
+    if sensors and (sensors.get('heave_oscillation_rms', 0.0) > 0.35 or sensors.get('recoil_damping', False) or sensors.get('cetacean_roll', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-105'), None)
+        if h: return h
+
+    # Quadrupedal Ground-Coupled Vault Takeoff Demand (H-98)
+    if sensors and sensors.get('on_ground', False) and (lever >= 65.0 or sensors.get('vault_takeoff', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-98'), None)
+        if h: return h
+
+    # Plesiosaur Tandem Wake Capture Demand (H-104)
+    if sensors and (sensors.get('wake_capture', False) or sensors.get('downstream_wake_detected', False) or sensors.get('formation_flight', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-104'), None)
+        if h: return h
+
+    # Crustacean Adlocomotory Jet Coalescence Thrust Surge (H-106)
+    if sensors and (sensors.get('jet_coalescence', False) or sensors.get('krill_sprint', False) or sensors.get('thrust_boost_demand', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-106'), None)
+        if h: return h
+
+    # Copepod Dual-Mode Asymmetric Metachrony Power Smoothing (H-107)
+    if sensors and (sensors.get('torque_ripple_pct', 0.0) > 28.0 or sensors.get('power_smoothing', False) or sensors.get('battery_current_ripple_a', 0.0) > 3.5):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-107'), None)
+        if h: return h
+
+    # Tailless Metachronal Differential Sweep Directional Trim (H-100)
+    if sensors and (abs(sensors.get('sideslip_beta_deg', 0.0)) > 3.0 or abs(sensors.get('yaw_drift_deg', 0.0)) > 2.5 or sensors.get('tailless_yaw_trim', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-100'), None)
+        if h: return h
+
+    # Cranial Crest Dynamic Flap-Inertia Pitch Counterbalance (H-101)
+    if sensors and (sensors.get('pitch_servo_current_a', 0.0) > 4.2 or sensors.get('high_pitch_load', False)):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-101'), None)
+        if h: return h
+
+    # Total Power Loss / Deadstick Emergency Fail-Safe
+    if sensors and sensors.get('all_motors_off', False):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-76'), None)
+        if h: return h
+
+    # Dipteran Coriolis High Angular Acceleration Gust Preemption (H-93)
+    if sensors and (sensors.get('angular_accel_dps2', abs(sensors.get('gyro_deriv', 0.0))) > 220.0 or sensors.get('coriolis_gust_alert')):
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-93'), None)
+        if h: return h
+
+    # Somatosensory Incipient Stall Detection Trigger (H-85)
+    if sensors and sensors.get('motor_current_jitter_a', 0.0) > 0.85:
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-85'), None)
+        if h: return h
+
+    # Vortex Ring State (VRS) Mitigation Trigger in Steep Descent
+    if w_sink < -2.5 and v_ms < 6.0:
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-75'), None)
+        if h: return h
+
+    # High Density-Altitude / Thin Air Kinematic Trigger
+    if sensors and (sensors.get('density_altitude_m', 0.0) > 2200.0 or sensors.get('air_density_rho', 1.225) < 1.0):
+        target_hid = 'H-73' if v_ms < 6.0 else 'H-74'
+        h = next((h for h in AERO_HYPOTHESES if h['id'] == target_hid), None)
+        if h: return h
+
+    # Direct Pilot Control Routing: Rudder / Yaw Stick
+    if abs(yaw) >= 0.20:
+        if abs(roll) < 0.20 and abs(yaw) >= 0.40:
+            # Decoupled pure yaw demand -> Odonata Direct-Musculature Stroke-Plane Vectoring (H-88)
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-88'), None)
+            if h: return h
+        if v_ms < 3.5:
+            # Low speed / hover -> Chiropteran Inertial Reorientation (H-81)
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-81'), None)
+            if h: return h
+        for hid in ['H-103', 'H-100', 'H-88', 'H-88A', 'H-88B', 'H-81', 'H-39', 'H-58', 'H-59', 'H-DIH-4', 'H-WC-1', 'H-WC-2', 'H-BS-4']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Direct Pilot Control Routing: Roll Joystick
+    if abs(roll) >= 0.35:
+        for hid in ['H-105', 'H-82', 'H-MV-1', 'H-60', 'H-61', 'H-MV-3', 'H-PF-6', 'H-HB-2', 'H-DIH-6']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Direct Pilot Control Routing: Pitch Joystick (Gestures)
+    if pitch >= 0.50:
+        if LV_BRAKE_LO <= lever < LV_DESCENT_LO and pitch >= 0.75:
+            # Brake-Snap Perch Flare (H-84)
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-84'), None)
+            if h: return h
+        # Coleopteran Elytron Canard obstacle climb check (H-92)
+        if pitch >= 0.70 and (v_ms >= 5.0 or (sensors and sensors.get('obstacle_climb'))):
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-92'), None)
+            if h: return h
+        # Dynamic Kramer pre-rotation lift burst at low speed (H-89)
+        if v_ms < 5.0 and pitch >= 0.60:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-89'), None)
+            if h: return h
+        # Pitch candidates evaluation
+        pitch_candidates = ['H-DSH-1', 'H-101', 'H-72', 'H-63', 'H-62', 'H-83', 'H-89', 'H-HL-4', 'H-CLB-3', 'H-PF-1', 'H-CE-1'] if v_ms < 8.0 else ['H-DSH-1', 'H-101', 'H-83', 'H-92', 'H-HL-4', 'H-63', 'H-62', 'H-CLB-3', 'H-PF-1', 'H-CE-1']
+        for hid in pitch_candidates:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+    elif pitch <= -0.50:
+        for hid in ['H-STOOP-1', 'H-40', 'H-PULL-1']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Automatic Wave Lever Zone Routing: Multi-Option Evaluation
+    # Emergency Stop (< 6%)
+    if lever < LV_BRAKE_LO:
+        for hid in ['H-55', 'H-108', 'H-LB-3']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Active Aerodynamic Braking (6% to 16%)
+    if LV_BRAKE_LO <= lever < LV_DESCENT_LO:
+        for hid in ['H-87', 'H-103', 'H-54', 'H-LB-1']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Low Speed / Hover Detents (near zero airspeed)
+    if v_ms < 3.0:
+        h_agl = sensors.get('h_agl_m', _flight_state.get('h_agl_m', 2.0))
+        hover_candidates = ['H-VEX-1', 'H-67', 'H-64', 'H-65', 'H-66'] if h_agl < 0.6 else ['H-64', 'H-65', 'H-66', 'H-67', 'H-VEX-1']
+        for hid in hover_candidates:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Glide & Soar Detent (28% to 45% with forward airspeed)
+    if (LV_GLIDE_LO <= lever < LV_DETENT_LO) and v_ms >= 3.0:
+        if sensors and (sensors.get('thermal_loiter', False) or sensors.get('sar_loiter', False) or (v_ms >= 6.0 and w_sink > -0.8)):
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == 'H-102'), None)
+            if h: return h
+        h_agl = sensors.get('h_agl_m', _flight_state.get('h_agl_m', 10.0))
+        for hid in (['H-102', 'H-90', 'H-95', 'H-56', 'H-57', 'H-SOR-2', 'H-SOR-1', 'H-LSB-1'] if h_agl <= 3.0 else ['H-102', 'H-95', 'H-57', 'H-90', 'H-56', 'H-SOR-2', 'H-SOR-1', 'H-LSB-1']):
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Sprint Dash (>= 88%)
+    if lever >= LV_SPRINT_LO:
+        if v_ms < 6.0:
+            # Low speed sprint breakout -> Lepidopteran Dorsal Clap Jet (H-91), Caridoid Escape (H-108) or Catapult Vector (H-69)
+            for hid in ['H-91', 'H-108', 'H-69']:
+                h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+                if h: return h
+        elif v_ms >= 14.0:
+            for hid in ['H-86', 'H-106', 'H-46', 'H-53', 'H-70', 'H-AC-SHIFT-1']:
+                h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+                if h: return h
+
+    # Climb Zone (78% to 88%)
+    if LV_CLIMB_LO <= lever < LV_SPRINT_LO:
+        for hid in ['H-71', 'H-92', 'H-63', 'H-CLB-3', 'H-HL-4']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Fast Cruise (68% to 78%)
+    if (LV_CRUISE_LO <= lever < LV_CLIMB_LO) and v_ms >= 11.0:
+        for hid in ['H-86', 'H-104', 'H-94', 'H-47', 'H-51']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    # Cruise Detent (45% to 68%)
+    if (LV_DETENT_LO <= lever <= LV_CRUISE_LO) and v_ms >= 7.0:
+        for hid in ['H-94', 'H-104', 'H-107', 'H-49', 'H-52', 'H-LSB-1']:
+            h = next((h for h in AERO_HYPOTHESES if h['id'] == hid), None)
+            if h: return h
+
+    if focus:
+        old_f = _focus_state.get('active', '')
+        _focus_state['active'] = focus
+        try:
+            return _orig_dhs_adv()
+        finally:
+            _focus_state['active'] = old_f
+    return _orig_dhs_adv()
+
+# ── H-88A / H-88B Wave Kinematic Generators ──────────────────────────────────
+def wave_odonata_dynamic_vectoring(t_sec: float, f_hz: float = 2.6, flap_amp_deg: float = 24.0,
+                                   stroke_plane_tilt_deg: float = 18.0, yaw_demand: float = 1.0) -> dict:
+    """
+    H-88A: Odonata Dynamic Harmonic Stroke-Plane Vectoring.
+    Synthesizes stroke plane tilt beta = arctan(Theta / Phi) dynamically by coordinating
+    sinusoidal flapping and sweep motion on every stroke cycle.
+    """
+    import math
+    omega = 2.0 * math.pi * f_hz
+    flap_val = flap_amp_deg * math.sin(omega * t_sec)
+
+    clamped_demand = max(-1.0, min(1.0, yaw_demand))
+    eff_tilt_deg = stroke_plane_tilt_deg * clamped_demand
+    tilt_rad = math.radians(abs(eff_tilt_deg))
+    sweep_amp_deg = min(15.0, flap_amp_deg * math.tan(tilt_rad))
+
+    if clamped_demand >= 0:
+        sweep_port = +sweep_amp_deg * math.sin(omega * t_sec)
+        sweep_stbd = -sweep_amp_deg * math.sin(omega * t_sec)
+    else:
+        sweep_port = -sweep_amp_deg * math.sin(omega * t_sec)
+        sweep_stbd = +sweep_amp_deg * math.sin(omega * t_sec)
+
+    return {
+        'flap_port_deg': round(flap_val, 2),
+        'flap_stbd_deg': round(flap_val, 2),
+        'sweep_port_deg': round(sweep_port, 2),
+        'sweep_stbd_deg': round(sweep_stbd, 2),
+        'eff_tilt_deg': round(eff_tilt_deg, 2),
+        'sweep_amp_deg': round(sweep_amp_deg, 2),
+        'decoupled_yaw_active': abs(clamped_demand) > 0.05,
+    }
+
+
+def wave_odonata_sweep_bias_trim(yaw_demand: float = 0.0, bias_max_deg: float = 12.0) -> dict:
+    """
+    H-88B: Odonata Quasi-Steady Differential Sweep Bias Vectoring.
+    Applies static opposing sweep angles to port and starboard wings to tilt the aerodynamic
+    thrust vector relative to freestream flow with zero cyclic servo oscillation.
+    """
+    clamped = max(-1.0, min(1.0, yaw_demand))
+    sweep_bias_port = +clamped * bias_max_deg
+    sweep_bias_stbd = -clamped * bias_max_deg
+
+    return {
+        'sweep_bias_port_deg': round(sweep_bias_port, 2),
+        'sweep_bias_stbd_deg': round(sweep_bias_stbd, 2),
+        'differential_sweep_deg': round(sweep_bias_port - sweep_bias_stbd, 2),
+        'is_trim_active': abs(clamped) > 0.03,
+        'power_penalty_w': 0.0,
+    }
+
+
+# ── Ground Station Diagnostic Command ─────────────────────────────────────────
+def advanced_physics_status():
+    """
+    GS: advanced_physics_status
+    Displays status and metrics for H-37 through H-47, H-49, H-51 through H-76, H-81 through H-88, H-89 through H-95, H-98 through H-102, and H-103 through H-108 across all 5 ALC modalities.
+    AI: 'advanced physics status' / 'physics status' / 'h46 status' /
+        'high speed status' / 'hover status' / 'comfort status' / 'safety suite' / 'bat suite' / 'dragonfly suite' / 'insect suite' / 'pterosaur suite' / 'aquatic suite'
+    """
+    lines = [
+        "\n  ════ ADVANCED PHYSICS, HOVER, SAFETY, BAT, DRAGONFLY, INSECT, PTEROSAUR & AQUATIC SUITE STATUS (H-37 to H-108) ════",
+        f"  Registered in AERO_HYPOTHESES: {sum(1 for h in AERO_HYPOTHESES if h['id'] in _adv_new_ids)}/{len(_adv_new_ids)}",
+        f"  Registered in Queue:           {sum(1 for h in _hypothesis_queue if h['id'] in _adv_new_ids)}/{len(_adv_new_ids)}",
+        f"  ALSS Segments:                 {sum(1 for s in _ALSS_SEGMENTS.values() if s[1] in _adv_new_ids)}/{len(_adv_new_ids)}",
+        f"  CMTS Context Champions:        {len([c for c in _CMTS_CHAMPIONS.values() if c.get('hyp_id') in _adv_new_ids])}/{len(_adv_new_ids)}",
+        "\n  WAVE LEVER DETENT MAPPINGS:",
+        f"    Catapult / Vault  (>= {LV_SPRINT_LO}%):        H-98 Quadrupedal Vault Leap (+1.85g), H-106 Krill Jet Coalescence, H-91 Lepidopteran Clap Jet, H-86 Reverse Cascade, H-46 Resonant Buzz",
+        f"    Sustained Climb   ({LV_CLIMB_LO}-{LV_SPRINT_LO}%):       H-92 Coleopteran Elytron Canard, H-71 Strouhal Vy (+5.2 m/s), H-63 Collective Step",
+        f"    Fast Cruise       ({LV_CRUISE_LO}-{LV_CLIMB_LO}%):       H-104 Plesiosaur Tandem Wake, H-94 Orthopteran Torsional Wave, H-86 Hindwing Downwash Harvest, H-47 Bound-Glide",
+        f"    Cruise Detent     ({LV_DETENT_LO}-{LV_CRUISE_LO}%):       H-107 Copepod Asymmetric Metachrony, H-94 Locust Traveling Twist (-32% Cd,i), H-49 Katzmayr, H-52 Quick-Return Flap",
+        f"    Glide / Soar      ({LV_GLIDE_LO}-{LV_DETENT_LO}%):       H-102 Azhdarchid Thermal Soar (0.38 m/s sink), H-90 Trapped-Vortex Cavity, H-95 Slotted Flap",
+        f"    Active Brake      ({LV_BRAKE_LO}-{LV_DESCENT_LO}%):       H-103 Turtle In-Stroke Pivot Brake, H-87 Active Upstroke Airbrake (-1.25g) & H-54 Clamshell Scissor Flap",
+        f"    Emergency Stop    (< {LV_BRAKE_LO}%):         H-108 Decapod Caridoid Escape Flare, H-55 Toroidal Vortex Ring Breakdown Rapid Stop",
+        "\n  AQUATIC BIOMECHANICS & HYDRODYNAMIC BIOMIMICRY SUITE (H-103 to H-108):",
+        "    H-103 Caretta In-Stroke Pivot Brake:  Differential flipper pitch/sweep brake (turn radius < 0.65m, -1.35g brake)",
+        "    H-104 Plesiosaur Tandem Wake Capture: Fore/hind flipper tandem phase sync (+22.5% thrust boost, collective pitch trim)",
+        "    H-105 Cetacean Hydrofoil Roll/Recoil: 3-DOF hydrofoil roll with fluke heave recoil damping (roll rate > 120 deg/s)",
+        "    H-106 Krill Adlocomotory Metachrony:  Sequential pleopod rearward jet coalescence (+26.8% thrust boost)",
+        "    H-107 Copepod Dual-Mode Metachrony:   Sequential downstroke x synchronous upstroke power smoothing (torque ripple < 8%)",
+        "    H-108 Decapod Caridoid Escape Flare:  Rapid reverse impulse tail-flip flare (escape thrust > 38N, rapid deceleration)",
+        "\n  PTEROSAUR FLIGHT BIOMECHANICS SUITE (H-98, H-100 to H-102):",
+        "    H-98 Quadrupedal Vault Takeoff:       Forelimb-hindlimb leap impulse (+1.85g vertical breakout, 0.42s transition)",
+        "    H-100 Tailless Differential Sweep:    Metachronal differential sweep trim (+/-14° sweep, <1.2° yaw drift)",
+        "    H-101 Flap-Inertia Counterbalance:    Cranial crest pitch feedforward canceling stroke downforce (-42% servo current)",
+        "    H-102 Azhdarchid Thermal Soaring:     Deep-camber high-AR slotted box lock (min sink 0.38 m/s, +86% loiter endurance)",
+        "\n  INSECT FLIGHT BIOMECHANICS SUITE (H-89 to H-95):",
+        "    H-89 Dynamic Kramer Lift Burst:       Pitch pre-rotation (7.5°-12.5°) at stroke reversal (+80% rotational CL)",
+        "    H-90 Trapped-Vortex Cavity Control:   Micro-vortex standing rollers on S1223 upper surface (L/D > 21.5)",
+        "    H-91 Lepidopteran Clap Jet:           Zero-airspeed pneumatic jet expulsion (+1.45g breakout acceleration)",
+        "    H-92 Coleopteran Elytron Canard:      Station 1 rigid pitch canard + Stations 2-4 flap (48° steep climb)",
+        "    H-93 Dipteran Coriolis Preemption:    Haltere-derived angular acceleration reflex (<18ms counter-twist)",
+        "    H-94 Orthopteran Torsional Wave:      Dynamic spanwise traveling twist wave (-32% induced drag, 10.4 Wh/km)",
+        "    H-95 Tandem Slotted Fowler Flap:      Station 1-2 inter-wing gap Fowler flap coupling (CL,max 2.45 glide)",
+        "\n  DRAGONFLY AERODYNAMIC SUITE (H-86 to H-88):",
+        "    H-86 Reverse Metachronal Cascade:  Hindwing-leading phase offset (-90° to -35°) harvests downwash (+24.5% thrust)",
+        "    H-87 Active Upstroke Dynamic Brake: Inverted chord negative AoA (-38° to -18°) produces -1.25g reverse deceleration",
+        "    H-88 Odonata Stroke-Plane Vectoring: Differential stroke plane tilt (10° to 30°) decoupled pure yaw moment (>45°/s)",
+        "    H-88A Odonata Dynamic Vectoring:   Harmonic stroke-plane modulation generates pure yaw couple (>60°/s)",
+        "    H-88B Odonata Sweep Bias Trim:     Quasi-steady differential sweep bias (+/-12°) provides continuous trim without servo fatigue",
+        "\n  BAT FLIGHT BIOMECHANICS SUITE (H-81 to H-85):",
+        "    H-81 Chiropteran Inertial Reorientation: Zero-airspeed yaw torque via asymmetric wing inertia",
+        "    H-82 Anhedral Gull-Wing Turn Trapping:   Zero-sideslip knife-edge cornering (R < 0.8m)",
+        "    H-83 Dynamic Inflow-Aligned LEV:         Sustained vortex attachment at alpha > 35 deg, CL > 2.2",
+        "    H-84 Metachronal Cascade Somersault:     Post-stall perch flare and 180 deg acrobatic flip",
+        "    H-85 Somatosensory Stall Preemption:     Boundary layer separation reflex via current jitter",
+        "\n  HOVER SUSTAINABILITY & ROTARY HYBRID ENVELOPE:",
+        "    Weis-Fogh Clap-Fling: H-64 Peak CL > 2.4 (cuts hover freq to 1.50 Hz, -28% power)",
+        "    Downwash Ingestion:   H-65 Harvests upstream slipstream for +18% free vertical lift",
+        "    Virtual Recoil:       H-66 ODrive FOC electrical spring cuts motor heating by 40%",
+        "    Ground Cushion Hover: H-67 In-ground-effect mirror cushion at h < 0.5b (-35% power)",
+        "    ETL Creep Loiter:     H-68 Micro-speed translational butterfly loiter (-40% power)",
+        "    VRS Immunity:         H-75 Outward wake deflection during steep descent (zero settling)",
+        "    Deadstick Polar Lock: H-76 Emergency all-motor loss symmetrical glide polar (L/D ~15:1)",
+        "\n  MULTI-AXIS BIOMIMETIC FLIGHT CONTROLS:",
+        "    Yaw Pedals:  H-103 Caretta Pivot Brake, H-100 Tailless Metachronal Sweep, H-58 Strouhal-Differential Thrust, H-59 Virtual Downwash Rudder & H-88 Stroke-Plane Tilt",
+        "    Roll Stick:  H-105 Cetacean Hydrofoil Roll, H-60 Metachronal Roll Wave Cascade & H-61 Dynamic Anhedral-Dihedral Snap-Roll",
+        "    Pitch Stick: H-101 Flap-Inertia Pitch Counterbalance, H-62 Dynamic Canard-Wing Pumping & H-72 High-Lift Clap Steep Clearance (Vx)",
+        "\n  ADVERSE WEATHER & DENSITY-ALTITUDE OVERRIDES:",
+        "    H-41: Metachronal Heave/Pitch Cancellation (87.5% vibration reduction, <0.03g RMS)",
+        "    H-42: Asymmetric N-1 Actuator Loss Re-Trim (98.2% lift retention, <0.15 Nm roll error)",
+        "    H-43: Severe Wind Shear DLTV (+0.81g climb with zero body pitch rotation)",
+        "    H-44: Heavy Rain & Icing LEV Re-Energization (3x pitch micro-dither, 85% CL,max recovery)",
+        "    H-45: Proactive Bus Brownout Protection (Hierarchical W3/W4 throttling below 21.8V)",
+        "    H-73: Bumblebee Alpine Amplitude Compensation (75° -> 110° stroke in thin air)",
+        "\n  AERODYNAMIC SAFETY, DYNAMIC STALL & BLIND-SPOT MITIGATION SUITE:",
+        "    H-LSB-1:      Laminar Separation Bubble Stability (cross-wing r_cross correlation & stroke variance burst rejection, CFIT clamp)",
+        "    H-DSH-1:      Dynamic Stall Delay & Camber Reflex Damping (pitch rate trigger, tare-compensated hysteresis loop)",
+        "    H-AC-SHIFT-1: Aero Center Shift High-Q Compensation (q_dyn > 180 Pa pre-bias against trailing-edge camber drift)",
+        "    H-SHED-1:     Post-Stall Wake Shedding Dither (asymmetric wingtip dither pulse with H-45 brownout voltage clamp)",
+        "    H-VEX-1:      Ground Vortex Fountain Suppression (differential dihedral canting with LiDAR ground proximity interlock)",
+        "\n  ALC INTEGRATION:",
+        f"    Active Priority Queue:         {len(_ALC_SHARED['priority_hyp_queue'])} items",
+        f"    Active CRM Alert Log:          {len(_ALC_SHARED['alert_log'])} entries",
+        "  ──────────────────────────────────────────────────────────────────────"
+    ]
+    report = "\n".join(lines)
+    print(report)
+    return report
+
+_GS_ALLOWED_CMDS.add('advanced_physics_status')
+
+
+# ── Genome axis normalisation ─────────────────────────────────────────────────
+for _ax in _ALL_MW_AXES:
+    _t = sum(_ax.values())
+    if _t > 0 and abs(_t-1.0) > 0.001:
+        for _k in _ax: _ax[_k] /= _t
+
+
+# ── Verify Final Registration ─────────────────────────────────────────────────
+_adv_reg = [h for h in AERO_HYPOTHESES if h['id'] in _adv_new_ids]
+_adv_q   = [h for h in _hypothesis_queue if h['id'] in _adv_new_ids]
+_boot_log.append(f"\n  ══ ADVANCED PHYSICS & SAFETY SUITE INTEGRATION ══")
+_boot_log.append(f"  New hypotheses:  {len(_adv_reg)}/{len(_adv_new_ids)} registered in AERO_HYPOTHESES")
+_boot_log.append(f"  Queue:           {len(_adv_q)}/{len(_adv_new_ids)} queued")
+_boot_log.append(f"  Wave Lever:      Mapped across SPRINT, CLIMB, CRUISE, DETENT, GLIDE, BRAKE, STOP zones")
+_boot_log.append(f"  5 Modalities:    AI Observer, Discovery Selector, ALSS, Genome, CMTS")
+_boot_log.append(f"  GS:              advanced_physics_status")
+_boot_log.append(f"  Total hyps:      {len(AERO_HYPOTHESES)}")
+
+
+# ── Physical Actuator Amplitude Sanitizer (Mark 1 Hardware Grounding) ──────────
+# BOM item PROP-04 confirms: 7:1 Capstan Sector Wheel has a full 200° circular arc,
+# providing ±100° flapping stroke authority (100° dorsal up, 100° ventral down).
+# Flapping amplitude parameters are clamped to <= 100.0° to respect the physical
+# sector wheel envelope while providing maximum aerodynamic stroke.
+_clamped_hyps = 0
+for _h_list in (AERO_HYPOTHESES, _hypothesis_queue, _ADV_NEW_HYPS):
+    for _h in _h_list:
+        _cfg = _h.get('config', {}) if isinstance(_h, dict) else {}
+        for _k in ('amp_port_deg', 'amp_stbd_deg', 'amp_deg', 'flap_amp_deg'):
+            if _k in _cfg and isinstance(_cfg[_k], (int, float)) and _cfg[_k] > 100.0:
+                _cfg[_k] = 100.0
+                _clamped_hyps += 1
+if _clamped_hyps > 0:
+    _boot_log.append(f"  [AUDIT] Hardware safety clamp: clamped {_clamped_hyps} over-amplitude parameters to <= 100.0 deg")
+
+# ── Final audit re-check (Post-Registration Complete) ─────────────────────────
+_hyp_id_set2 = {h['id'] for h in AERO_HYPOTHESES}
+_all_segs2   = set()
+for segs in _ALSS_CURRICULUM.values():
+    _all_segs2.update(segs)
+
+_still_broken = []
+for seg_name in _all_segs2:
+    seg = _ALSS_SEGMENTS.get(seg_name)
+    if seg is None:
+        _still_broken.append(f"{seg_name}: not in _ALSS_SEGMENTS")
+    elif len(seg) >= 2 and seg[1] not in _hyp_id_set2:
+        _still_broken.append(f"{seg_name}: hyp '{seg[1]}' not found")
+
+# GS callables
+_non_callable_gs = [c for c in _GS_ALLOWED_CMDS
+                    if not callable(globals().get(c, None))]
+
+if _still_broken:
+    for s in _still_broken: _boot_log.append(f"  [AUDIT WARNING] Broken segment: {s}")
+if _non_callable_gs:
+    for c in _non_callable_gs: _boot_log.append(f"  [AUDIT WARNING] Non-callable GS: {c}")

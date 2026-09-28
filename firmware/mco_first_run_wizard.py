@@ -11,12 +11,18 @@ Usage:  python3 main.py --wizard
 import time, sys
 
 try:
-    from odrive_interface import ODriveInterface
-    from servo_interface  import ServoInterface
-    import wave_library   as wl
+    from mco_odrive_interface import ODriveInterface
+    from mco_servo_interface  import ServoInterface
+    import mco_wave_library   as wl
     HW_AVAILABLE = True
 except ImportError:
-    HW_AVAILABLE = False
+    try:
+        from odrive_interface import ODriveInterface
+        from servo_interface  import ServoInterface
+        import wave_library   as wl
+        HW_AVAILABLE = True
+    except ImportError:
+        HW_AVAILABLE = False
 
 
 SEP = "=" * 55

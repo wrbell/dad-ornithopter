@@ -29,9 +29,10 @@ import sys, socket, json, threading, time, math
 
 try:
     import pygame, pygame.freetype
+    HAS_PYGAME = True
 except ImportError:
-    print("sudo apt install python3-pygame")
-    sys.exit(1)
+    pygame = None
+    HAS_PYGAME = False
 
 WINDOWED = '--windowed' in sys.argv
 W, H     = 800, 480
@@ -503,4 +504,7 @@ class Panel:
 
 
 if __name__ == '__main__':
+    if not HAS_PYGAME:
+        print("ERROR: pygame not installed. Run: sudo apt install python3-pygame")
+        sys.exit(1)
     Panel().run()

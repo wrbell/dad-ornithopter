@@ -114,44 +114,73 @@ def taxi_amplitudes_asymmetric(yaw_cmd, amp_up=None):
     return up_port, up_stbd
 
 
-def taxi_commands(throttle_frac, yaw_cmd, reverse=False):
+def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False):
     """
     Returns command dict for ground taxi.
     Uses asymmetric stroke: full upstroke, shallow −4° downstroke.
 
-    The FCC implements this by commanding each ODrive with a
-    velocity profile that spends more time on the upstroke arc
-    than the downstroke arc (velocity-profiled crank motion).
+    Control inputs:
+    - throttle_frac: 0.0 to 1.0 (frequency scaling 0.2 to 1.0 Hz)
+    - yaw_cmd: −1.0 to +1.0 from rudder pedals (differential upstroke amplitude for heading yaw)
+    - lateral_cmd: −1.0 to +1.0 from roll stick (H-26 differential AoA + dihedral side-force for direct sideways translation)
+    - reverse: True for reverse taxi (negative pitch)
     """
-    from wave_library import metachronal_phase_offsets
+    try:
+        from mco_wave_library import metachronal_phase_offsets
+    except ImportError:
+        from wave_library import metachronal_phase_offsets
 
     freq     = taxi_freq(throttle_frac)
-    pitch    = TAXI['REVERSE_PITCH_DEG'] if reverse else TAXI['PITCH_DEG']
+    base_pitch = TAXI['REVERSE_PITCH_DEG'] if reverse else TAXI['PITCH_DEG']
 
     up_port, up_stbd = taxi_amplitudes_asymmetric(yaw_cmd)
 
+    # Lateral ground crab / sidestep via H-26 force vector decoupling:
+    # Right stick (lateral_cmd > 0): Port wings higher AoA & dihedral, pushing craft toward starboard
+    # Left stick  (lateral_cmd < 0): Stbd wings higher AoA & dihedral, pushing craft toward port
+    lat_deadband = 0.08
+    lateral_active = abs(lateral_cmd) > lat_deadband
+    if lateral_active:
+        lat_scale = (abs(lateral_cmd) - lat_deadband) / (1.0 - lat_deadband)
+        lat_scale = min(1.0, max(0.0, lat_scale)) * (1.0 if lateral_cmd > 0 else -1.0)
+        port_pitch_bias = +4.0 * lat_scale
+        stbd_pitch_bias = -3.0 * lat_scale
+        port_dih_bias   = +5.0 * lat_scale
+        stbd_dih_bias   = -3.0 * lat_scale
+    else:
+        port_pitch_bias = 0.0
+        stbd_pitch_bias = 0.0
+        port_dih_bias   = 0.0
+        stbd_dih_bias   = 0.0
+
     # Build per-wing commands
-    # Each wing needs: upstroke_amp, downstroke_amp, pitch
     wing_cmds = []
     for i in range(8):
         is_port = (i % 2 == 0)
+        p_bias = port_pitch_bias if is_port else stbd_pitch_bias
+        d_bias = port_dih_bias   if is_port else stbd_dih_bias
         wing_cmds.append({
-            'amp_up':   up_port if is_port else up_stbd,
-            'amp_down': TAXI['AMP_DOWN_DEG'],     # always ~4° — ground limit
-            'pitch':    pitch,
-            'sweep':    TAXI['SWEEP_DEG'],
+            'amp_up':       up_port if is_port else up_stbd,
+            'amp_down':     TAXI['AMP_DOWN_DEG'],     # always ~4° — ground limit
+            'pitch':        round(base_pitch + p_bias, 1),
+            'dihedral_deg': round(max(0.0, d_bias), 1),
+            'sweep':        TAXI['SWEEP_DEG'],
         })
 
     offsets = metachronal_phase_offsets(offset_deg=TAXI['PHASE_OFFSET_DEG'])
 
     return {
-        'freq_hz':     freq,
-        'wing_cmds':   wing_cmds,
-        'phase_offsets': offsets,
-        'mode':        'reverse_taxi' if reverse else 'forward_taxi',
-        'notes':       (f"asymmetric stroke: up={up_port:.0f}/{up_stbd:.0f}° "
-                        f"down={TAXI['AMP_DOWN_DEG']:.0f}° "
-                        f"freq={freq:.2f}Hz"),
+        'freq_hz':                 freq,
+        'wing_cmds':               wing_cmds,
+        'phase_offsets':           offsets,
+        'mode':                    'reverse_taxi' if reverse else 'forward_taxi',
+        'lateral_active':          lateral_active,
+        'lateral_cmd':             round(lateral_cmd, 2),
+        'yaw_cmd':                 round(yaw_cmd, 2),
+        'notes':                   (f"asymmetric stroke: up={up_port:.0f}/{up_stbd:.0f}° "
+                                    f"down={TAXI['AMP_DOWN_DEG']:.0f}° "
+                                    f"freq={freq:.2f}Hz"
+                                    + (f" sidestep={lateral_cmd:+.2f}" if lateral_active else "")),
     }
 
 
@@ -178,7 +207,7 @@ INSPECTION = {
 
 # Wing spans for walk-around reference
 WING_SPANS = {
-    'W1': 772, 'W2': 749, 'W3': 735, 'W4': 712   # mm semi-span
+    'W1': 1150, 'W2': 1150, 'W3': 1150, 'W4': 1150   # mm semi-span (1.15m: mount + 4x250mm segments + tip)
 }
 
 INSPECTION_WALK_AROUND = """
@@ -322,7 +351,7 @@ class InspectionMode:
         for name, span_mm in WING_SPANS.items():
             print(f"    {name}: {span_mm}mm  ({span_mm/10:.1f}cm) from root")
         print()
-        print("  Longitudinal stagger: 138mm between adjacent pairs")
+        print("  Longitudinal stagger: 250mm between adjacent pairs")
         print("  W1 is furthest forward; W4 is furthest aft")
         print()
         # Print the walk-around checklist

@@ -78,7 +78,7 @@ def colour(text, *codes):
 
 # ── Connection ────────────────────────────────────────────────────
 DEFAULT_IP   = '192.168.7.1'
-DEFAULT_PORT = 5760
+DEFAULT_PORT = 5757
 
 class GSConnection:
     """Manages the TCP connection to the Pi."""
@@ -177,6 +177,14 @@ class AppState:
 
     def ingest(self, msg):
         """Process an incoming message from the Pi."""
+        if not isinstance(msg, dict):
+            if isinstance(msg, str):
+                with self._lock:
+                    self.alerts.append((time.time(), msg))
+                    if len(self.alerts) > 20:
+                        self.alerts = self.alerts[-20:]
+            return
+
         t = msg.get('type', '')
         with self._lock:
             if t == 'telemetry':
@@ -193,6 +201,11 @@ class AppState:
                 self.aero_cal = msg.get('data', {})
             elif t == 'lm6_zones':
                 self.lm6_zones = msg.get('data', {})
+            elif t == 'ack':
+                ack_text = msg.get('msg', str(msg))
+                self.alerts.append((time.time(), f"[ACK] {ack_text}"))
+                if len(self.alerts) > 20:
+                    self.alerts = self.alerts[-20:]
             elif t == 'alert':
                 self.alerts.append((time.time(), msg.get('msg', '')))
                 if len(self.alerts) > 20:

@@ -31,19 +31,19 @@ import math, json, time, os
 # AIRCRAFT CONSTANTS (from wave library)
 # ─────────────────────────────────────────────────────────────────
 MCO_1D = {
-    'MTOW_KG':       3.448,
-    'VS_KT':         9.42,
-    'VS_MS':         4.85,
+    'MTOW_KG':       5.687,
+    'VS_KT':         12.77,
+    'VS_MS':         6.57,
     'VNE_KT':        54.4,
     'VNE_MS':        28.0,
-    'CL_MAX':        2.40,
-    'S_M2':          0.979,
-    'CHORD_MM':      165,
+    'CL_MAX':        1.60,
+    'S_M2':          1.320,
+    'CHORD_MM':      143.7,
     'FREQ_MAX_HZ':   3.0,
-    'AMP_DEG':       80.0,
+    'AMP_DEG':       96.0,
     'PHASE_DEG':     60.0,
     'PILOTS':        0,
-    'WINGSPAN_M':    1.544,
+    'WINGSPAN_M':    2.348,
 }
 
 MCO_1A = {
@@ -226,7 +226,7 @@ def build_protocol():
         "Calculate CT from measured thrust: CT = T / (0.5 × ρ × V_stroke² × S)",
     ]
     tc.success = [
-        "Aircraft achieves lift ≥ MTOW (3.448 × 9.81 = 33.8N) at some f ≤ 3 Hz",
+        "Aircraft achieves lift ≥ MTOW (5.687 × 9.81 = 55.8N) at some f ≤ 3 Hz",
         "CT value confirms or updates wave library placeholder (1.13)",
         "Lift scales as f² with R² > 0.95 (confirms T ∝ f² scaling)",
         "Lift scales as AMP² with R² > 0.90 (confirms T ∝ AMP² scaling)",

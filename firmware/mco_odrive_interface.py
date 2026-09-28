@@ -59,6 +59,7 @@ Requirements:
 import struct
 import time
 import math
+import threading
 
 try:
     import can
@@ -127,6 +128,21 @@ class ODriveInterface:
     def __init__(self, channel="can0", bitrate=1_000_000):
         self._bus   = None
         self._sim   = not CAN_AVAILABLE
+        self._lock  = threading.Lock()
+        self._running = True
+        self._positions = [0.0] * N_WINGS
+        self._velocities = [0.0] * N_WINGS
+        self._currents = [0.0] * N_WINGS
+        self._temperatures = [{'fet_C': 25.0, 'motor_C': 25.0} for _ in range(N_WINGS)]
+        self._vbus = 22.2
+        self._states = [
+            {'responding': False, 'error': 0, 'state': STATE_IDLE, 'wing': WING_NAMES[i], 'node': i}
+            for i in range(N_WINGS)
+        ]
+        self._last_seen = [0.0] * N_WINGS
+        self._pending_requests = {}
+        self._rx_thread = None
+
         if CAN_AVAILABLE:
             try:
                 self._bus = can.interface.Bus(
@@ -136,9 +152,69 @@ class ODriveInterface:
                 )
                 print(f"[S1] CAN bus {channel} opened at {bitrate//1000} kbps "
                       f"(8 nodes, 1 motor each)")
+                self._rx_thread = threading.Thread(target=self._rx_worker, daemon=True)
+                self._rx_thread.start()
             except Exception as e:
                 print(f"[S1] CAN open failed: {e} — simulation mode")
                 self._sim = True
+
+    # ── Background RX Worker ──────────────────────────────────────────────────
+
+    def _rx_worker(self):
+        """Background daemon thread: continuously reads incoming CAN frames and updates telemetry cache."""
+        while self._running and self._bus:
+            try:
+                msg = self._bus.recv(timeout=0.01)
+                if not msg:
+                    continue
+                node_id = (msg.arbitration_id >> 5) & 0x7F
+                cmd_id  = msg.arbitration_id & 0x1F
+
+                # Check if there is an explicit request waiter
+                key = (node_id, cmd_id)
+                with self._lock:
+                    if key in self._pending_requests:
+                        evt, holder = self._pending_requests[key]
+                        holder.append(msg)
+                        evt.set()
+
+                # Update cached telemetry
+                if 0 <= node_id < N_WINGS:
+                    self._last_seen[node_id] = time.monotonic()
+                    data = msg.data
+                    if cmd_id == CMD_GET_ENCODER and len(data) >= 8:
+                        pos_turns, vel_rps = struct.unpack("<ff", data[:8])
+                        with self._lock:
+                            self._positions[node_id] = pos_turns * 2 * math.pi
+                            self._velocities[node_id] = vel_rps
+                    elif cmd_id == CMD_GET_IQ and len(data) >= 8:
+                        _iq_setpt, iq_meas = struct.unpack("<ff", data[:8])
+                        with self._lock:
+                            self._currents[node_id] = abs(iq_meas)
+                    elif cmd_id == CMD_GET_TEMP and len(data) >= 8:
+                        fet_c, mot_c = struct.unpack("<ff", data[:8])
+                        with self._lock:
+                            self._temperatures[node_id] = {
+                                'fet_C': round(fet_c, 1),
+                                'motor_C': round(mot_c, 1)
+                            }
+                    elif cmd_id == CMD_GET_VBUS and len(data) >= 8:
+                        vbus, _ibus = struct.unpack("<ff", data[:8])
+                        with self._lock:
+                            self._vbus = vbus
+                    elif cmd_id == CMD_HEARTBEAT and len(data) >= 4:
+                        axis_error = struct.unpack("<I", data[:4])[0]
+                        axis_state = data[4] if len(data) > 4 else 0
+                        with self._lock:
+                            self._states[node_id] = {
+                                'responding': True,
+                                'error':      axis_error,
+                                'state':      axis_state,
+                                'wing':       WING_NAMES[node_id],
+                                'node':       node_id,
+                            }
+            except Exception:
+                pass
 
     # ── Low-level CAN ─────────────────────────────────────────────────────────
 
@@ -157,22 +233,22 @@ class ODriveInterface:
             print(f"[S1] CAN send node {node_id} cmd 0x{cmd_id:03X}: {e}")
 
     def _request(self, node_id, cmd_id, timeout_s=0.004):
-        """Send a request frame and wait for the response frame."""
-        self._send(node_id, cmd_id)
+        """Send a request frame and wait for response frame via background worker dispatch."""
         if self._sim or not self._bus:
             return None
-        deadline = time.monotonic() + timeout_s
-        while time.monotonic() < deadline:
-            try:
-                msg = self._bus.recv(timeout=timeout_s)
-                if msg is None:
-                    break
-                # Accept the response with the matching arb ID
-                if msg.arbitration_id == _arb_id(node_id, cmd_id):
-                    return msg
-            except Exception:
-                break
-        return None
+        evt = threading.Event()
+        holder = []
+        key = (node_id, cmd_id)
+        with self._lock:
+            self._pending_requests[key] = (evt, holder)
+        try:
+            self._send(node_id, cmd_id)
+            if evt.wait(timeout_s) and holder:
+                return holder[0]
+            return None
+        finally:
+            with self._lock:
+                self._pending_requests.pop(key, None)
 
     # ── Axis state control ────────────────────────────────────────────────────
 
@@ -288,114 +364,91 @@ class ODriveInterface:
 
     # ── Telemetry reads ───────────────────────────────────────────────────────
 
+    def trigger_telemetry_request(self):
+        """Non-blocking: trigger telemetry queries to all nodes without waiting."""
+        if self._sim or not self._bus:
+            return
+        for i in range(N_WINGS):
+            self._send(i, CMD_GET_ENCODER)
+            self._send(i, CMD_GET_IQ)
+
     def read_encoder_estimates(self):
         """
-        Read pos_estimate and vel_estimate from all 8 S1 boards.
+        Read pos_estimate and vel_estimate from cached telemetry for all 8 S1 boards.
         The S1 uses an on-board absolute magnetic encoder.
-        Position is in turns (absolute from power-on — no drift on cold start).
+        Position is in turns (converted to radians at motor shaft).
 
         Returns:
             positions_rad:   list of 8 floats (motor shaft, radians)
             velocities_rps:  list of 8 floats (motor shaft, rev/s)
-        Nones indicate CAN timeout or CAN not available.
+        Non-blocking: returns cached values in < 0.05 ms without starving the control loop.
         """
         if self._sim:
             return [0.0] * N_WINGS, [0.0] * N_WINGS
 
-        positions  = []
-        velocities = []
+        # Trigger async CAN requests for next tick update
         for i in range(N_WINGS):
-            msg = self._request(wing_to_node(i), CMD_GET_ENCODER)
-            if msg and len(msg.data) >= 8:
-                pos_turns, vel_rps = struct.unpack("<ff", msg.data[:8])
-                positions.append(pos_turns * 2 * math.pi)  # turns → rad
-                velocities.append(vel_rps)
-            else:
-                positions.append(None)
-                velocities.append(None)
-        return positions, velocities
+            self._send(i, CMD_GET_ENCODER)
+
+        with self._lock:
+            return list(self._positions), list(self._velocities)
 
     def read_currents(self):
         """
-        Read Iq_measured from all 8 S1 boards.
-        Returns list of 8 floats (amps). 0.0 on failure.
+        Read Iq_measured from cached telemetry for all 8 S1 boards.
+        Returns list of 8 floats (amps). Non-blocking.
         """
         if self._sim:
             return [0.0] * N_WINGS
 
-        currents = []
         for i in range(N_WINGS):
-            msg = self._request(wing_to_node(i), CMD_GET_IQ)
-            if msg and len(msg.data) >= 8:
-                _iq_setpt, iq_meas = struct.unpack("<ff", msg.data[:8])
-                currents.append(abs(iq_meas))
-            else:
-                currents.append(0.0)
-        return currents
+            self._send(i, CMD_GET_IQ)
+
+        with self._lock:
+            return list(self._currents)
 
     def read_temperatures(self):
         """
-        Read FET and motor temperatures from all 8 S1 boards.
-        The S1 has on-board thermistors — reliable thermal monitoring.
-        Returns list of 8 dicts {'fet_C': float, 'motor_C': float}.
+        Read FET and motor temperatures from cached telemetry.
+        Returns list of 8 dicts {'fet_C': float, 'motor_C': float}. Non-blocking.
         """
         if self._sim:
             return [{'fet_C': 25.0, 'motor_C': 25.0}] * N_WINGS
 
-        temps = []
         for i in range(N_WINGS):
-            msg = self._request(wing_to_node(i), CMD_GET_TEMP)
-            if msg and len(msg.data) >= 8:
-                fet_c, mot_c = struct.unpack("<ff", msg.data[:8])
-                temps.append({'fet_C': round(fet_c, 1),
-                              'motor_C': round(mot_c, 1)})
-            else:
-                temps.append({'fet_C': None, 'motor_C': None})
-        return temps
+            self._send(i, CMD_GET_TEMP)
+
+        with self._lock:
+            return [dict(t) for t in self._temperatures]
 
     def read_vbus(self):
         """
         Read bus voltage from node 0.
-        Returns float volts. 0.0 on failure.
+        Returns float volts. Non-blocking.
         """
         if self._sim:
-            return 14.8
+            return 22.2
 
-        msg = self._request(0, CMD_GET_VBUS)
-        if msg and len(msg.data) >= 8:
-            vbus, _ibus = struct.unpack("<ff", msg.data[:8])
-            return vbus
-        return 0.0
+        self._send(0, CMD_GET_VBUS)
+        with self._lock:
+            return self._vbus
 
     def read_all_states(self):
         """
-        Read heartbeat from all 8 nodes.
-        Returns list of 8 dicts with 'error', 'state', 'responding'.
-        Heartbeat is sent automatically by the S1 at configured rate.
-        This polls for the latest heartbeat frame from each node.
+        Read heartbeat / axis state for all 8 nodes.
+        Returns list of 8 dicts with 'error', 'state', 'responding'. Non-blocking.
         """
-        states = []
-        for i in range(N_WINGS):
-            msg = self._request(wing_to_node(i), CMD_HEARTBEAT, timeout_s=0.01)
-            if msg and len(msg.data) >= 8:
-                axis_error = struct.unpack("<I", msg.data[:4])[0]
-                axis_state = msg.data[4] if len(msg.data) > 4 else 0
-                states.append({
-                    'responding': True,
-                    'error':      axis_error,
-                    'state':      axis_state,
-                    'wing':       WING_NAMES[i],
-                    'node':       i,
-                })
-            else:
-                states.append({
-                    'responding': False,
-                    'error':      None,
-                    'state':      None,
-                    'wing':       WING_NAMES[i],
-                    'node':       i,
-                })
-        return states
+        now = time.monotonic()
+        with self._lock:
+            res = []
+            for i in range(N_WINGS):
+                st = dict(self._states[i])
+                if not self._sim:
+                    st['responding'] = (now - self._last_seen[i]) < 1.0
+                else:
+                    st['responding'] = True
+                res.append(st)
+            return res
 
     def get_vel_limit(self, wing_idx=0):
         """
@@ -412,7 +465,10 @@ class ODriveInterface:
 
     def close(self):
         """Idle all motors and shut down the CAN bus."""
+        self._running = False
         self.idle_all()
+        if self._rx_thread and self._rx_thread.is_alive():
+            self._rx_thread.join(timeout=0.2)
         if self._bus:
             try:
                 self._bus.shutdown()

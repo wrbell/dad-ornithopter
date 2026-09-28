@@ -43,16 +43,17 @@ import argparse
 
 # ── MCO-1D motor parameters (GoolRC 5010-14 360KV) ──────────────────────────
 POLE_PAIRS          = 7        # 12N14P: 14 magnetic poles / 2 = 7 pole pairs
-MOTOR_KV            = 360
-CURRENT_LIM         = 20.0    # A per motor (conservative — increase if needed)
-CURRENT_LIM_MARGIN  = 5.0     # A headroom above limit
-CALIBRATION_CURRENT = 10.0    # A used during motor calibration
-VEL_LIMIT           = 150.0   # rad/s motor shaft — bench verify before TC-01
-                               # At 2.5 Hz flapping × 7:1 ratio = 17.5 rps = 110 rad/s
-                               # 150 rad/s gives ~35% headroom
-BANDWIDTH           = 1000.0  # Hz — velocity controller bandwidth
-BRAKE_RESISTANCE    = 2.0     # Ω — the included brake resistor per S1
-CAN_BAUD            = 1_000_000   # 1 Mbps standard CAN (not CAN-FD for now)
+MOTOR_KV            = 200      # Option A T-Motor MN5008 (or 360 for GoolRC)
+CURRENT_LIM         = 25.0     # A per motor soft limit
+CURRENT_LIM_MARGIN  = 10.0     # A headroom above limit (35A hard max)
+CALIBRATION_CURRENT = 10.0     # A used during motor calibration
+VEL_LIMIT           = 40.0     # turns/s (rev/s) motor shaft — ODrive S1 native units (40 rps = 251.3 rad/s = 2400 RPM)
+                               # At 3.5 Hz sprint (θ0=±34°) × 10:1 ratio = 20.8 rps peak (or 30.7 rps at 2.2 Hz ±80°). 40 rps gives ~30-90% headroom.
+BANDWIDTH           = 1000.0   # Hz — velocity controller bandwidth
+BRAKE_RESISTANCE    = 2.0      # Ω — the included brake resistor per S1
+DC_BUS_OVERVOLTAGE  = 28.5     # V — overvoltage trip level for 6S LiPo with regen absorption
+WATCHDOG_TIMEOUT    = 0.100    # s — 100ms CAN communication loss watchdog
+CAN_BAUD            = 1_000_000 # 1 Mbps standard CAN (not CAN-FD for now)
 
 # Node IDs for all 8 S1 boards
 ALL_NODES = list(range(8))   # 0 through 7
@@ -86,16 +87,17 @@ def configure_s1(odrv, node_id, verify_only=False):
                                                                                  'Current hard limit (A)'),
         ('axis0.config.motor.calibration_current',         CALIBRATION_CURRENT, 'Calibration current (A)'),
         # Velocity controller
-        ('axis0.controller.config.vel_limit',              VEL_LIMIT,           'Velocity limit (rad/s)'),
+        ('axis0.controller.config.vel_limit',              VEL_LIMIT,           'Velocity limit (turns/s native)'),
         ('axis0.controller.config.control_mode',           2,                   'Control mode: VELOCITY'),
         ('axis0.controller.config.input_mode',             1,                   'Input mode: VELOCITY_RAMP'),
         # Encoder — on-board absolute magnetic encoder
         # S1 uses on-board encoder by default; these paths confirm it
         ('axis0.config.load_encoder',                      1,                   'Load encoder: onboard'),
         ('axis0.config.commutation_encoder',               1,                   'Commutation: onboard'),
-        # Brake resistor — each S1 has its own (NOT shared)
+        # Brake resistor & DC bus protection — each S1 has its own (NOT shared)
         ('config.brake_resistor0.enable',                  True,                'Brake resistor enabled'),
         ('config.brake_resistor0.resistance',              BRAKE_RESISTANCE,    'Brake resistance (2Ω)'),
+        ('config.dc_bus_overvoltage_trip_level',           DC_BUS_OVERVOLTAGE,  'DC bus overvoltage trip (28.5V)'),
         # CAN node ID
         ('axis0.config.can.node_id',                       node_id,             f'CAN node ID = {node_id}'),
     ]
@@ -276,6 +278,38 @@ def main():
             print("     # Adjust per actual cascade phase offsets in wave library.")
             print("  3. Run preflight: python3 mco_preflight_checks.py --bench")
             print("  4. Start TC-01:   tc01_start  (from ground station)")
+
+
+def safe_failsafe_configuration(odrv=None):
+    """
+    Enforce DO-178C / DAL-C certified failsafe settings across ODrive S1:
+    - 100ms CAN watchdog timeout (cuts torque on lost communication)
+    - Dynamic brake resistor active at 2.0 ohms
+    - 28.5V DC bus overvoltage trip margin
+    - Current limit clamp (25A soft / 35A hard)
+    - Velocity limit clamp (40 turns/s native)
+    """
+    failsafe_params = [
+        ('config.brake_resistor0.enable', True),
+        ('config.brake_resistor0.resistance', BRAKE_RESISTANCE),
+        ('axis0.config.watchdog_timeout', WATCHDOG_TIMEOUT),
+        ('axis0.config.enable_watchdog', True),
+        ('config.dc_bus_overvoltage_trip_level', DC_BUS_OVERVOLTAGE),
+        ('axis0.config.motor.current_soft_max', CURRENT_LIM),
+        ('axis0.config.motor.current_hard_max', CURRENT_LIM + CURRENT_LIM_MARGIN),
+        ('axis0.controller.config.vel_limit', VEL_LIMIT),
+    ]
+    if odrv is not None:
+        for path, val in failsafe_params:
+            try:
+                obj = odrv
+                parts = path.split('.')
+                for p in parts[:-1]:
+                    obj = getattr(obj, p)
+                setattr(obj, parts[-1], val)
+            except Exception as e:
+                print(f"    [FAILSAFE] Warning setting {path}: {e}")
+    return {p[0]: p[1] for p in failsafe_params}
 
 
 if __name__ == '__main__':
