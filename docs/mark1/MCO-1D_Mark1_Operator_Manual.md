@@ -1,0 +1,163 @@
+# MCO-1D Mark 1 — Operator & Pilot Flight Operations Manual
+
+**Aircraft Title**: MCO-1D Mark 1 Metachronal Cascade Ornithopter  
+**Document Designation**: MCO-1D-OPS-MK1  
+**Classification**: Authoritative Operations Baseline — Revision Mark 1 (September 2026)  
+
+---
+
+## 1. Flight Control Architecture & Transmitter Mapping
+
+The **MCO-1D Mark 1** employs an **Intent Arbitration Layer** that converts conventional pilot stick and lever inputs into complex 8-wing kinematic commands. The pilot does not manually fly individual wing surfaces; the flight computer executive (`mco_main.py`) continuously translates pilot intent into optimal metachronal phase, sweep, and pitch commands at 50 Hz.
+
+```
+Transmitter Mapping (Mode 2 Standard):
+   LEFT STICK (Vertical)                   RIGHT STICK (Vertical)
+   +-----------------------+              +-----------------------+
+   |   UNIFIED LEVER       |              |   PITCH COMMAND       |
+   |   100% (Sprint/Max Thrust)           |   (Elevator Feel)     |
+   |   50% (Trim Detent)   |              |                       |
+   |   0% (Max Airbrake)   |              |                       |
+   +-----------------------+              +-----------------------+
+   LEFT STICK (Horizontal)                 RIGHT STICK (Horizontal)
+   +-----------------------+              +-----------------------+
+   |   YAW / SIDESLIP      |              |   ROLL / BANK         |
+   |   Differential Sweep  |              |   Differential Amp    |
+   +-----------------------+              +-----------------------+
+```
+
+---
+
+## 2. The Unified Control Lever (0% to 100%)
+
+The primary propulsion control is the **Unified Lever**, assigned to the transmitter throttle axis (CH3). Following fixed-wing aviation standard: **100% (Full Forward) = Maximum Power / Sprint**, and **0% (Full Aft) = Maximum Airbrake / Emergency Stop**. It governs total specific excess power ($P_s$), airspeed, and descent rate along a continuous response curve:
+
+| Lever Range | Mode Name | Wing Kinematics & Aerodynamic State | Typical Airspeed | Operational Use |
+| :---: | :--- | :--- | :---: | :--- |
+| **88% – 100%** | **SPRINT / MAX THRUST** | Wings swept forward ($30^\circ$), reduced stroke amplitude, peak flapping frequency ($3.5 - 4.0\text{ Hz}$). CF-1 clap burst below 10 m/s (`H-91`). Peak forward thrust or maximum vertical breakout. | $12.0 - 15.0\text{ m/s}$ | Dash, headwind penetration, max climb / vertical breakout. |
+| **78% – 88%** | **HIGH THRUST / CLIMB** | High-thrust climb modes (`CLB2_ANGLE`, `H-92`, `H-71`), stroke $\pm 80^\circ$, frequency $2.5 - 3.0\text{ Hz}$. Positive climb rate ($P_s > 0$). | $10.0 - 12.5\text{ m/s}$ | STOL takeoff climbout, steep obstacle clearance. |
+| **68% – 78%** | **POWERED CRUISE** | Clean $90^\circ$ metachronal cascade (`H-86`, `H-104`), stroke $\pm 80^\circ$, frequency $2.0 - 2.5\text{ Hz}$. Fast transit. | $9.5 - 11.0\text{ m/s}$ | Fast transit, search sweeps. |
+| **55% – 68%** | **CRUISE** | Standard cruise (`H-94`, `H-107`, `H-49`), frequency $1.87 - 2.0\text{ Hz}$, dihedral $+6^\circ$, cascade phase $28^\circ$. | $9.0 - 9.5\text{ m/s}$ | Efficient search patrol, loiter. |
+| **45% – 55%** | **TRIM DETENT** | **Fixed-Wing Mode ($V \ge 5\text{ m/s}$)**: Balanced level cruise ($P_s = 0$, zero VSI).<br>**Helicopter Mode ($V \le 3\text{ m/s}$)**: Stationary hover altitude lock ($0\text{ fpm}$ vertical rate, $1.0\text{g}$ lift equilibrium). | $9.0\text{ m/s}$ (FW)<br>$0.0\text{ m/s}$ (Heli) | Hands-off cruise level flight, or rock-steady stationary hover hold. |
+| **38% – 45%** | **APPROACH / LOW POWER** | Whisper mode (`AQ1_WHISPER`, `H-102`), reduced power, frequency throttled ($1.0 - 1.5\text{ Hz}$). In hover: gentle vertical descent. | $8.0 - 9.0\text{ m/s}$ (FW)<br>$-50\text{ to } -150\text{ fpm}$ (Heli) | Approach corridor, acoustic stealth, or hover descent. |
+| **28% – 38%** | **GLIDE & SOAR** | Unpowered/slow-flap best glide (`H-102`, `H-90`, `H-95`, `H-LSB-1`), dihedral $+6^\circ$, minimal sink rate. Thermal soaring active. | $7.0 - 8.5\text{ m/s}$ | Power conservation, glide descent. |
+| **16% – 28%** | **PIGEON DESCENT** | High-dihedral V-shape ($+40^\circ$ to $+60^\circ$), steep glide slope without airspeed buildup (constant $-3.0\text{ m/s}$ sink). In hover: landing flare. | $6.5 - 7.5\text{ m/s}$ | Steep approach over obstacles, ground approach. |
+| **6% – 16%** | **ACTIVE BRAKE** | Negative AoA active upstroke reverse thrust (`H-87`), turtle pivot brake (`H-103`), clamshell drag. Rapid deceleration. | $5.0 - 6.5\text{ m/s}$ | Rapid speed reduction, entry to hover, ground rollout. |
+| **0% – 6%** | **MAX AIRBRAKE / STOP** | Full cascade reversal ($180^\circ$), maximum aerodynamic braking flare (`H-55`, `H-108`, `LB3_EMERG`), motor idle/stop. | $< 5.0\text{ m/s}$ | Touchdown flare arrest, emergency stop, motor cut. |
+
+---
+
+### 2.1 Transition to Helicopter / Hover Mode ($V \le 3\text{ m/s}$)
+
+The transition between fixed-wing airplane flight and helicopter hover is fully seamless and requires **zero switch-flipping or menu interaction**. It is governed strictly by airspeed crossfading:
+
+1. **Entering Hover at Will**:
+   * While cruising in fixed-wing flight, retard the Unified Lever into the **Active Brake detent ($6\%\text{--}16\%$)** or apply gentle aft stick to flare.
+   * As forward airspeed drops through the $5.0\text{ m/s} \to 3.0\text{ m/s}$ window, the FCC automatically crossfades aerodynamic lift into Weis-Fogh flapping hover lift (`H-64` / `H-66`).
+   * When nearly at rest ($V \le 3.0\text{ m/s}$), **click the Unified Lever into the center 50% Trim Detent**.
+   * The aircraft immediately locks into a stationary hover, commanding $0\text{ fpm}$ vertical speed and holding current radar altitude ($1.0\text{g}$ equilibrium).
+2. **Helicopter Flight Handling**:
+   * **Unified Lever**: Acts as helicopter collective with a center-hold detent:
+     * *Centered at 50%*: Holds current hover altitude rock-steady ($0\text{ fpm}$).
+     * *Forward (> 55%)*: Proportional vertical ascent up to $+400\text{ fpm}$.
+     * *Aft (< 45%)*: Proportional vertical descent down to $-400\text{ fpm}$.
+     * *Below 16%*: Ground contact and settling on landing skids.
+   * **Control Stick**: Controls horizontal translation (cyclic):
+     * Centered: Attitude hold (stabilizes level in place).
+     * Nudge Forward/Aft/Lateral: Gently drifts the aircraft in that direction without changing hover altitude.
+   * **Rudder Pedals**: Controls pure heading rotation (yaw):
+     * Deflecting pedals uses decoupled stroke-plane vectoring (`H-88A` / `H-88B`) or inertial tail-flick (`H-81`) to rotate the aircraft in place ($30^\circ/\text{s}$) with zero roll coupling or lateral drift.
+3. **Resuming Fixed-Wing Flight**:
+   * Push the control stick forward to tilt the thrust vector forward and advance the Unified Lever above $60\%$.
+   * As the aircraft accelerates past $3.0\text{ m/s}$ up through $5.0\text{ m/s}$, the FCC automatically crossfades back into fixed-wing airplane handling.
+
+---
+
+### 2.2 Pilot Inceptor Mapping & Invisible Hypothesis Optimization
+All 232 aerodynamic hypotheses operate **completely invisibly** beneath the controls:
+* **The Pilot Flies an Airplane**: The pilot commands pitch, roll, yaw, and thrust using standard fixed-wing controls (plus helicopter hover when slow).
+* **Autonomous Learning Classifier (ALC)**: The ALC and Context Champions (`_CMTS_CHAMPIONS`) continuously test and select the optimal hypothesis variant for the current flight regime, minimizing battery power and vibration in the background.
+* **No Autonomous Autopilot Active**: Autopilot waypoint navigation and automated 3D trajectory steering are strictly deferred post-first-flight. The human pilot maintains 100% direct command authority at all times.
+
+---
+
+## 3. Standard Operating Procedures (SOP)
+
+### 3.1 Pre-Flight Inspection & Ballast Check
+1. **Mechanical Walkaround**:
+   * Inspect all 8 wings for covering tears or rib delamination.
+   * Check Dyneema capstan cables: verify no fraying, tension within $160 - 200\text{ N}$.
+   * Verify all 16 servo horns are tight with Loctite 243 visible.
+2. **Longitudinal Balance Verification**:
+   * Inspect the sliding battery tray on the fuselage keel rail.
+   * Verify the 4.0 mm ball-lock pin is securely engaged in **Hole 3 ($250\text{ mm}$ aft of datum)** for nominal STOL cruise ($26.5\%$ MAC).
+   * Confirm 6S and 2S battery cinch straps are tight.
+3. **Avionics & Ground Station Bringup**:
+   * Power transmitter; ensure Unified Lever is at **$0\%$ (Stick Down / Safe Stop)**.
+   * Power 2S servo battery, then 6S motor battery.
+   * On the ground station laptop, launch the telemetry bridge and Gemini copilot:
+     ```bash
+     ./start_gs.sh
+     ```
+   * Open the browser ground station (`http://localhost:5759`). Verify solid telemetry streaming at 50 Hz and all 8 ODrive nodes active.
+
+### 3.2 Taxi & STOL Takeoff
+1. **Ground Taxi**:
+   * Advance Unified Lever forward into the $55\% - 65\%$ band until wings begin gentle forward taxi cycling.
+   * Steer along the runway using the Yaw stick (differential wing sweep).
+   * Align aircraft directly into the wind; pull lever back to $50\%$ to idle/stop.
+2. **STOL Takeoff Run**:
+   * Advance Unified Lever smoothly forward to **$85\% - 90\%$ (High Thrust / Takeoff)**.
+   * As airspeed passes $4.0\text{ m/s}$ on the ground roll (after $\approx 8\text{ m}$), apply slight aft pitch stick ($+5^\circ$ AoA).
+   * Aircraft will unstick smoothly at **$6.2\text{ m/s}$**.
+   * Establish initial climbout at **$9.0\text{ m/s}$**; return lever to $55\% - 65\%$ (Cruise) as altitude passes $15\text{ m}$ AGL.
+
+### 3.3 Approach & STOL Landing Flare
+1. **Downwind / Base Leg**:
+   * Set Unified Lever to $60\%$ ($V \approx 9.0\text{ m/s}$); fly standard rectangular pattern.
+2. **Final Approach**:
+   * Retard Unified Lever to **$28\% - 35\%$ (Glide / Approach)** to establish a stable $-1.5\text{ m/s}$ descent at $7.5\text{ m/s}$ airspeed.
+   * If high on glidepath, retard lever to **$20\%$ (Pigeon Descent)** for a steep descent without airspeed gain.
+3. **Touchdown Flare**:
+   * At $1.5\text{ m}$ AGL (monitored via TF-Luna LiDAR), pull lever smoothly back into **$5\% - 10\%$ (Airbrake Flare)**.
+   * The wings flare to high dihedral and maximum drag, arresting sink rate to $< 0.3\text{ m/s}$ as the carbon skids touch down.
+   * Immediately retard lever fully back to **$0\%$ (Max Airbrake / Full Stop)** to stop all wing motion.
+
+---
+
+## 4. Ground Station Operations with Gemini 2.5 Flash Copilot
+
+The Mark 1 integrates an autonomous ground station copilot powered by **Google Gemini 2.5 Flash** running locally on port 5759 (`mco_gemini_proxy.py`).
+
+### Key Capabilities
+* **Live Telemetry Monitoring**: Analyzes 154 real-time telemetry variables at 50 Hz, detecting sensor drift, temperature anomalies, or abnormal energy consumption before the pilot notices.
+* **Natural Language Queries**: The pilot or flight engineer can ask questions directly via the browser ground station console:
+  * *"What is our current specific excess power and battery margin?"*
+  * *"Report wing symmetry and Dyneema rope health on Pair 3."*
+  * *"Analyze our landing approach and give pitch stability score."*
+* **Automatic Post-Flight Debrief**: Generates an instantaneous flight envelope summary and maintenance alert log upon touchdown.
+
+---
+
+## 5. Emergency Procedures & Autonomous Failsafes
+
+### 5.1 Remote Control Signal Loss (RC Failsafe)
+* **Trigger**: SBUS packet loss for $> 1.0\text{ s}$.
+* **Action**:
+  1. The executive immediately overrides pilot inputs and enters **Autonomous Return-to-Home (RTH)**.
+  2. The flight controller commands $50\%$ Unified Lever ($9.0\text{ m/s}$ cruise), climbs or descends to $17\text{ m}$ AGL safety altitude, and navigates via Pixhawk GPS toward the launch coordinates.
+  3. Upon reaching home coordinates, aircraft holds a $25\text{ m}$ radius loiter circle for 60 seconds before executing an automated LiDAR-guided STOL landing flare.
+
+### 5.2 Pitot Tube Obstruction / Ice (`PITOT_STUCK`)
+* **Trigger**: Airspeed unchanged for $> 50$ consecutive samples ($1.0\text{ s}$) while inertial accelerations are present.
+* **Action**:
+  1. The flight computer flags `PITOT_STUCK` in telemetry.
+  2. Airspeed estimation switches seamlessly to the **Synthetic Airspeed Estimator** ($V_{\text{synth}} = |\vec{V}_{\text{GPS}} - \vec{W}_{\text{est}}|$ fused with IMU forward integration).
+  3. Dynamic stall protection margins increase by $1.5\text{ m/s}$ to prevent stall in gusting conditions.
+
+### 5.3 Motor Thermal Overload Protection
+* **Trigger**: ODrive S1 FET temperature exceeds **$75^\circ\text{C}$**.
+* **Action**:
+  1. Executive initiates dynamic velocity limiting: `vel_limit` is scaled back from $150\text{ rad/s}$ to $110\text{ rad/s}$ over 5 seconds.
+  2. Telemetry alerts ground station: `FET_OVERTEMP: Throttling flapping frequency to 2.2 Hz`.
+  3. Pilot is directed to maintain $\ge 35\%$ lever position (cruise) to ensure cooling airflow over the motor bays.

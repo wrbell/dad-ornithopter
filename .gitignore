@@ -19,6 +19,11 @@ venv/
 .venv/
 env/
 .env
+ornithopter-cad/
+
+# Binary installers
+*.dmg
+Antigravity.dmg
 
 # Runtime flight logs & calibration data
 logs/
