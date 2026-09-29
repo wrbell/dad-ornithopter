@@ -293,10 +293,13 @@ def generate_wing_system():
         z_curr = -frac * SPAN_TIP
         scale = 1.0 - 0.78 * (frac ** 1.1)
         x_shift = 16.0 * (frac ** 1.2)
-        loft_wires.append(make_te_3mm_wire(scale, min_te_thick=TE_MIN_THICK).translate(cq.Vector(x_shift, 0, z_curr)))
+        # Taper trailing edge vertical thickness smoothly from 3.15mm at root (Z=0)
+        # down to 1.20mm at the tip D-box (Z=-125mm), preventing thick/ragged overhangs at the tip
+        min_te_thick = max(1.20, TE_MIN_THICK * (1.0 - 0.65 * (frac ** 0.9)))
+        loft_wires.append(make_te_3mm_wire(scale, min_te_thick=min_te_thick).translate(cq.Vector(x_shift, 0, z_curr)))
 
     for d_frac, d_scale in [(0.35, 0.14), (0.70, 0.07), (0.95, 0.02)]:
-        te_th = max(2.5, TE_MIN_THICK * (1.0 - d_frac * 0.2))
+        te_th = max(0.60, 1.20 * (1.0 - d_frac))
         loft_wires.append(make_te_3mm_wire(d_scale, min_te_thick=te_th).translate(cq.Vector(16.0 + d_frac * 1.5, 0, -SPAN_TIP - d_frac * 5.0)))
 
     loft_solid = cq.Solid.makeLoft(loft_wires, ruled=True)
@@ -307,16 +310,15 @@ def generate_wing_system():
     # and internal gyroid infill that connects 100% to the skin.
     tip_solid = tip_outer
 
-    # 3D. Open Bays in Back 70% along -Z with guaranteed >= 3.0mm skeletonized trailing edge land
-    # Bay 0 (Z=-5 to -49.3mm) and Bay 1 (Z=-50.7 to -99.3mm) are open bays between Rib 1 & Rib 2.
-    # The distal tip from Rib 2 to the apex dome (Z=-99.3 to -130.0mm) is preserved as a solid,
-    # smooth aerodynamic cap, guaranteeing 100% intact, continuous skin on the distal top surface!
+    # 3D. Open Bays in Back 70% along -Z with reinforced 4.0mm skeletonized trailing edge land
+    # (thickened by 1.0 mm chordwise to give a robust solid perimeter base and eliminate ragged edges)
     bay_tip_intervals = [
         (-5.0, -49.3),   # Bay 0: between root bulkhead and Rib 1
         (-50.7, -99.3),  # Bay 1: between Rib 1 and Rib 2
     ]
 
     X_ROOT_TE = 143.659
+    TE_LAND_TIP = 4.00   # 4.0 mm chordwise land width (1.0 mm wider than 3.0mm baseline)
 
     for z_start, z_end in bay_tip_intervals:
         bay_wires = []
@@ -328,7 +330,7 @@ def generate_wing_system():
             x_shift = 16.0 * (frac_span ** 1.2)
             x_fwd = 49.5 * scale + x_shift
             x_te = X_ROOT_TE * scale + x_shift
-            x_rear = x_te - TE_LAND
+            x_rear = x_te - TE_LAND_TIP
             p_cut = box(x_fwd, -40.0, x_rear, 40.0)
             c_cut = list(p_cut.exterior.coords)[:-1]
             w_cut = cq.Wire.makePolygon([cq.Vector(c[0], c[1], z_curr) for c in c_cut] + [cq.Vector(c_cut[0][0], c_cut[0][1], z_curr)])
