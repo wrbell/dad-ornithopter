@@ -8,20 +8,29 @@
 
 ---
 
-## 1. How to Use These Worksheets
+## 1. How to Use These Worksheets (Dual-Mode Data Acquisition)
 
-As the physical mechanism of the **MCO-1D Mark 1** is assembled, rigged, and progressed through each flight test gate, record the measured physical numbers into the corresponding worksheet. 
+Data collection is supported across two synchronized workflows:
 
-Whenever you provide these filled numbers back in chat or save them to [`knowledge/build_measurements.json`](file:///Users/drbell/Code/flight/knowledge/build_measurements.json), the simulation models, flight governor limits, and mass properties in `firmware/` and `scripts/` will be updated with your exact as-built numbers.
+### Mode A: Printable PDF Field Cards (Clipboard Longhand Mode)
+Pre-rendered vector PDF cards are located in [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/):
+* **[All-in-One 8-Page Field Binder](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_Mark1_All_Worksheets_Binder.pdf)** (`MCO-1D_Mark1_All_Worksheets_Binder.pdf`)
+* **[WS-00: As-Built Physical Inspection (2 Pages)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS00_As_Built_Physical_Inspection.pdf)** (`MCO-1D_WS00_As_Built_Physical_Inspection.pdf`)
+* **[WS-01: TC-01 Ground Bench Test (1 Page)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)** (`MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`)
+* **[WS-02: TC-02 Tethered Lift & Hover (1 Page)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)** (`MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`)
+* **[WS-03: TC-03 Advance-Ratio Truck Sweep (1 Page)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)** (`MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`)
+* **[WS-04: TC-04 Free Flight STOL Sortie (2 Pages)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)** (`MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`)
 
-```
-Worksheet Directory:
-  * WS-00: As-Built Physical Airframe & Structural Measurement Worksheet
-  * WS-01: Test Card TC-01 — Ground Bench Test Worksheet (Rigid Load Stand)
-  * WS-02: Test Card TC-02 — Tethered Lift & Hover Characterization Worksheet
-  * WS-03: Test Card TC-03 — Moving Vehicle Advance-Ratio Sweep Worksheet
-  * WS-04: Test Card TC-04 — Free Flight STOL Runway Expansion Worksheet
-```
+*Procedure*: Print these cards, take them on a clipboard, record measurements in ink, and photograph or scan them to paste into chat.
+
+### Mode B: Automated Onboard Telemetry Logging & Exporter (Vehicle-Generated Mode)
+The aircraft automatically logs motor currents, bus voltages, electrical power, stator/FET temperatures, loaded servo slews, IMU vibration, airspeed, and GPS trajectory:
+* Run any test card via Ground Station (`tc01_start`, `tc02_start`, `tc03_start`, `tc04_start`).
+* After the test, run the automated telemetry extractor:
+  ```bash
+  python3 scripts/export_test_card_telemetry.py [--tc 1|2|3|4|all] [--json]
+  ```
+* This prints the completed table and JSON directly, saving you from writing numbers manually during high-power flapping!
 
 ---
 

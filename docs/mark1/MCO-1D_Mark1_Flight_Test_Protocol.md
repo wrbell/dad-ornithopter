@@ -23,6 +23,27 @@ flowchart LR
 3. **CAN Communication Dropout**: Loss of more than 2 consecutive 50 Hz frames on any ODrive node.
 4. **Vibration Spike**: RMS airframe accelerometer vibration $> 2.5\text{ g}$ in the $10 - 200\text{ Hz}$ band.
 
+### 1.1 Physical Data Logging & Field Worksheets (Dual-Mode Acquisition)
+To ensure zero data loss during testing, data collection is supported via two synchronized methods:
+
+1. **Printable Field Worksheets (Longhand Mode)**:
+   Pre-formatted PDF field cards are located in [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/):
+   * **Complete Binder (8 Pages)**: [`MCO-1D_Mark1_All_Worksheets_Binder.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_Mark1_All_Worksheets_Binder.pdf)
+   * **WS-00 (2 Pages)**: [`MCO-1D_WS00_As_Built_Physical_Inspection.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS00_As_Built_Physical_Inspection.pdf)
+   * **WS-01 (1 Page)**: [`MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
+   * **WS-02 (1 Page)**: [`MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
+   * **WS-03 (1 Page)**: [`MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
+   * **WS-04 (2 Pages)**: [`MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
+   * *Procedure*: Print on Letter paper, complete on clipboard during testing in ink, photograph or scan, and paste directly into the engineering chat.
+
+2. **Automated Onboard Telemetry Logging (Vehicle-Generated Mode)**:
+   The aircraft automatically samples and logs all dynamic performance metrics:
+   * 8× ODrive motor currents, DC voltages, active electrical Watts, and stator/FET temperatures over CAN-FD at 50 Hz.
+   * 16× servo positions, dynamic loaded slew rate, and voltage droop via 2× MCP3208 12-bit SPI ADCs at 333 Hz.
+   * 3-axis airframe RMS vibration and attitude rates (°/s) via Pixhawk 4 Mini IMU.
+   * Airspeed counts via MS4525DO Pitot-static sensor; ground altitude via TF-Luna LiDAR.
+   * *Export Command*: Run `python3 scripts/export_test_card_telemetry.py` (or Ground Station command `tc_export`) to automatically output populated worksheet tables and JSON ready for analysis.
+
 ---
 
 ## 2. Test Card TC-01: Ground Bench Test
@@ -83,6 +104,9 @@ This harness executes 10 rigorous physics and safety validation gates:
 
 Formal certification output is recorded to [`knowledge/tc01_bench_certification.json`](file:///Users/drbell/Code/flight/knowledge/tc01_bench_certification.json) and documented in [`docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md). All 10 gates must read `PASS` prior to proceeding to TC-02.
 
+* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
+* **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 1`
+
 ---
 
 ## 3. Test Card TC-02: Tethered Lift & Hover Characterization
@@ -96,6 +120,11 @@ Establish vertical force balance and attitude stabilization authority while secu
 ### 3.2 Evaluation Criteria
 * **Equilibrium Discovery**: Identify the minimum frequency where aircraft becomes weightless on the tether ($T / W = 1.00$).
 * **Roll / Pitch Control Authority**: Inject $\pm 5^\circ$ step stick commands; verify pitch servo differential produces $\ge 15^\circ/\text{s}$ pitch rate and roll amplitude differential produces $\ge 20^\circ/\text{s}$ roll rate.
+
+### 3.3 Test Execution & Worksheets
+* **Automated Test Run**: `python3 firmware/mco_test_cards.py --tc 2` (or GS `tc02_start`).
+* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
+* **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 2`
 
 ---
 
@@ -118,6 +147,11 @@ Where $b = 1.584\text{ m}$ (total span) and $f$ is flapping frequency.
    * **Run 4 ($12.0\text{ m/s}$)**: Fast cruise speed.
    * **Run 5 ($14.0\text{ m/s}$)**: Forward-sweep sprint dart configuration.
 
+### 4.3 Test Execution & Worksheets
+* **Automated Test Run**: `python3 firmware/mco_test_cards.py --tc 3` (or GS `tc03_start`).
+* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
+* **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 3`
+
 ---
 
 ## 5. Test Card TC-04: First Free Flight STOL Envelope Expansion
@@ -126,6 +160,7 @@ Where $b = 1.584\text{ m}$ (total span) and $f$ is flapping frequency.
 1. TC-01, TC-02, and TC-03 certified complete with zero open anomalies.
 2. Weight and balance certified with battery sled locked at **250 mm (26.5% MAC)**.
 3. Ambient surface winds $< 3.0\text{ m/s}$ aligned within $15^\circ$ of runway heading.
+4. **Printable Field Worksheet Ready on Clipboard**: [`docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
 
 ### 5.2 Flight Profile & Maneuver Sequence
 
@@ -146,5 +181,10 @@ Immediately upon aircraft retrieval:
    ```bash
    python3 -c "import mco_wave_library as w; w._gs_execute_cmd({'cmd':'alc_debrief'})"
    ```
-2. Inspect Dyneema drive lines for fuzzing or micro-wear using 10× optical loupe.
-3. Download 50 Hz binary flight log from `/var/log/mco_flight.log` for aerodynamic parameter estimation.
+2. Export automated flight telemetry summary:
+   ```bash
+   python3 scripts/export_test_card_telemetry.py --tc 4
+   ```
+3. Inspect Dyneema drive lines for fuzzing or micro-wear using 10× optical loupe.
+4. Download 50 Hz binary flight log from `/var/log/mco_flight.log` for aerodynamic parameter estimation.
+

@@ -137,6 +137,30 @@ The Mark 1 integrates an autonomous ground station copilot powered by **Google G
   * *"Analyze our landing approach and give pitch stability score."*
 * **Automatic Post-Flight Debrief**: Generates an instantaneous flight envelope summary and maintenance alert log upon touchdown.
 
+### 4.2 Test Card Commands & Automated Telemetry Export
+The Ground Station console directly controls automated test card execution and telemetry extraction:
+
+* **Triggering Test Cards**:
+  ```bash
+  tc01_start       # Executes TC-01 ground bench frequency sweep (1.0 to 3.5 Hz)
+  tc02_start       # Executes TC-02 tethered hover unstick discovery
+  tc03_start       # Executes TC-03 advance-ratio truck sweep
+  tc04_start       # Initiates TC-04 guided free flight STOL sequence
+  ```
+* **Status & Abort**:
+  ```bash
+  tc01_status      # Queries live step progress and pass/fail gates
+  tc01_confirm     # Operator confirmation for semi-automatic physical steps
+  tc01_abort       # Emergency test abort: idles all 8 motors immediately
+  ```
+* **Data Export & Worksheets**:
+  * Run `tc_export` to flush all test card results to `/home/pi/knowledge/tc_results.json`.
+  * From the ground station terminal, execute:
+    ```bash
+    python3 scripts/export_test_card_telemetry.py [--tc 1|2|3|4|all] [--json]
+    ```
+    This outputs the formatted table corresponding to printable worksheets [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/), providing immediate verification without manual pen recording during test sequences.
+
 ---
 
 ## 5. Emergency Procedures & Autonomous Failsafes
