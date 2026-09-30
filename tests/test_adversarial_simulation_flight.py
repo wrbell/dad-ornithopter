@@ -54,6 +54,20 @@ class AdversarialFlightSimulator:
             if 'pitot_history' in wl._fault_state:
                 wl._fault_state['pitot_history'].clear()
 
+        # Reset firmware Continuous Lever System (CLS) state
+        if hasattr(wl, 'reset_cls_state'):
+            wl.reset_cls_state()
+        elif hasattr(wl, '_cls_state'):
+            wl._cls_state['freq_actual'] = 2.5
+            wl._cls_state['freq_target'] = 2.5
+            wl._cls_state['blend_alpha'] = 0.0
+            wl._cls_state['lever_prev'] = 50.0
+            wl._cls_state['correction_times'].clear()
+
+        # Reset firmware tie-breaker state
+        if hasattr(wl, 'reset_tie_breaker_state'):
+            wl.reset_tie_breaker_state()
+
         # Aircraft state vector
         self.x = 0.0
         self.y = 0.0

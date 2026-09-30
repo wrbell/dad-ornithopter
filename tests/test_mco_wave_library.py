@@ -29,6 +29,14 @@ from mco_flight_governor import (
 class TestPhaseAwareHypothesisSeeding(unittest.TestCase):
     """Verifies phase-aware mission hypothesis filtering and prioritization."""
 
+    @classmethod
+    def setUpClass(cls):
+        cls._orig_queue = list(wl._hypothesis_queue)
+
+    @classmethod
+    def tearDownClass(cls):
+        wl._hypothesis_queue[:] = cls._orig_queue
+
     def test_seed_cruise_phase(self):
         """Verify cruise phase seeding only yields hypotheses applicable to cruise."""
         n = wl.seed_hypotheses_for_mission(flight_phase='cruise', V_ms=9.0)
@@ -81,6 +89,19 @@ class TestPhaseAwareHypothesisSeeding(unittest.TestCase):
 
 class TestHypothesisDeduplicationAndConvergence(unittest.TestCase):
     """Verifies parameter distance checking and duplicate rejection safeguards."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._orig_queue = list(wl._hypothesis_queue)
+        cls._orig_eval_history = list(wl._hypothesis_eval_history)
+        cls._orig_results = dict(wl._hypothesis_results)
+
+    @classmethod
+    def tearDownClass(cls):
+        wl._hypothesis_queue[:] = cls._orig_queue
+        wl._hypothesis_eval_history[:] = cls._orig_eval_history
+        wl._hypothesis_results.clear()
+        wl._hypothesis_results.update(cls._orig_results)
 
     def setUp(self):
         # Reset queue and history before each test

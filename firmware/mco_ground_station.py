@@ -611,6 +611,7 @@ _CMD_CATALOGUE = {
     'pilot_intent_status': 'Current intent and mechanism weights',
     'l4_status':           'Loop 4 optimizer status',
     'knowledge_status':    'What has been learned — knowledge state summary',
+    'endurance_status':    'Honest power accounting & endurance hypotheses status (H-SERVO-1, H-DIST-1, H-SWEEP-1, H-DUTY-1)',
   },
 }
 
@@ -847,6 +848,10 @@ def parse_and_send(line, conn, state):
 
     elif cmd == 'status':
         conn.send({'cmd': 'status'})
+
+    elif cmd == 'endurance_status':
+        endurance_status()
+        return
 
     elif cmd == 'aero':
         conn.send({'cmd': 'aero_cal_status'})
@@ -1687,6 +1692,12 @@ def focus_define(name='', description='', metric='imu_rms_g',
         from mco_wave_library import focus_define as _fd
         _fd(str(name), str(description), str(metric), str(direction),
             bool(persist))
+    except Exception as e: print(f"  error: {e}")
+
+def endurance_status():
+    """Show honest endurance power accounting and suite status."""
+    try:
+        from mco_wave_library import endurance_status as _es; _es()
     except Exception as e: print(f"  error: {e}")
 
 if __name__ == '__main__':

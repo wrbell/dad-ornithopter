@@ -353,6 +353,18 @@ BOM_DATABASE = [
         "unit_mass_g": 120.0,
         "notes": "Ultra-flexible multi-strand wire for vibrating armatures and quick-disconnect connectors."
     },
+    {
+        "id": "PWR-07",
+        "name": "Texas Instruments INA226 High-Side Current & Power Monitor Breakout (0.005Ω Shunt)",
+        "category": "4. Power Storage & Electrical Distribution",
+        "qty": 1,
+        "unit_price": 12.50,
+        "vendor": "Adafruit / Mouser / Texas Instruments",
+        "url": "https://www.adafruit.com/product/4982",
+        "part_no": "TI-INA226-BRK",
+        "unit_mass_g": 4.5,
+        "notes": "Inline between 2S 7.4V LiPo and 16-port servo bus (pre-buffer capacitor). I2C (0x40) to Pi 4B GPIO 2/3. Closes 60–105W servo blind spot for H-SERVO-1."
+    },
 
     # ── 5. AIRFRAME & WING STRUCTURE ─────────────────────────────────────────
     {

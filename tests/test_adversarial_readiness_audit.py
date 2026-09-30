@@ -197,6 +197,52 @@ class TestAdversarialReadinessAudit(unittest.TestCase):
         self.assertEqual(res.checks[1].status, pfc.PASS)
         self.assertEqual(res.checks[2].status, pfc.PASS)
 
+    def test_path2_ps_governed_climb_limits(self):
+        """Path 2 Milestone 2: Climb modes must enforce electrical Ps constraints."""
+        clb1 = w.unified_lever_to_params(72.0, V_ms=8.0, h_agl_m=10.0)
+        clb2 = w.unified_lever_to_params(82.0, V_ms=8.0, h_agl_m=10.0)
+
+        self.assertEqual(clb1['mode_id'], 'CLB1_RATE')
+        self.assertLessEqual(clb1['climb_rate_ceiling_ms'], 2.2)
+        self.assertLessEqual(clb1['max_continuous_power_w'], 280.0)
+        self.assertFalse(clb1['is_kinetic_zoom'])
+
+        self.assertEqual(clb2['mode_id'], 'CLB2_ANGLE')
+        self.assertLessEqual(clb2['max_steady_gamma_deg'], 15.5)
+        self.assertLessEqual(clb2['climb_rate_ceiling_ms'], 2.2)
+        self.assertLessEqual(clb2['max_continuous_power_w'], 280.0)
+        self.assertFalse(clb2['is_kinetic_zoom'])
+
+    def test_path2_atmospheric_density_and_loaded_servo_slew(self):
+        """Path 2 Milestone 3: Barometric density and aero hinge derating on servo slew rate."""
+        import mco_flight_governor as fg
+        # Density decreases with altitude
+        rho_sea_level = fg.atmospheric_density(0.0)
+        rho_1000m = fg.atmospheric_density(1000.0)
+        self.assertAlmostEqual(rho_sea_level, 1.225, delta=0.01)
+        self.assertLess(rho_1000m, rho_sea_level)
+
+        # Loaded slew rate derates at high speed due to aerodynamic hinge moments
+        slew_0ms = fg.compute_loaded_servo_slew_ceiling(V_ms=0.0)
+        slew_20ms = fg.compute_loaded_servo_slew_ceiling(V_ms=20.0)
+        self.assertEqual(slew_0ms, fg.PITCH_SERVO_SLEW_DPS)
+        self.assertLess(slew_20ms, slew_0ms)
+        self.assertGreaterEqual(slew_20ms, fg.PITCH_SERVO_SLEW_DPS * 0.35)
+
+    def test_path2_active_vs_apparent_power_model(self):
+        """Path 2 Milestone 1: Reconcile flapping motor active work from apparent voltamperes."""
+        import mco_performance_model as pm
+        model = pm.PerformanceModel()
+        res = model.predict(freq_hz=2.0, V_ms=10.0, sweep_deg_mean=60.0,
+                            amplitude_deg=80.0, throttle_frac=0.7)
+
+        self.assertIn('power_apparent_va', res)
+        self.assertIn('power_W', res)
+        self.assertIn('power_factor', res)
+        self.assertEqual(res['power_factor'], pm.PF_FLAPPING)
+        self.assertLess(res['power_W'], res['power_apparent_va'])
+        self.assertLessEqual(res['power_W'], 600.0)
+
 
 if __name__ == '__main__':
     unittest.main()

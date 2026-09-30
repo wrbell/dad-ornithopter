@@ -13,7 +13,7 @@ import numpy as np
 import pyvista as pv
 
 OUT_DIR = 'cad/manufactured'
-ARTIFACT_DIR = '/Users/drbell/.gemini/antigravity/brain/fcfca30b-4f75-4837-ba9b-50a1b0b3caba'
+ARTIFACT_DIR = '/Users/drbell/.gemini/antigravity/brain/6bbf0df4-3e68-4851-9322-6154657ee0b5'
 AIRCRAFT_STL = os.path.join(OUT_DIR, 'mco_core_one_lego_edition.stl')
 
 def render_views():
@@ -35,6 +35,7 @@ def render_views():
     mesh_center_x = (bb[0] + bb[1]) / 2.0
     mesh_center_y = (bb[2] + bb[3]) / 2.0
     mesh_centered = mesh.translate((plate_center_x - mesh_center_x, plate_center_y - mesh_center_y, -bb[4]))
+    cockpit_x = 63.0
 
     # Plate mesh
     plate = pv.Cube(center=(plate_center_x, plate_center_y, -1.0), x_length=plate_x, y_length=plate_y, z_length=2.0)
@@ -52,14 +53,12 @@ def render_views():
     print(f"  ✓ Rendered: {img1}")
 
     # 2. Close-up on the Lego Cockpit (Seat with 2 Studs, Dual Joysticks & Console)
-    # The nose is at the front of the aircraft (lower X in centered space)
-    cockpit_x = plate_center_x - (mesh_center_x - bb[0]) + 18.0
     p2 = pv.Plotter(off_screen=True, window_size=[1800, 1200])
     p2.set_background('#ffffff')
     p2.add_mesh(mesh_centered, color='#ea580c', specular=0.45, ambient=0.3, diffuse=0.8, smooth_shading=True)
-    # Camera looking directly down-forward into the open cockpit
-    p2.camera_position = [(cockpit_x - 45, -55, 55), (cockpit_x + 5, 0, 16), (0, 0, 1)]
-    p2.camera.zoom(1.4)
+    # Camera looking directly into the open cockpit, seatback, studs, footwell and dashboard
+    p2.camera_position = [(10, -85, 65), (63, 0, 20), (0, 0, 1)]
+    p2.camera.zoom(1.05)
     img2 = os.path.join(OUT_DIR, 'mco_core_one_lego_cockpit_zoom.png')
     p2.screenshot(img2)
     print(f"  ✓ Rendered: {img2}")
@@ -84,9 +83,19 @@ def render_views():
     p4.screenshot(img4)
     print(f"  ✓ Rendered: {img4}")
 
+    # 5. Close-up on Stout Aircraft Tail Skid Bumper
+    p5 = pv.Plotter(off_screen=True, window_size=[1800, 1100])
+    p5.set_background('#ffffff')
+    p5.add_mesh(mesh_centered, color='#ea580c', specular=0.4, ambient=0.25, diffuse=0.8, smooth_shading=True)
+    p5.camera_position = [(200, -85, 25), (165, 0, 8), (0, 0, 1)]
+    p5.camera.zoom(1.3)
+    img5 = os.path.join(OUT_DIR, 'mco_core_one_lego_gear_truss_zoom.png')
+    p5.screenshot(img5)
+    print(f"  ✓ Rendered: {img5}")
+
     # Copy images to artifact directory
     if os.path.exists(ARTIFACT_DIR):
-        for img in [img1, img2, img3, img4]:
+        for img in [img1, img2, img3, img4, img5]:
             shutil.copy(img, ARTIFACT_DIR)
         print("  ✓ Synced all Lego Edition renders to artifacts directory.")
 

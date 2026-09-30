@@ -2,29 +2,29 @@
 
 **Aircraft Designation**: MCO-1D Mark 1 Metachronal Cascade Ornithopter  
 **Demonstrator Program**: MCO-1A Search-and-Rescue (SAR) Subscale Prototype  
-**Last Refreshed / Price Verified**: `2026-09-22 19:56:47 UTC`  
+**Last Refreshed / Price Verified**: `2026-09-27 20:48:16 UTC`  
 **Classification**: Authoritative Engineering Sourcing Record (Mark 1 Baseline)  
 
 ---
 
 ## Executive Sourcing Summary
 
-- **Total Line Items**: 45 distinct components
-- **Total Physical Parts Count**: 176 parts (complete airframe + spares)
-- **Total Estimated Procurement Cost**: **$3,863.28 USD**
+- **Total Line Items**: 46 distinct components
+- **Total Physical Parts Count**: 177 parts (complete airframe + spares)
+- **Total Estimated Procurement Cost**: **$3,875.78 USD**
 - **Operational Flight MTOW**: **5.897 kg (5,897 g)** (certified flight mass with 1.15m wings & GoolRC motors)
-- **Gross Kit & Spares Mass**: **8.226 kg (8,226 g)** (all line items including spares & bench gear)
+- **Gross Kit & Spares Mass**: **8.230 kg (8,230 g)** (all line items including spares & bench gear)
 - **Longitudinal Balance (CG)**: **467.6 mm aft of datum (-5.1% MAC reference, 43.3 mm forward of NP)** on quick-pin slide rail (Safe Envelope: -10.0%–25.0% MAC)
 
 | Category | Line Items | Subtotal (USD) | Subtotal Mass (g) | % of Cost |
 | :--- | :---: | :---: | :---: | :---: |
-| **1. Propulsion & Kinematic Drivetrain** | 6 | $1,094.00 | 2,098 g | 28.3% |
-| **2. Morphing Actuation & Servo Systems** | 4 | $1,216.41 | 1,410 g | 31.5% |
+| **1. Propulsion & Kinematic Drivetrain** | 6 | $1,094.00 | 2,098 g | 28.2% |
+| **2. Morphing Actuation & Servo Systems** | 4 | $1,216.41 | 1,410 g | 31.4% |
 | **3. Avionics, Computing & Sensors** | 11 | $337.99 | 202 g | 8.7% |
-| **4. Power Storage & Electrical Distribution** | 6 | $222.48 | 904 g | 5.8% |
+| **4. Power Storage & Electrical Distribution** | 7 | $234.98 | 908 g | 6.1% |
 | **5. Airframe, Wing Structure & Mechanics** | 12 | $831.90 | 3,363 g | 21.5% |
-| **6. Precision Hardware, Fasteners & Consumables** | 6 | $160.50 | 249 g | 4.2% |
-| **TOTAL (All Subsystems)** | **45** | **$3,863.28** | **8,226 g** | **100.0%** |
+| **6. Precision Hardware, Fasteners & Consumables** | 6 | $160.50 | 249 g | 4.1% |
+| **TOTAL (All Subsystems)** | **46** | **$3,875.78** | **8,230 g** | **100.0%** |
 
 ---
 
@@ -70,7 +70,7 @@
 | `AV-11` | **HX711 24-Bit ADC + 5 kg S-Type Precision Load Cell Kit** | 1 | $15.00 | **$15.00** | 45.0 g | [SparkFun / Amazon](https://www.sparkfun.com/products/13879) | `SEN-13879-KIT`<br>*Used during TC-01 and TC-02 ground bench test stands for live thrust and lift logging.* |
 
 ### 4. Power Storage & Electrical Distribution
-*Category Subtotal: **$222.48 USD** | Mass: **904 g***
+*Category Subtotal: **$234.98 USD** | Mass: **908 g***
 
 | Item ID | Component & Description | Qty | Unit Price | Ext. Price | Unit Mass | Vendor / Sourcing Link | Part Number / Notes |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- | :--- |
@@ -80,6 +80,7 @@
 | `PWR-04` | **Panasonic 4,700 µF 16V Low-ESR Electrolytic Buffer Capacitor** | 2 | $2.25 | **$4.50** | 8.0 g | [Mouser / Panasonic](https://www.mouser.com/ProductDetail/Panasonic/EEU-FR1C472) | `EEU-FR1C472`<br>*Connected across the 7.4V servo bus rail to suppress voltage dips during reversals.* |
 | `PWR-05` | **High-Current 8-Way Motor Power Distribution Rail (120A)** | 1 | $14.50 | **$14.50** | 18.0 g | [Matek Systems / Amazon](https://www.mateksys.com) | `MTK-PDB-120A`<br>*Feeds 22.2V main propulsion power to 8× ODrive S1 units via 30A automotive blade fuses.* |
 | `PWR-06` | **High-Flex 14 AWG / 22 AWG Silicone Wire & XT60/XT30 Connector Kit** | 1 | $18.50 | **$18.50** | 120.0 g | [Amass / Amazon](https://www.amazon.com) | `AMASS-SIL-CONN-KIT`<br>*Ultra-flexible multi-strand wire for vibrating armatures and quick-disconnect connectors.* |
+| `PWR-07` | **Texas Instruments INA226 High-Side Current & Power Monitor Breakout (0.005Ω Shunt)** | 1 | $12.50 | **$12.50** | 4.5 g | [Adafruit / Mouser / Texas Instruments](https://www.adafruit.com/product/4982) | `TI-INA226-BRK`<br>*Inline between 2S 7.4V LiPo and 16-port servo bus (pre-buffer capacitor). I2C (0x40) to Pi 4B GPIO 2/3. Closes 60–105W servo blind spot for H-SERVO-1.* |
 
 ### 5. Airframe, Wing Structure & Mechanics
 *Category Subtotal: **$831.90 USD** | Mass: **3,363 g***

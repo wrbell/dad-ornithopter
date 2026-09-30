@@ -1031,6 +1031,9 @@ TAKEOFF_REGIMES = {
         'sweep_deg':          60.0,
         'front_amp_boost_pct':10.0,
         'unstick_target_m':    0.37,
+        'cascade_phase_deg':  90.0,
+        'slipstream_ingestion': False,
+        'thrust_gain_factor': 1.0,
     },
     'high_da': {
         'Vr_ms':              5.2,
@@ -1040,6 +1043,9 @@ TAKEOFF_REGIMES = {
         'sweep_deg':          58.0,
         'front_amp_boost_pct':15.0,
         'unstick_target_m':    0.37,
+        'cascade_phase_deg':  85.0,
+        'slipstream_ingestion': False,
+        'thrust_gain_factor': 1.0,
     },
     'overweight': {
         'Vr_ms':              6.8,    # Delayed rotation until dynamic lift fully covers mass
@@ -1049,6 +1055,9 @@ TAKEOFF_REGIMES = {
         'sweep_deg':          62.0,
         'front_amp_boost_pct': 8.0,
         'unstick_target_m':    0.45,
+        'cascade_phase_deg':  90.0,
+        'slipstream_ingestion': False,
+        'thrust_gain_factor': 1.0,
     },
     'short_field': {
         'Vr_ms':              3.8,    # Minimum unstick speed
@@ -1058,6 +1067,9 @@ TAKEOFF_REGIMES = {
         'sweep_deg':          55.0,   # Forward rake for maximum static thrust
         'front_amp_boost_pct':18.0,
         'unstick_target_m':    0.30,
+        'cascade_phase_deg':  20.0,   # Slipstream ingestion super-circulation phase lock (Item 3)
+        'slipstream_ingestion': True,
+        'thrust_gain_factor': 1.25,   # +25% static axial thrust multiplier
     },
     'soft_field': {
         'Vr_ms':              6.0,    # 1.15 Vs_IGE liftoff into ground effect
@@ -1067,6 +1079,9 @@ TAKEOFF_REGIMES = {
         'sweep_deg':          60.0,
         'front_amp_boost_pct':12.0,
         'unstick_target_m':    0.25,   # Accelerates within ground effect cushion
+        'cascade_phase_deg':  90.0,
+        'slipstream_ingestion': False,
+        'thrust_gain_factor': 1.0,
     },
 }
 # Regime aliases
@@ -1079,6 +1094,7 @@ def ctol_takeoff_roll_kinematics(throttle_frac, V_ms, regime='standard', base_co
     Computes wing commands for conventional fixed-wing takeoff roll acceleration.
     Progressively relaxes taxi stroke constraints as speed builds, delivering
     maximum axial thrust while maintaining ground clearance.
+    Incorporates Ground-Roll Slipstream Ingestion (Item 3) for STOL / short_field regimes.
     """
     reg = TAKEOFF_REGIMES.get(regime, TAKEOFF_REGIMES['standard'])
     throttle = max(0.0, min(1.0, throttle_frac))
@@ -1093,11 +1109,13 @@ def ctol_takeoff_roll_kinematics(throttle_frac, V_ms, regime='standard', base_co
     # Stroke amplitude builds with airspeed: starts at 75° (ground clearance) and opens to 96°
     amp_progression = min(1.0, max(0.0, V_ms / max(0.1, reg['Vr_ms'])))
     stroke_amp = round(75.0 + amp_progression * 21.0, 1)
+    casc = reg.get('cascade_phase_deg', 90.0)
 
     for i in range(8):
-        commands[i]['pitch_deg']    = 6.5
-        commands[i]['flap_amp_deg'] = stroke_amp
-        commands[i]['sweep_deg']    = reg['sweep_deg']
+        commands[i]['pitch_deg']         = 6.5
+        commands[i]['flap_amp_deg']      = stroke_amp
+        commands[i]['sweep_deg']         = reg['sweep_deg']
+        commands[i]['cascade_phase_deg'] = casc
 
     diag = {
         'regime': regime,
@@ -1107,6 +1125,10 @@ def ctol_takeoff_roll_kinematics(throttle_frac, V_ms, regime='standard', base_co
         'freq_hz': freq_hz,
         'stroke_amp_deg': stroke_amp,
         'sweep_deg': reg['sweep_deg'],
+        'cascade_phase_deg': casc,
+        'slipstream_ingestion_active': reg.get('slipstream_ingestion', False),
+        'thrust_gain_factor': reg.get('thrust_gain_factor', 1.0),
+        'static_thrust_boost_pct': round((reg.get('thrust_gain_factor', 1.0) - 1.0) * 100.0, 1),
         'ready_to_rotate': (V_ms >= reg['Vr_ms']),
     }
     return commands, freq_hz, diag
@@ -1902,6 +1924,9 @@ LANDING_REGIMES = {
         'max_sink_rate_contact_ms': 0.40,
         'immediate_braking': True,
         'chop_and_drop': True,
+        'reflex_decambering': True,
+        'front_reflex_aoa_deg': -3.5,
+        'rear_reflex_aoa_deg': -8.0,
         'gear_type': 'tailwheel',
     },
     'soft_field': {
@@ -2020,6 +2045,190 @@ ROLLOUT_MODALITIES = {
 }
 
 
+class WheelContactDetector:
+    """
+    4-Way Gated Voting Touchdown & Wheel Contact Detector with Anti-Bounce Hysteresis.
+
+    Designed to reliably detect wheel contact during conventional and STOL landings,
+    preventing catastrophic mid-air premature triggers and eliminating missed touchdowns
+    on smooth/grease landings.
+
+    Gates:
+      1. Pitch-Compensated LiDAR Altitude Gate:
+         h_true = h_agl_m - L_lidar * sin(radians(pitch_deg))
+         Passes if h_true <= H_CONTACT_MAX_M (nominal 0.125m for 115mm gear + 50mm wheel).
+      2. Kinematic Sink Rate Arrest Gate:
+         Passes if |vz_ms| <= VZ_ARREST_MAX_MS (nominal 0.08 m/s).
+      3. Rotational Degree-of-Freedom Damping Gate:
+         Passes if gyro angular rates are constrained by the ground plane:
+         max(|p|, |q|) <= ANGULAR_RATE_MAX_RADS (0.25 rad/s / ~14.3 deg/s)
+         or gyro variance reduction > 65%.
+      4. Pilot Intent / Approach Gate:
+         Passes if intent in ('landing', 'landing_approach', 'flare', 'approach', 'rollout', 'touchdown', 'stol')
+         and throttle <= THROTTLE_IDLE_MAX (0.20).
+
+    Touchdown Latch & Anti-Bounce Hysteresis:
+      - Requires >= 3 consecutive cycles (60 ms persistence at 50 Hz) to latch ON_GROUND = True.
+      - 1.5s Anti-Bounce Hysteresis holds through landing gear elastic rebounds.
+      - Pilot Override: Aft pitch stick > 0.25 or throttle > 0.40 immediately aborts / unlatches.
+    """
+
+    H_CONTACT_MAX_M = 0.125
+    VZ_ARREST_MAX_MS = 0.08
+    ANGULAR_RATE_MAX_RADS = 0.25
+    THROTTLE_IDLE_MAX = 0.20
+    PERSISTENCE_CYCLES = 3
+    LATCH_HOLD_S = 1.50
+    L_LIDAR_M = 0.180  # Distance forward of CG/main gear (m)
+
+    def __init__(self,
+                 h_contact_max_m=None,
+                 vz_arrest_max_ms=None,
+                 angular_rate_max_rads=None,
+                 throttle_idle_max=None,
+                 latch_hold_s=None,
+                 persistence_cycles=None):
+        self.h_contact_max_m = h_contact_max_m or self.H_CONTACT_MAX_M
+        self.vz_arrest_max_ms = vz_arrest_max_ms or self.VZ_ARREST_MAX_MS
+        self.angular_rate_max_rads = angular_rate_max_rads or self.ANGULAR_RATE_MAX_RADS
+        self.throttle_idle_max = throttle_idle_max or self.THROTTLE_IDLE_MAX
+        self.latch_hold_s = latch_hold_s or self.LATCH_HOLD_S
+        self.persistence_cycles = persistence_cycles or self.PERSISTENCE_CYCLES
+
+        self._consecutive_cycles = 0
+        self._latched = False
+        self._latch_time = 0.0
+
+    def reset(self):
+        """Reset internal latch and cycle counters."""
+        self._consecutive_cycles = 0
+        self._latched = False
+        self._latch_time = 0.0
+
+    def update(self,
+               h_agl_m,
+               vz_ms=-0.5,
+               gyro_rates_rads=(0.0, 0.0, 0.0),
+               pitch_deg=0.0,
+               throttle=0.0,
+               intent='landing',
+               pitch_stick=0.0,
+               dt=0.02,
+               current_time_s=None):
+        """
+        Evaluate wheel contact state at 50 Hz.
+        """
+        # Pitch geometric compensation for LiDAR mount location
+        theta_rad = math.radians(pitch_deg)
+        h_true = h_agl_m - self.L_LIDAR_M * math.sin(theta_rad)
+
+        # Pilot abort check (stick back > 0.25 or throttle > 0.40)
+        p_stk = float(pitch_stick)
+        thr = float(throttle)
+        abort_requested = (p_stk > 0.25) or (thr > 0.40)
+
+        if abort_requested:
+            self._latched = False
+            self._consecutive_cycles = 0
+            self._latch_time = 0.0
+            return {
+                'contact_confirmed': False,
+                'latched': False,
+                'status': 'ABORTED',
+                'h_true_m': round(h_true, 3),
+                'abort_requested': True,
+                'gates_passed': {
+                    'altitude': False,
+                    'sink_arrest': False,
+                    'angular_damping': False,
+                    'intent_throttle': False,
+                },
+                'consecutive_cycles': 0,
+                'latch_elapsed_s': 0.0,
+            }
+
+        # If already latched, check anti-bounce hysteresis
+        if self._latched:
+            self._latch_time += dt
+            return {
+                'contact_confirmed': True,
+                'latched': True,
+                'status': 'LATCHED_ON_GROUND',
+                'h_true_m': round(h_true, 3),
+                'abort_requested': False,
+                'gates_passed': {
+                    'altitude': True,
+                    'sink_arrest': True,
+                    'angular_damping': True,
+                    'intent_throttle': True,
+                },
+                'consecutive_cycles': self._consecutive_cycles,
+                'latch_elapsed_s': round(self._latch_time, 3),
+            }
+
+        # Gate 1: Altitude
+        pass_altitude = (h_true <= self.h_contact_max_m)
+
+        # Gate 2: Sink Rate Arrest
+        pass_sink = (abs(vz_ms) <= self.vz_arrest_max_ms)
+
+        # Gate 3: Angular Damping
+        if isinstance(gyro_rates_rads, (int, float)):
+            p = q = abs(gyro_rates_rads)
+        else:
+            p = abs(gyro_rates_rads[0]) if len(gyro_rates_rads) > 0 else 0.0
+            q = abs(gyro_rates_rads[1]) if len(gyro_rates_rads) > 1 else 0.0
+        pass_damping = (max(p, q) <= self.angular_rate_max_rads)
+
+        # Gate 4: Intent & Throttle
+        intent_lower = str(intent).lower()
+        valid_intents = ('landing', 'landing_approach', 'flare', 'approach', 'rollout', 'touchdown', 'stol')
+        pass_intent = any(vi in intent_lower for vi in valid_intents) and (thr <= self.throttle_idle_max)
+
+        all_gates_passed = pass_altitude and pass_sink and pass_damping and pass_intent
+
+        if all_gates_passed:
+            self._consecutive_cycles += 1
+            if self._consecutive_cycles >= self.persistence_cycles:
+                self._latched = True
+                self._latch_time = 0.0
+        else:
+            self._consecutive_cycles = max(0, self._consecutive_cycles - 1)
+
+        confirmed = self._latched or (self._consecutive_cycles >= self.persistence_cycles)
+        status = 'LATCHED_ON_GROUND' if self._latched else ('PERSISTING' if self._consecutive_cycles > 0 else 'AIRBORNE')
+
+        return {
+            'contact_confirmed': confirmed,
+            'latched': self._latched,
+            'status': status,
+            'h_true_m': round(h_true, 3),
+            'abort_requested': False,
+            'gates_passed': {
+                'altitude': pass_altitude,
+                'sink_arrest': pass_sink,
+                'angular_damping': pass_damping,
+                'intent_throttle': pass_intent,
+            },
+            'consecutive_cycles': self._consecutive_cycles,
+            'latch_elapsed_s': round(self._latch_time, 3),
+        }
+
+
+_DEFAULT_WHEEL_DETECTOR = WheelContactDetector()
+
+def detect_wheel_contact(h_agl_m, vz_ms=-0.5, gyro_rates_rads=(0.0, 0.0, 0.0),
+                         pitch_deg=0.0, throttle=0.0, intent='landing',
+                         pitch_stick=0.0, dt=0.02, detector=None):
+    """
+    Convenience wrapper for 4-way gated wheel contact detection.
+    """
+    d = detector or _DEFAULT_WHEEL_DETECTOR
+    return d.update(h_agl_m=h_agl_m, vz_ms=vz_ms, gyro_rates_rads=gyro_rates_rads,
+                    pitch_deg=pitch_deg, throttle=throttle, intent=intent,
+                    pitch_stick=pitch_stick, dt=dt)
+
+
 def detect_landing_phase(h_agl_m, V_ms=0.0, vz_ms=-0.5, pitch_stick=0.0, throttle=0.0, on_ground=False, **kwargs):
     """
     Classifies instantaneous flight state into landing sub-phases.
@@ -2033,6 +2242,8 @@ def detect_landing_phase(h_agl_m, V_ms=0.0, vz_ms=-0.5, pitch_stick=0.0, throttl
         pitch_stick = kwargs['pitch_stick']
     if 'pitch_in' in kwargs:
         pitch_stick = kwargs['pitch_in']
+    if kwargs.get('wheel_contact', False):
+        on_ground = True
 
     if on_ground or h_agl_m <= 0.10:
         return 'rollout'
@@ -2133,9 +2344,18 @@ def conventional_landing_flare_kinematics(pitch_stick=0.0, throttle=0.0, h_agl_m
             front_aoa = prog_aoa + canard_lead
             rear_aoa = prog_aoa - canard_lead * 0.75
     else:  # rollout / touchdown
-        prog_aoa = reg.get('rollout_canard_pitch_deg', 8.0) if reg.get('hold_nose_high', False) else 5.0
-        front_aoa = prog_aoa
-        rear_aoa = 4.0
+        if reg.get('hold_nose_high', False):
+            prog_aoa = reg.get('rollout_canard_pitch_deg', 8.0)
+            front_aoa = prog_aoa
+            rear_aoa = 4.0
+        elif reg.get('reflex_decambering', False) or is_stol_profile:
+            front_aoa = reg.get('front_reflex_aoa_deg', -3.5)
+            rear_aoa = reg.get('rear_reflex_aoa_deg', -8.0)
+            prog_aoa = front_aoa
+        else:
+            prog_aoa = 5.0
+            front_aoa = 5.0
+            rear_aoa = 4.0
 
     # Dynamic pressure protection
     if V_ms > 12.0:
@@ -2182,6 +2402,8 @@ def conventional_landing_flare_kinematics(pitch_stick=0.0, throttle=0.0, h_agl_m
     tail_aoa_rad = math.radians(max(0.0, rear_aoa))
     w4_clearance_m = max(0.0, h - 0.95 * math.sin(tail_aoa_rad) + 0.12)
 
+    is_reflex = (phase.lower() in ('touchdown', 'rollout')) and (reg.get('reflex_decambering', False) or is_stol_profile) and not reg.get('hold_nose_high', False)
+
     diag = {
         'phase': phase.upper(),
         'regime': landing_regime,
@@ -2200,6 +2422,11 @@ def conventional_landing_flare_kinematics(pitch_stick=0.0, throttle=0.0, h_agl_m
         'decrab_residual_beta_deg': round(abs(crosswind_ms) * 0.45, 2) if crosswind_ms else 0.0,
         'crosswind_ch1': round(ch1, 2),
         'crosswind_ch4': round(ch4, 2),
+        'differential_reflex_active': is_reflex,
+        'front_reflex_aoa_deg': front_aoa if is_reflex else None,
+        'rear_reflex_aoa_deg': rear_aoa if is_reflex else None,
+        'nose_over_protected': True,
+        'aerodynamic_downforce_active': is_reflex,
     }
 
     return commands, freq_hz, diag
@@ -2212,7 +2439,7 @@ def aerodynamic_rollout_braking_kinematics(lever_pct=50.0, throttle=0.0, V_ms=0.
     Computes 8-wing commands during runway rollout (on_ground = True).
     Governed by the Unified Wave Lever Convention (100% to 0%):
       - lever >= 78% or throttle >= 50%: Touch-and-Go Takeoff Roll
-      - 45% <= lever < 78%: Low-drag freewheel coasting (f = 0 Hz)
+      - 45% <= lever < 78%: Low-drag freewheel coasting (f = 0 Hz) with differential reflex decambering in STOL
       - 28% <= lever < 45%: Auto-taxi transition when V < 4.5 m/s
       - 16% <= lever < 28%: Shuttlecock bluff-body aerodynamic airbrake (Cd ~ 1.65)
       - 6% <= lever < 16%: Active reverse thrust flapping (-25 N backward thrust)
@@ -2259,7 +2486,13 @@ def aerodynamic_rollout_braking_kinematics(lever_pct=50.0, throttle=0.0, V_ms=0.
         freq_hz = 0.0
         base_sweeps = [cfg['sweep_deg']] * 8
         base_dihs = [cfg['dihedral_deg']] * 8
-        base_pitches = [cfg['pitch_deg']] * 8
+        is_reflex = (regime in ('short_field', 'stol', 'stol_landing', 'stol_spot') or
+                     LANDING_REGIMES.get(regime, {}).get('reflex_decambering', False) or
+                     kwargs.get('reflex_decambering', False))
+        if is_reflex:
+            base_pitches = [-3.5, -3.5, -3.5, -3.5, -8.0, -8.0, -8.0, -8.0]
+        else:
+            base_pitches = [cfg['pitch_deg']] * 8
         q = 0.5 * 1.225 * (V ** 2)
         retarding_force_n = q * 1.320 * cfg['cd_est']
 
@@ -2279,7 +2512,13 @@ def aerodynamic_rollout_braking_kinematics(lever_pct=50.0, throttle=0.0, V_ms=0.
             freq_hz = 0.0
             base_sweeps = [cfg['sweep_deg']] * 8
             base_dihs = [cfg['dihedral_deg']] * 8
-            base_pitches = [cfg['pitch_deg']] * 8
+            is_reflex = (regime in ('short_field', 'stol', 'stol_landing', 'stol_spot') or
+                         LANDING_REGIMES.get(regime, {}).get('reflex_decambering', False) or
+                         kwargs.get('reflex_decambering', False))
+            if is_reflex:
+                base_pitches = [-3.5, -3.5, -3.5, -3.5, -8.0, -8.0, -8.0, -8.0]
+            else:
+                base_pitches = [cfg['pitch_deg']] * 8
             q = 0.5 * 1.225 * (V ** 2)
             retarding_force_n = q * 1.320 * cfg['cd_est']
 
@@ -2338,6 +2577,10 @@ def aerodynamic_rollout_braking_kinematics(lever_pct=50.0, throttle=0.0, V_ms=0.
         })
 
     decel_g = round(retarding_force_n / (5.687 * 9.81), 2)
+    is_reflex_active = (modality == 'FREEWHEEL_COAST' and (regime in ('short_field', 'stol', 'stol_landing', 'stol_spot') or
+                        LANDING_REGIMES.get(regime, {}).get('reflex_decambering', False) or
+                        kwargs.get('reflex_decambering', False)))
+
     diag = {
         'modality': modality,
         'lever_pct': lev,
@@ -2347,6 +2590,11 @@ def aerodynamic_rollout_braking_kinematics(lever_pct=50.0, throttle=0.0, V_ms=0.
         'decel_g': decel_g,
         'touch_and_go_ready': modality == 'TOUCH_AND_GO',
         'taxi_ready': modality == 'AUTO_TAXI',
+        'differential_reflex_active': is_reflex_active,
+        'front_reflex_aoa_deg': -3.5 if is_reflex_active else None,
+        'rear_reflex_aoa_deg': -8.0 if is_reflex_active else None,
+        'aerodynamic_downforce_n': round(0.5 * 1.225 * (V ** 2) * 1.320 * 0.25, 2) if is_reflex_active else 0.0,
+        'nose_over_protected': True,
     }
 
     return commands, freq_hz, diag

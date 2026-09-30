@@ -12,7 +12,7 @@ import numpy as np
 import pyvista as pv
 
 OUT_DIR = 'cad/manufactured'
-ARTIFACT_DIR = '/Users/drbell/.gemini/antigravity/brain/fcfca30b-4f75-4837-ba9b-50a1b0b3caba'
+ARTIFACT_DIR = '/Users/drbell/.gemini/antigravity/brain/6bbf0df4-3e68-4851-9322-6154657ee0b5'
 AIRCRAFT_STL = os.path.join(OUT_DIR, 'mco_core_one_complete_aircraft.stl')
 
 def render_views():
@@ -79,12 +79,12 @@ def render_views():
     p4.screenshot(img4)
     print(f"  ✓ Rendered: {img4}")
 
-    # 5. Close-up on Fuselage Truss, Landing Gear, and Teardrop Pod
+    # 5. Close-up on Stout Aircraft Tail Skid Bumper
     p5 = pv.Plotter(off_screen=True, window_size=[1800, 1100])
     p5.set_background('#ffffff')
     p5.add_mesh(mesh_centered, color='#ea580c', specular=0.4, ambient=0.25, diffuse=0.8, smooth_shading=True)
-    p5.camera_position = [(plate_center_x - 30, -120, 60), (plate_center_x - 10, 0, 10), (0, 0, 1)]
-    p5.camera.zoom(1.4)
+    p5.camera_position = [(200, -85, 25), (165, 0, 8), (0, 0, 1)]
+    p5.camera.zoom(1.3)
     img5 = os.path.join(OUT_DIR, 'mco_core_one_gear_truss_zoom.png')
     p5.screenshot(img5)
     print(f"  ✓ Rendered: {img5}")
