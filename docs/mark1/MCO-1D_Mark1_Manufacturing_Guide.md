@@ -245,26 +245,48 @@ Fuselage Keel Track (230 mm to 340 mm aft of datum):
 
 ---
 
-## 8. Assembly Quality Verification Gate
+## 8. Physical Build Quality Verification Gate & Actionable Assembly To-Do List
 
-Before proceeding to electrical commissioning, verify each item on the airframe:
+Before proceeding to electrical commissioning and initial motor spin, the mechanical build team must execute and verify each item on this authoritative assembly checklist, incorporating all findings from the Physical Readiness Audit (`MCO-1D-AUD-PHYS-MK1`):
 
-* [ ] **Total Airframe Dry Mass**: Structural airframe without batteries must weigh $\le 4,972\text{ g}$.
-* [ ] **Wing Alignment**: All 4 pairs show $0.0^\circ \pm 0.2^\circ$ dihedral at rest and zero geometric twist.
-* [ ] **Pterostigma Tip Ballast**: All 8 wingtips have $1.5\text{ g}$ brass/tungsten ballast securely potted at $y = 0.85b$ forward of the pitch axis.
-* [ ] **Capstan Tension**: All 8 Dyneema lines verify between $160\text{ N}$ and $200\text{ N}$ tension.
-* [ ] **Bearing Freedom**: Sector wheels and motor drums rotate smoothly with zero binding.
+### 8.1 Mechanical, Drivetrain & Structural Integrity
+* [ ] **Total Airframe Dry Mass**: Structural airframe without batteries must weigh $\le 4,972\text{ g}$ (Target MTOW with 6S 4500mAh + 2S 3000mAh: $5,687\text{ g}$).
+* [ ] **Wing Alignment & Zero-Twist**: All 4 pairs show $0.0^\circ \pm 0.2^\circ$ dihedral at rest and zero geometric wash-in/wash-out across span.
+* [ ] **Carbon Spar Internal Root Ferrules (PHY-02)**: CNC 6061-T6 aluminum internal crush sleeves ($\varnothing 8.0\,\text{mm} \times 40.0\,\text{mm}$ with $0.5\,\text{mm}$ collar) epoxied into the root bore of all 8 main spars. Clamp split-collars torqued to $2.2\,\text{N}\cdot\text{m}$ with Loctite 243. Prevents composite crush under $2.2g$ flapping ($M_b = 5.36\,\text{N}\cdot\text{m}$).
+* [ ] **Dyneema SK99 48-Hour Creep Settlement (PHY-01)**: All 8 capstan drive cables pre-stretched at $200\,\text{N}$ on an inline tension scale for a minimum of 48 hours to exhaust viscoelastic primary creep.
+* [ ] **Final Capstan Pre-Tensioning & Witness Marks (PHY-01)**: Cables re-tensioned to $180\,\text{N} \pm 5\,\text{N}$. Clamping cam screws locked with Loctite 480 flexible CA. High-contrast paint witness marks applied across cable, screw, and sector rim.
+* [ ] **10:1 Transmission Ratio & Groove Seating**: Motor pinion drum ($d_{\text{pitch}} = 15.4\text{ mm}$ or $18.0\text{ mm}$) and sector wheel ($R = 77.0\text{ mm}$ or $90.0\text{ mm}$) verify exact $10.0:1$ transmission ratio with 3 full Dyneema wraps seated in the helical groove without crossover.
+* [ ] **Bearing Freedom**: Sector wheels and motor drums rotate smoothly with zero binding across full $100^\circ$ stroke arc.
 * [ ] **Fastener Security**: Every M2/M3 fastener has Loctite 243 visible on threads.
-* [ ] **Battery Sled Lock**: Quick-pin firmly engages all 12 indexing detents without lateral play.
-* [ ] **Servo Linkage Slop (H-89)**: All 16 AGFRC IB53BHU carbon tie-rods and ball-links verify $< 0.1\text{ mm}$ mechanical backlash.
-* [ ] **Servo Decoupling Capacitor (H-89)**: $4,700\ \mu\text{F}$ low-ESR capacitor soldered directly across 7.4V servo bus board input with leads $< 20\text{ mm}$.
-* [ ] **Rib Cavity Step Definition (H-90)**: S1223 ribs verify 3 micro-step cavities ($1.2\text{ mm}$ deep) along forward upper chord without film sagging.
-* [ ] **Pneumatic Clap Skirt (H-91)**: Inboard trailing edges of Stations 1 & 2 have $15\text{ mm}$ silicone skirts fitted and sealing cleanly at $+70^\circ$ dihedral.
-* [ ] **Station 1 Canard Holding Rigidity (H-92)**: Station 1 holds $+35^\circ$ dihedral with $< 0.5^\circ$ deflection and $< 12\text{ A}$ holding current on bench.
-* [ ] **Flight Controller Vibration Isolation (H-93)**: Pixhawk 4 Mini mounted on Shore 20A silicone gel grommets with $1.5\text{ mm}$ clearance.
-* [ ] **CAN-FD Bus Termination (H-93)**: Bus resistance measures $60.0\ \Omega \pm 1.5\ \Omega$ line-to-line across CAN_H and CAN_L.
-* [ ] **Tandem Station Gap Clearance (H-95)**: Inter-station convergent slot gap measures $25.0\text{ mm} \pm 2.0\text{ mm}$ across span at neutral sweep.
-* [ ] **Fresh-Air Motor Cooling Inlets (H-BUS-3 / H-CMP-1)**: All 8 motor pods verify dedicated line-of-sight to undisturbed freestream air via staggered outboard scoops; scavenge louvers clear of wiring.
-* [ ] **10:1 Capstan Drive Ratio Verification**: Motor pinion drum ($d_{\text{pitch}} = 15.4\text{ mm}$ or $18.0\text{ mm}$) and sector wheel ($R = 77.0\text{ mm}$ or $90.0\text{ mm}$) verify exact $10.0:1$ transmission ratio with Dyneema seated in helical groove.
+
+### 8.2 Thermal Isolation & Cooling Architecture
+* [ ] **Motor Mount Thermal Isolator Gaskets (PHY-04)**: $0.5\,\text{mm}$ silicone/FR4 thermal barrier gaskets installed between all 8 T-Motor MN5008 baseplates and station brackets. Motor faceplates verified as 6061-T6 aluminum ($2.0\,\text{mm}$).
+* [ ] **Ram-Air NACA Inlets & Exhaust Louvers (PHY-04 / H-BUS-3)**: All 8 motor pods verify unobstructed internal airflow through staggered forward scoops ($+35\,\text{mm} / +55\,\text{mm}$ lateral offset) and $45^\circ$ negative-pressure scavenge louvers. Prevents LW-PLA pod softening ($T_g = 55^\circ\text{C}$).
+* [ ] **ODrive S1 Inverter Thermal Coupling**: Aluminum heatsinks on all 8 ODrive S1 boards coupled to fuselage ventilation louvers via $1.5\,\text{mm}$ silicone thermal pads ($k \ge 6.0\,\text{W/m}\cdot\text{K}$).
+
+### 8.3 Aerodynamics, Kinematics & Stability Envelopes
+* [ ] **Longitudinal CG & Battery Sled Calibration (PHY-03 / PHY-05)**: Sled quick-release pin locked into **Hole 3 ($250.0\,\text{mm}$ setting)**. Complete aircraft balanced on knife-edge: center of gravity verified at **$311.8\,\text{mm} \pm 3.0\,\text{mm}$ aft of datum ($26.5\%$ MAC)**.
+* [ ] **Aft CG Mechanical Lockout**: Physical roll pin installed in Hole 6 of the battery keel track to mechanically prevent sled insertion beyond Hole 5 ($270\,\text{mm}$ / $29.5\%$ MAC aft stability boundary).
+* [ ] **Vertical Staircase & Tandem Clearance (PHY-05)**: Vertical drop of $41.25\,\text{mm}$ per station ($123.75\,\text{mm}$ total) and longitudinal stagger of $250.0\,\text{mm}$ verified. Minimum dynamic clearance between adjacent wingtips $\ge 35.0\,\text{mm}$ across all stroke phases.
+* [ ] **Software Sweep-Differential Limit Enforcement**: Firmware governor clamped to $\Delta \Lambda \le 15.0^\circ$ during high-rate opposing strokes to eliminate inter-station blade clashing.
+* [ ] **Active Flapping Cruise Floor & Glide Protocol (PHY-03)**: Autopilot configured with active flapping floor $f \ge 1.87\,\text{Hz}$ in cruise to cover the $18.64\,\text{N}$ passive lift deficit at $9.0\,\text{m/s}$. Emergency unpowered dead-stick glide speed set to $V_{\text{glide}} \ge 11.0\,\text{m/s}$.
+
+### 8.4 Actuation, Servos & Electrical Protection
+* [ ] **Servo Linkage Backlash (H-89 / PHY-07)**: All 16 AGFRC IB53BHU carbon tie-rods and ball-links verify $< 0.1\text{ mm}$ mechanical play. Pitch horn mechanical advantage verified at $1.2:1$ for dynamic load headroom.
+* [ ] **Servo Travel Clamping**: All 16 servos programmed via `AGF-SPV3` to $170^\circ$ max travel ($333\,\text{Hz}$ PWM, $1.0\,\mu\text{s}$ deadband) to prevent MCP3208 ADC rail saturation.
+* [ ] **Servo Bus Decoupling Capacitor (PHY-08)**: $4,700\,\mu\text{F} \times 16\,\text{V}$ ultra-low ESR capacitor soldered directly across the 7.4V servo distribution bus with leads $< 20\,\text{mm}$.
+* [ ] **Servo Rail Voltage Droop Test**: Simultaneous 16-servo step deflection under bench test verifies 7.4V rail voltage remains $\ge 7.1\,\text{V}$ (droop $\le 0.3\,\text{V}$).
+
+### 8.5 Avionics & Sensing Systems
+* [ ] **CAN-FD Bus Termination & Resistance**: Total line-to-line resistance across CAN_H and CAN_L measures exactly $60.0\,\Omega \pm 1.5\,\Omega$ with power off.
+* [ ] **Flight Controller Gel Isolation (H-93)**: Pixhawk 4 Mini mounted on 4× Shore 20A silicone gel grommets with $1.5\,\text{mm}$ uncompressed gap to decouple $2.5\,\text{Hz}$ airframe flapping harmonics.
+* [ ] **Pitot-Static Low-$q$ Filtering (PHY-06)**: MS4525DO digital pitot zero-calibrated at ambient temperature with probe cover on. 5-point rolling median filter and low-speed synthetic airspeed fusion ($< 7.5\,\text{m/s}$) verified in Pixhawk EKF3.
+* [ ] **TF-Luna LiDAR Ground Zero**: Ground elevation reads $0.02\,\text{m}$ (ground taxi height) at rest on wheels.
+
+### 8.6 Biomimetic Wing Features
+* [ ] **Pterostigma Tip Mass Balancing**: All 8 wingtips have $1.5\text{ g}$ brass/tungsten slug potted at $y = 0.85b$ forward of the pitch axis.
+* [ ] **Micro-Cavity Step Definition (H-90)**: Universal S1223 ribs verify 3 micro-step cavities ($1.2\text{ mm}$ deep) with tight Mylar covering without bridging or sagging.
+* [ ] **Pneumatic Clap Skirt (H-91)**: Inboard trailing edges of Stations 1 & 2 have $15\text{ mm}$ silicone skirts sealing cleanly at $+70^\circ$ dihedral.
+
 
 

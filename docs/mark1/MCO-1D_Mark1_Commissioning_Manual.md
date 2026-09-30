@@ -18,11 +18,17 @@ Commissioning the **MCO-1D Mark 1** involves high-torque oscillating drivetrains
 > **Electrical Isolation**: Never bridge the 7.4V servo bus ground to the 22.2V motor ground at any point other than the opto-isolated FCC interface. Never apply 6S main battery power without 50W dynamic brake resistors connected to each ODrive S1.
 
 ### 1.2 Initial Power-Up Checklist
-1. **Bench Supply Step-In**: Power the 22.2V motor bus initially using a current-limited DC bench supply set to **$22.0\text{V}$ and $2.0\text{A}$ current limit**.
-2. **Servo Bus Check**: Apply 7.4V from the 2S 3000mAh pack to the servo bus board. Verify with a DMM:
+1. **Mechanical & Physical Verification Gate Sign-Off**: Confirm all 8 sections of the **Physical Build Quality Verification Gate** (`MFG-MK1` Section 8) have been signed off:
+   * Internal 6061-T6 aluminum spar crush ferrules epoxied (PHY-02).
+   * 48-hour Dyneema SK99 creep bedding complete; re-tensioned to $180\,\text{N} \pm 5\,\text{N}$ with witness marks (PHY-01).
+   * 0.5 mm thermal barrier gaskets installed on all motor mounts (PHY-04).
+   * $4,700\,\mu\text{F}$ low-ESR capacitor verified on 7.4V servo bus (PHY-08).
+   * Battery sled locked at Hole 3 ($250\,\text{mm}$ / $26.5\%$ MAC) with Hole 6 lockout pin inserted (PHY-05).
+2. **Bench Supply Step-In**: Power the 22.2V motor bus initially using a current-limited DC bench supply set to **$22.0\text{V}$ and $2.0\text{A}$ current limit**.
+3. **Servo Bus Check**: Apply 7.4V from the 2S 3000mAh pack to the servo bus board. Verify with a DMM:
    * Voltage: $+7.4\text{V} \pm 0.4\text{V}$.
    * Quiescent Current: $< 0.8\text{A}$ across all 16 servos at idle.
-3. **Flight Computer Boot**: Apply 5V power to the Raspberry Pi 4B and Pixhawk 4 Mini. Verify solid green 3.3V/5V power LEDs and active heartbeat on the Waveshare CAN-FD Hat.
+4. **Flight Computer Boot**: Apply 5V power to the Raspberry Pi 4B and Pixhawk 4 Mini. Verify solid green 3.3V/5V power LEDs and active heartbeat on the Waveshare CAN-FD Hat.
 
 ---
 
