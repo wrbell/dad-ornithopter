@@ -12,7 +12,7 @@ Commissioning the **MCO-1D Mark 1** involves high-torque oscillating drivetrains
 
 ### 1.1 Mandatory Safety Rules
 > [!CAUTION]
-> **Mechanical Pinch Points**: The 7:1 capstan cable drive and sector wheels generate over $250\text{ N}$ of linear cable tension. Keep hands and tools clear of the sector wheel travel arc during power-up and calibration.
+> **Mechanical Pinch Points**: The 10:1 capstan cable drive and sector wheels generate over $250\text{ N}$ of linear cable tension. Keep hands and tools clear of the sector wheel travel arc during power-up and calibration.
 
 > [!WARNING]
 > **Electrical Isolation**: Never bridge the 7.4V servo bus ground to the 22.2V motor ground at any point other than the opto-isolated FCC interface. Never apply 6S main battery power without 50W dynamic brake resistors connected to each ODrive S1.
@@ -57,8 +57,11 @@ odrv0.axis0.config.motor.torque_constant = 0.048   # N*m/A for 200KV
 odrv0.axis0.config.motor.current_soft_max = 25.0   # Continuous Amps
 odrv0.axis0.config.motor.current_hard_max = 35.0   # Peak Amps
 
-# Kinematic Limits (7:1 Capstan Reduction)
-odrv0.axis0.controller.config.vel_limit = 150.0    # rad/s (allows 3.5 Hz flapping)
+# Kinematic Limits (10:1 Capstan Reduction)
+# ODrive S1 native velocity is in turns/s (revolutions/s).
+# At 10:1 reduction, 3.5 Hz flapping requires 35.0 turns/s on the motor shaft.
+# vel_limit = 40.0 turns/s (251.3 rad/s or 2400 RPM) provides 14.3% dynamic margin.
+odrv0.axis0.controller.config.vel_limit = 40.0     # turns/s (allows 3.5 Hz flapping at 10:1)
 odrv0.axis0.controller.config.control_mode = ControlMode.POSITION_CONTROL
 odrv0.axis0.controller.config.input_mode = InputMode.POS_FILTER
 
@@ -140,7 +143,7 @@ Verify that all 16 channels respond proportionally when wings are manually defle
 
 ---
 
-## 6. Full Pre-Flight Built-In-Test (BIT)
+## 6. Full Pre-Flight Built-In-Test (BIT) & Automated Bench Qualification
 
 Before any flight operation or test stand trial, execute the complete pre-flight self-test:
 
@@ -166,3 +169,11 @@ python3 firmware/mco_preflight.py
   AIRCRAFT SYSTEM STATUS: GO FOR FLIGHT
 ============================================================
 ```
+
+### 6.1 Automated Laboratory Bench Qualification (TC-01)
+Prior to mounting the airframe onto the physical load stand, run the automated TC-01 qualification harness:
+```bash
+python3 scripts/run_tc01_bench_checkout.py
+```
+This verifies all 10 physical calibration gates (static thrust $\ge 35.0\,\text{N}$, motor power factor $0.127$, loaded servo slew floor, barometric density coupling, $P_s$ climb ceiling, CF-1 dispatch safety, and mountain trigger detection), confirming full system readiness.
+

@@ -34,8 +34,8 @@ The primary propulsion control is the **Unified Lever**, assigned to the transmi
 
 | Lever Range | Mode Name | Wing Kinematics & Aerodynamic State | Typical Airspeed | Operational Use |
 | :---: | :--- | :--- | :---: | :--- |
-| **88% – 100%** | **SPRINT / MAX THRUST** | Wings swept forward ($30^\circ$), reduced stroke amplitude, peak flapping frequency ($3.5 - 4.0\text{ Hz}$). CF-1 clap burst below 10 m/s (`H-91`). Peak forward thrust or maximum vertical breakout. | $12.0 - 15.0\text{ m/s}$ | Dash, headwind penetration, max climb / vertical breakout. |
-| **78% – 88%** | **HIGH THRUST / CLIMB** | High-thrust climb modes (`CLB2_ANGLE`, `H-92`, `H-71`), stroke $\pm 80^\circ$, frequency $2.5 - 3.0\text{ Hz}$. Positive climb rate ($P_s > 0$). | $10.0 - 12.5\text{ m/s}$ | STOL takeoff climbout, steep obstacle clearance. |
+| **88% – 100%** | **SPRINT / MAX THRUST** | Wings swept forward ($30^\circ$), reduced stroke amplitude, peak flapping frequency ($3.5 - 4.0\text{ Hz}$). CF-1 clap burst below 10 m/s (`H-91`) governed by `run_cf1_clap_fling` envelope protection ($V_\infty \le 10.0\text{ m/s}$, duration $\le 1.5\text{ s}$). Peak forward thrust or maximum vertical breakout. | $12.0 - 15.0\text{ m/s}$ | Dash, headwind penetration, max climb / vertical breakout. |
+| **78% – 88%** | **HIGH THRUST / CLIMB** | High-thrust climb modes (`CLB2_ANGLE`, `H-92`, `H-71`), stroke $\pm 80^\circ$, frequency $2.5 - 3.0\text{ Hz}$. Governed by calibrated $P_s$ steady climb limits ($V_z \le 2.2\text{ m/s}$, climb angle $\gamma \le 15.5^\circ$, active motor power $P \le 280\text{ W}$). Transient surges $> 2.2\text{ m/s}$ tagged as kinetic zooms with energy depletion tracking. | $10.0 - 12.5\text{ m/s}$ | STOL takeoff climbout, steep obstacle clearance. |
 | **68% – 78%** | **POWERED CRUISE** | Clean $90^\circ$ metachronal cascade (`H-86`, `H-104`), stroke $\pm 80^\circ$, frequency $2.0 - 2.5\text{ Hz}$. Fast transit. | $9.5 - 11.0\text{ m/s}$ | Fast transit, search sweeps. |
 | **55% – 68%** | **CRUISE** | Standard cruise (`H-94`, `H-107`, `H-49`), frequency $1.87 - 2.0\text{ Hz}$, dihedral $+6^\circ$, cascade phase $28^\circ$. | $9.0 - 9.5\text{ m/s}$ | Efficient search patrol, loiter. |
 | **45% – 55%** | **TRIM DETENT** | **Fixed-Wing Mode ($V \ge 5\text{ m/s}$)**: Balanced level cruise ($P_s = 0$, zero VSI).<br>**Helicopter Mode ($V \le 3\text{ m/s}$)**: Stationary hover altitude lock ($0\text{ fpm}$ vertical rate, $1.0\text{g}$ lift equilibrium). | $9.0\text{ m/s}$ (FW)<br>$0.0\text{ m/s}$ (Heli) | Hands-off cruise level flight, or rock-steady stationary hover hold. |
@@ -74,7 +74,7 @@ The transition between fixed-wing airplane flight and helicopter hover is fully 
 ---
 
 ### 2.2 Pilot Inceptor Mapping & Invisible Hypothesis Optimization
-All 232 aerodynamic hypotheses operate **completely invisibly** beneath the controls:
+All 258 aerodynamic hypotheses operate **completely invisibly** beneath the controls:
 * **The Pilot Flies an Airplane**: The pilot commands pitch, roll, yaw, and thrust using standard fixed-wing controls (plus helicopter hover when slow).
 * **Autonomous Learning Classifier (ALC)**: The ALC and Context Champions (`_CMTS_CHAMPIONS`) continuously test and select the optimal hypothesis variant for the current flight regime, minimizing battery power and vibration in the background.
 * **No Autonomous Autopilot Active**: Autopilot waypoint navigation and automated 3D trajectory steering are strictly deferred post-first-flight. The human pilot maintains 100% direct command authority at all times.
@@ -161,3 +161,11 @@ The Mark 1 integrates an autonomous ground station copilot powered by **Google G
   1. Executive initiates dynamic velocity limiting: `vel_limit` is scaled back from $150\text{ rad/s}$ to $110\text{ rad/s}$ over 5 seconds.
   2. Telemetry alerts ground station: `FET_OVERTEMP: Throttling flapping frequency to 2.2 Hz`.
   3. Pilot is directed to maintain $\ge 35\%$ lever position (cruise) to ensure cooling airflow over the motor bays.
+
+### 5.4 Mountain Terrain & High-Altitude Ridge Turbulence (`MOUNTAIN_TERRAIN_TRIGGER`)
+* **Trigger**: GPS/barometric altitude $> 1500\,\text{m}$, terrain slope $> 12^\circ$, or vertical gust rate $> 2.0\,\text{m/s}$ detected by `detect_mountain_terrain_trigger()`.
+* **Action**:
+  1. Telemetry annunciates `TERRAIN_ADVISORY: Mountain turbulence profile active`.
+  2. The flight controller biases hypothesis selection toward mountain ridge soaring kinematics (`H-61`), increasing pitch lead compensation and dynamic dihedral stability margins.
+  3. Copilot reports barometric density correction $\rho(h)$ and updated stall speed $V_s(h)$ to the operator display.
+

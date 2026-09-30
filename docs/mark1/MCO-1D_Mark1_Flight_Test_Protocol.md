@@ -54,7 +54,7 @@ TC-01 Mechanical Fixture:
 | **P5** | $3.0\text{ Hz}$ | $\pm 80.0^\circ$ | $60\text{ s}$ | $T_{\text{static}} \ge 37.0\text{ N}$ | $< 32.0\text{ A}$ |
 | **P6** | $3.5\text{ Hz}$ | $\pm 70.0^\circ$ | $20\text{ s}$ | $T_{\text{static}} \ge 42.0\text{ N}$ | $< 38.0\text{ A}$ |
 
-### 2.3 Automated Execution
+### 2.3 Automated Execution & Laboratory Bench Qualification Harness
 Run the automated TC-01 test sequencer:
 ```bash
 python3 firmware/mco_test_cards.py --tc 1
@@ -63,6 +63,25 @@ Or execute remotely via Ground Station:
 ```json
 {"cmd": "tc01_start"}
 ```
+
+For formal pre-flight bench certification under the Path 2 physical calibration baseline, execute the comprehensive automated laboratory bench qualification harness:
+```bash
+python3 scripts/run_tc01_bench_checkout.py
+```
+
+This harness executes 10 rigorous physics and safety validation gates:
+1. **Static Thrust Verification**: $T_{\text{static}} \ge 35.0\,\text{N}$ at $3.0\,\text{Hz}$ ($37.13\,\text{N}$ demonstrated).
+2. **Active Electrical Power Model**: Flapping motor power factor $\text{PF} = 0.127$, reconciling active battery draw $\le 280\,\text{W}$ with back-EMF recovery.
+3. **ODrive Kinematic Velocity Ceiling**: Motor shaft velocity limit verified at $40.0\,\text{turns/s}$ ($2400\,\text{RPM}$), providing $14.3\%$ safety margin over $3.5\,\text{Hz}$ flapping on 10:1 capstan.
+4. **Loaded Servo Slew Derating**: Evaluates $\Omega_{\text{eff}} = \Omega_0 \cdot \max(0.35, 1 - M_h / M_{\text{stall}})$, verifying minimum $35\%$ control rate floor under peak aero hinge moments.
+5. **Dynamic Pitch Servo Lead**: Phase advance angle scales dynamically with frequency and aerodynamic loading ($+13.7^\circ$ at $3.0\,\text{Hz}$).
+6. **Barometric Atmosphere Coupling**: Verifies barometric density lapse $\rho(h)$, scaling $q_\infty$ and stall speed ($V_s$ shifts from $8.94\,\text{m/s}$ at sea level to $9.92\,\text{m/s}$ at $2000\,\text{m}$).
+7. **Boyd $P_s$ Energy Climb Envelope**: Enforces steady climb ceiling $V_z \le 2.2\,\text{m/s}$ and climb angle $\gamma \le 15.5^\circ$, correctly classifying zoom surges.
+8. **CF-1 Clap-Fling Safety Dispatcher**: Confirms `run_cf1_clap_fling` enforces speed ceiling ($V_\infty \le 10\,\text{m/s}$) and time cutoff ($1.5\,\text{s}$).
+9. **Mountain Terrain Trigger Detection**: Confirms `detect_mountain_terrain_trigger` flags high-altitude / high-climb / terrain-slope flight regimes (`H-61`).
+10. **Hypothesis Tie-Break Exploration Balance**: Verifies `eval_counts` balancing across all 258 hypotheses during candidate arbitration.
+
+Formal certification output is recorded to [`knowledge/tc01_bench_certification.json`](file:///Users/drbell/Code/flight/knowledge/tc01_bench_certification.json) and documented in [`docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md). All 10 gates must read `PASS` prior to proceeding to TC-02.
 
 ---
 

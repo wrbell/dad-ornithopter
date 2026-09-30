@@ -33,7 +33,7 @@ The core loop monitors system heartbeat and transitions states autonomously:
 
 ## 2. Metachronal Kinematics Engine (`mco_wave_library.py`)
 
-The kinematics engine represents the single authoritative source of all flight waveforms, morphing envelopes, and evolutionary aerodynamic hypotheses (**232 total hypotheses** in `AERO_HYPOTHESES`, including **70 advanced biomimetic suites** in `_ADV_NEW_HYPS` spanning H-37 through H-108, H-LSB-1, H-DSH-1, H-AC-SHIFT-1, H-SHED-1, H-VEX-1, H-88A, and H-88B).
+The kinematics engine represents the single authoritative source of all flight waveforms, morphing envelopes, and evolutionary aerodynamic hypotheses (**258 total hypotheses** in `AERO_HYPOTHESES`, including **74 advanced biomimetic suites** in `_ADV_NEW_HYPS` spanning H-37 through H-108, H-LSB-1, H-DSH-1, H-AC-SHIFT-1, H-SHED-1, H-VEX-1, H-88A, and H-88B).
 
 ### 2.1 Boyd Specific Excess Power ($P_s$) PI Controller
 Vertical climb and acceleration are governed by Colonel John Boyd's energy-maneuverability formulation:
@@ -72,6 +72,24 @@ Hardware safety boundaries and turnaround dynamics are enforced without adding p
 * **`H-88B` (Quasi-Steady Differential Sweep Bias Trim)**: Applies static differential sweep angles ($\pm 12^\circ$) between port and starboard wings to tilt the aerodynamic drag vector, creating continuous yaw trim ($\sim 3.4\text{ N}\cdot\text{m}$) for crosswind decrab with zero cyclic servo fatigue.
 * All hypotheses map strictly to pilot inceptors (Wave Lever, Stick, Pedals) and operate invisibly; autonomous autopilot navigation and position-hold modes are deferred post-first-flight.
 
+### 2.5 Physical Calibration Models & Backlog Remediation (`Path 2`)
+Under the Path 2 engineering baseline, physical grounding functions reconcile aeromodeling with test stand dynamics:
+1. **Flapping Motor Power Factor Reconciliation (`PF_FLAPPING = 0.127`)**:
+   * Apparent electrical power ($I_{\text{RMS}} \cdot V_{\text{bus}} \approx 1600\,\text{W}$) is reconciled with actual battery active power draw ($P_{\text{active}} \le 280\,\text{W}$) via back-EMF mechanical regeneration into the DC bus / dynamic brake resistors during stroke turnaround.
+   * Governs $P_s$ steady climb rate ($V_z \le 2.2\,\text{m/s}$) and climb angle ($\gamma \le 15.5^\circ$), tagging transient surges as kinetic zooms with energy depletion tracking.
+2. **Barometric Atmospheric Density Model (`atmospheric_density(h_m)`)**:
+   * Models standard barometric lapse rate $\rho(h) = \rho_0 (1 - L \cdot h / T_0)^{\frac{g M}{R_0 L}}$ with temperature offset support ($T_{\text{offset\_k}}$).
+   * Dynamically couples air density $\rho(h)$ into dynamic pressure $q_\infty = \frac{1}{2} \rho V_\infty^2$ and true stall speed $V_s(h) = V_{s,0} \sqrt{\rho_0 / \rho(h)}$.
+3. **Loaded Servo Slew Derating (`compute_loaded_servo_slew_ceiling`) & Dynamic Pitch Lead (`calculate_dynamic_pitch_servo_lead`)**:
+   * Derates effective servo slew rate under aerodynamic hinge moments: $\Omega_{\text{eff}} = \Omega_0 \cdot \max(0.35, 1.0 - M_h / M_{\text{stall}})$.
+   * Computes dynamic pitch lead phase angle $\Delta \phi_{\text{lead}} = K_{\text{lead}} \cdot (2\pi f) \cdot \tau_{\text{servo}} \cdot (1 + M_h / M_{\text{stall}})$ to prevent phase lag breakdown at flapping frequencies up to $3.5\,\text{Hz}$.
+4. **CF-1 Clap-Fling Dispatcher (`run_cf1_clap_fling`) [O-C1 Resolved]**:
+   * Authoritative dispatcher for Weis-Fogh clap-and-fling aerodynamic bursts (`H-91`), enforcing maximum duration ($1.5\,\text{s}$), forward airspeed ceiling ($V_\infty \le 10.0\,\text{m/s}$), and recovery phase alignment.
+5. **GPS Mountain Terrain Trigger (`detect_mountain_terrain_trigger`) [O-D7 Resolved]**:
+   * Evaluates barometric/GPS altitude, vertical climb rate, terrain slope, and wind gust intensity to trigger high-altitude turbulent mountain flight profiles (`H-61`) with status reporting.
+6. **Tie-Break Exploration Balancing**:
+   * Hypothesis arbitration in `_select_winning_candidate` incorporates `eval_counts` usage tracking, selecting the least-evaluated candidate when performance scores tie within tolerance, ensuring balanced exploration across all 258 hypotheses.
+
 ---
 
 ## 3. CAN-FD Telemetry Frame Specification
@@ -109,7 +127,7 @@ The ground station interface engine (`_execute_gs_base_cmd`) supports **368 dist
 
 | Command Group | Representative Commands | Purpose |
 | :--- | :--- | :--- |
-| **System & Status** | `status`, `help`, `hyp_status`, `advanced_physics_status`, `gs_status`, `airborne_status` | Returns overall system state, active focus, calibration flags, and telemetry for all 70 advanced hypotheses. |
+| **System & Status** | `status`, `help`, `hyp_status`, `advanced_physics_status`, `gs_status`, `airborne_status` | Returns overall system state, active focus, calibration flags, and telemetry for all 74 advanced hypotheses. |
 | **Aero Calibration** | `aero_cal_status`, `aero_cal_reset`, `margin_status` | Inspects $C_{L,\max}$, glide polar confidence, and stall margins. |
 | **Test Cards** | `tc01_start`, `tc01_status`, `tc02_start`, `tc03_start`, `tc02_abort` | Triggers and monitors automated test cards TC-01 through TC-04. |
 | **Sensing & Hardware**| `stroke_position_status`, `fault_summary`, `fault_status` | Displays ODrive sector velocities, ADC count mappings, and faults. |
@@ -133,4 +151,4 @@ All flight software modules, kinematic allocators, governor guards, and test sui
 ```bash
 python3 -m unittest discover tests -p "test_*.py"
 ```
-Pass criteria: **425 / 425 tests pass (100% green, 0 failures, 0 errors)** covering the full envelope from zero-speed hover to high-speed dash, STOL takeoff, conventional flare/rollout, and biological go-around aborts.
+Pass criteria: **698 / 698 tests pass across 40 test suites (100% green, 0 failures, 0 errors)** covering the full envelope from zero-speed hover to high-speed dash, STOL takeoff, conventional flare/rollout, biological go-around aborts, physical atmospheric coupling, loaded servo derating, and Boyd $P_s$ power factor calibration.

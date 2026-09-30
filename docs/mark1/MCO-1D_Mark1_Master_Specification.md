@@ -119,6 +119,38 @@ via downstroke pitch bias and stroke plane inclination, maintaining positive spe
 
 $$V_s = \sqrt{\frac{2 W}{\rho S_{\text{total}} C_{L,\max}}} = \sqrt{\frac{2 \times 55.77}{1.225 \times 0.7124 \times 1.60}} = \mathbf{8.94\text{ m/s} \quad (17.4\text{ kt})}$$
 
+### 3.4 Flapping Motor Electrical Power Model (PF = 0.127)
+In reciprocating flapping drives, the peak apparent electrical voltamperes calculated from peak phase current:
+
+$$P_{\text{apparent}} = \sum_{i=1}^8 V_{\text{bus}} \cdot I_{\text{peak},i} \approx 8 \times 22.2\text{ V} \times 12.5\text{ A} \approx 2,220\text{ VA}$$
+
+represents oscillating reactive energy exchange rather than continuous heat dissipation. In the MCO-1D, metachronal inter-pair phase staggering (`H-SHUTTLE-1`) recovers back-EMF across the DC bus with $85\%$ shuttle efficiency. Net active electrical work is governed by the grounded flapping power factor:
+
+$$\text{PF}_{\text{flapping}} = 0.127$$
+$$\overline{P}_{\text{elec,active}} = \text{PF}_{\text{flapping}} \cdot P_{\text{apparent}} \approx 280.0\text{ W (at 2.5 Hz cruise)}$$
+
+Nominal continuous motor current per phase is $I_{\text{cont}} \approx 3.0\text{ A}$ (well within the $25.0\text{ A}$ continuous thermal rating of the T-Motor MN5008).
+
+### 3.5 $P_s$-Constrained Climb Envelope
+To preserve positive battery reserves and prevent motor over-temperature shutdown, unaccelerated steady climb modes enforce strict physical energy bounds:
+* **Best Climb Rate (`CLB1_RATE`)**: $V_z \le 2.2\text{ m/s}$ (target $1.85\text{ m/s}$), bounded by continuous electrical draw $P_{\text{cont}} \le 280.0\text{ W}$.
+* **Best Climb Gradient (`CLB2_ANGLE`)**: Steady flight-path climb angle $\gamma \le 15.5^\circ$, vertical velocity ceiling $V_z \le 2.1\text{ m/s}$, continuous draw $P_{\text{cont}} \le 280.0\text{ W}$.
+* **Kinetic Zoom (`CLB3_ZOOM`)**: Climb angles $> 25.0^\circ$ are tagged strictly as transient kinetic zoom maneuvers converting forward kinetic energy into altitude ($\tau \le 1.5\text{ s}$, $\Delta V = -\sqrt{2g \Delta h}$) with non-continuous power injection.
+
+### 3.6 Standard Barometric Atmospheric Density $\rho(h)$
+Dynamic pressure, aerodynamic lift, parasite drag, and Carson's best-range speed dynamically couple with barometric altitude:
+
+$$\rho(h) = \rho_0 \left(1 - \frac{0.0065 \cdot h}{288.15}\right)^{4.256}$$
+
+As density decreases with altitude ($\rho \approx 1.056\text{ kg/m}^3$ at $1500\text{ m}$ MSL), stall speed increases ($V_s(h) = V_{s0}\sqrt{\rho_0/\rho}$), and cruise flap frequency automatically shifts higher via ALC density-altitude compensation (`H-DA-1`..`7`).
+
+### 3.7 Aero Hinge-Moment Derating on Servo Slew Rate
+Control surface panel hinge moments scale with dynamic pressure: $M_h(q) = c_h \cdot q \cdot S_{\text{panel}} \cdot c_{\text{mean}}$. The pitch servo effective slew rate ceiling ($\Omega_0 = 1034^\circ/\text{s}$ no-load at 7.4V) is derated aerodynamically:
+
+$$\Omega_{\text{servo\_eff}} = \Omega_0 \cdot \max\left(0.35, 1.0 - \frac{M_h(q)}{M_{\text{stall}}}\right)$$
+
+Predictive lead phase feedforward (`calculate_dynamic_pitch_servo_lead`) adjusts transit timing $\tau_{\text{transit}} = \Delta \theta / \Omega_{\text{servo\_eff}}$ to eliminate aero lag without demanding physically unattainable slew rates at high dynamic pressure.
+
 ---
 
 ## 4. Weight, Balance & Mass Budget

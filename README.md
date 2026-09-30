@@ -25,7 +25,7 @@ graph TD
         WSB <--> EXE
         EXE --> INT[mco_intent_control.py Intent Engine]
         INT --> GOV[mco_flight_governor.py Safety & Recoil Engine]
-        GOV --> WL[mco_wave_library.py ~95k-Line Wave Kinematics 254 Hyps]
+        GOV --> WL[mco_wave_library.py ~99k-Line Wave Kinematics 258 Hyps / 74 Suites]
         WL --> ODRV[mco_odrive_interface.py CAN-FD Bus]
         WL --> SRV[mco_servo_interface.py pigpiod 333Hz PWM]
         
@@ -138,6 +138,7 @@ flight/
 │
 └── scripts/                       # Deployment, bringup, and systemd services
     ├── mco_bom_tool.py            # Zero-dependency live BOM pricing engine
+    ├── run_tc01_bench_checkout.py # Automated laboratory bench qualification runner (TC-01)
     ├── mco_install.sh             # Raspberry Pi automated installer
     ├── mco_can_setup.sh           # CAN-FD network bringup script
     ├── mco-flight.service         # Systemd flight computer autostart service
@@ -156,20 +157,26 @@ Test the 50 Hz control loop, wave library initialization, and intent arbitration
 python3 firmware/mco_main.py --sim
 ```
 
-### 2. Launch the Ground Station
+### 2. Execute Full Verification Test Suite
+Run the comprehensive 698-test verification suite spanning all 40 test suites and safety governors:
+```bash
+python3 -m unittest discover -s tests -p "test_*.py"
+```
+
+### 3. Run TC-01 Ground Bench Qualification
+Execute the automated 10-step laboratory test harness for rigid post load cell qualification:
+```bash
+python3 scripts/run_tc01_bench_checkout.py
+```
+
+### 4. Launch the Ground Station
 Start the WebSocket telemetry server, HTTP ground station bridge, and Gemini copilot proxy:
 ```bash
 ./start_gs.sh
 ```
 Open your browser at `http://localhost:8080` to access the interactive Mission Control dashboard with Gemini 2.5 Flash copilot on port 5759.
 
-### 3. Verify Pre-Flight Built-In Test (BIT)
-Execute the pre-flight verification suite:
-```bash
-python3 firmware/mco_preflight_checks.py --bench
-```
-
-### 4. Inspect & Auto-Update Bill of Materials (BOM)
+### 5. Inspect & Auto-Update Bill of Materials (BOM)
 Query verified vendors, check current market pricing, calculate total MTOW, and automatically refresh `docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md`:
 ```bash
 ./view_bom.sh
