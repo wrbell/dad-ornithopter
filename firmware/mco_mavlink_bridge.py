@@ -29,6 +29,53 @@ except ImportError:
     print("[WARN] pymavlink not installed — MAVLink in simulation mode")
 
 
+def detect_mountain_terrain_trigger(lat: float, lon: float,
+                                    alt_msl_m: float,
+                                    agl_m: float,
+                                    climb_rate_ms: float = 0.0,
+                                    terrain_elevation_m: float = None) -> dict:
+    """
+    O-D7: Autonomous mountain ridge updraft and high-density-altitude detection.
+    Evaluates barometric MSL altitude, AGL proximity, and terrain elevation gradients.
+    Automatically flags mountain mode when operating over mountainous relief or
+    exploiting orographic ridge lift.
+    """
+    reasons = []
+    is_mountain = False
+    ridge_updraft = False
+
+    # 1. High Elevation Threshold (> 1500m MSL)
+    if alt_msl_m >= 1500.0:
+        is_mountain = True
+        reasons.append(f"High altitude MSL ({alt_msl_m:.0f}m >= 1500m)")
+
+    # 2. Mountain Terrain Proximity: elevated base (> 600m MSL) + close to terrain (< 150m AGL)
+    if alt_msl_m >= 600.0 and agl_m <= 150.0:
+        is_mountain = True
+        reasons.append(f"Rugged terrain proximity ({agl_m:.0f}m AGL at {alt_msl_m:.0f}m MSL)")
+
+    # 3. Terrain Elevation Gradient (from DEM or radio altimeter - baro differential)
+    if terrain_elevation_m is not None and terrain_elevation_m >= 800.0:
+        is_mountain = True
+        reasons.append(f"DEM terrain base elevated ({terrain_elevation_m:.0f}m >= 800m)")
+
+    # 4. Orographic Ridge Updraft Detection: sustained climb without high throttle
+    if is_mountain and climb_rate_ms >= 1.2:
+        ridge_updraft = True
+        reasons.append(f"Ridge updraft detected (climb: +{climb_rate_ms:.1f} m/s)")
+
+    factor = 1.20 if is_mountain else 1.10
+    reason_str = "; ".join(reasons) if reasons else "Nominal lowland terrain"
+
+    return {
+        'mountain_mode': is_mountain,
+        'ridge_updraft_detected': ridge_updraft,
+        'trigger_reasons': reasons,
+        'reason': reason_str,
+        'stall_floor_factor': factor,
+    }
+
+
 class PixhawkBridge:
     def __init__(self, port="/dev/serial0", baud=57600):
         self._conn   = None
@@ -45,6 +92,13 @@ class PixhawkBridge:
         self.dragonfly_launch_cmd = False
         self.pigeon_climb_cmd = False
         self.climb_angle_target = 80.0
+        self.mountain_mode = False
+        self.ridge_updraft_detected = False
+        self.lat = 0.0
+        self.lon = 0.0
+        self.alt_msl_m = 0.0
+        self.agl_m = 100.0
+        self.climb_rate_ms = 0.0
         self._running     = False
 
 
@@ -82,6 +136,21 @@ class PixhawkBridge:
                         msg.chan4_raw, msg.chan5_raw, msg.chan6_raw,
                         msg.chan7_raw, msg.chan8_raw,
                     ]
+                elif mt == "GLOBAL_POSITION_INT":
+                    self.lat = getattr(msg, 'lat', 0) / 1e7
+                    self.lon = getattr(msg, 'lon', 0) / 1e7
+                    self.alt_msl_m = getattr(msg, 'alt', 0) / 1000.0
+                    self.agl_m = getattr(msg, 'relative_alt', 0) / 1000.0
+                    self.climb_rate_ms = -getattr(msg, 'vz', 0) / 100.0
+                    trig = detect_mountain_terrain_trigger(
+                        self.lat, self.lon, self.alt_msl_m, self.agl_m, self.climb_rate_ms
+                    )
+                    prev_mountain = self.mountain_mode
+                    self.mountain_mode = trig['mountain_mode']
+                    self.ridge_updraft_detected = trig['ridge_updraft_detected']
+                    if self.mountain_mode != prev_mountain:
+                        status = "ENGAGED" if self.mountain_mode else "DISENGAGED"
+                        self.send_statustext(f"TERRAIN: Mountain mode {status} ({trig['reason']})")
                 elif mt == "COMMAND_LONG":
                     # MAV_CMD_DO_GRIPPER = 211
                     if getattr(msg, 'command', 0) in (211, getattr(mavutil.mavlink, 'MAV_CMD_DO_GRIPPER', 211)):
@@ -148,6 +217,30 @@ class PixhawkBridge:
             self.pigeon_climb_cmd = True
             self.climb_angle_target = float(angle_deg)
 
+    def set_mountain_mode(self, enabled=True):
+        """Enable or disable mountain/ridge terrain mode."""
+        with self._lock:
+            self.mountain_mode = bool(enabled)
+            status = "ENGAGED" if self.mountain_mode else "DISENGAGED"
+            self.send_statustext(f"TERRAIN: Mountain mode manually {status}")
+
+    def update_terrain_state(self, lat: float, lon: float, alt_msl_m: float,
+                             agl_m: float, climb_rate_ms: float = 0.0,
+                             terrain_elevation_m: float = None) -> dict:
+        """Manually update or inject GPS terrain telemetry and evaluate triggers."""
+        with self._lock:
+            self.lat = lat
+            self.lon = lon
+            self.alt_msl_m = alt_msl_m
+            self.agl_m = agl_m
+            self.climb_rate_ms = climb_rate_ms
+            trig = detect_mountain_terrain_trigger(
+                lat, lon, alt_msl_m, agl_m, climb_rate_ms, terrain_elevation_m
+            )
+            self.mountain_mode = trig['mountain_mode']
+            self.ridge_updraft_detected = trig['ridge_updraft_detected']
+            return trig
+
     def get_state(self):
         with self._lock:
             cmd = self.payload_release_cmd
@@ -159,18 +252,22 @@ class PixhawkBridge:
             self.dragonfly_launch_cmd = False
             self.pigeon_climb_cmd = False
             return {
-                "airspeed_ms":          self.airspeed_ms,
-                "armed":                self.armed,
-                "roll_deg":             self.roll_deg,
-                "pitch_deg":            self.pitch_deg,
-                "rc_channels":          list(self.rc_channels),
-                "payload_release_cmd":  cmd,
-                "dragonfly_launch_cmd": df_cmd,
-                "pigeon_climb_cmd":     pg_cmd,
-                "climb_angle_target":   angle_tgt,
-                "gripper_state":        self.gripper_state,
-                "comfort_mode":         self.comfort_mode,
-                "sensitive_cargo":      self.sensitive_cargo,
+                "airspeed_ms":            self.airspeed_ms,
+                "armed":                  self.armed,
+                "roll_deg":               self.roll_deg,
+                "pitch_deg":              self.pitch_deg,
+                "rc_channels":            list(self.rc_channels),
+                "payload_release_cmd":    cmd,
+                "dragonfly_launch_cmd":   df_cmd,
+                "pigeon_climb_cmd":       pg_cmd,
+                "climb_angle_target":     angle_tgt,
+                "gripper_state":          self.gripper_state,
+                "comfort_mode":           self.comfort_mode,
+                "sensitive_cargo":        self.sensitive_cargo,
+                "mountain_mode":          self.mountain_mode,
+                "ridge_updraft_detected": self.ridge_updraft_detected,
+                "alt_msl_m":              self.alt_msl_m,
+                "agl_m":                  self.agl_m,
             }
 
     def close(self):

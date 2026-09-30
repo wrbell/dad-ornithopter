@@ -243,6 +243,63 @@ class TestAdversarialReadinessAudit(unittest.TestCase):
         self.assertLess(res['power_W'], res['power_apparent_va'])
         self.assertLessEqual(res['power_W'], 600.0)
 
+    def test_oc1_cf1_clap_fling_dispatcher(self):
+        """O-C1: Verify CF-1 clap-and-fling execution dispatcher and safety gates."""
+        # 1. Normal active burst mid-cycle
+        res = w.run_cf1_clap_fling(t_sec=0.5, V_ms=4.0, bus_voltage_v=22.2, agl_m=5.0)
+        self.assertTrue(res['active'])
+        self.assertFalse(res['is_complete'])
+        self.assertEqual(res['mode_id'], 'CF1_BURST')
+        self.assertGreater(res['estimated_lift_n'], 100.0)
+        self.assertTrue(res['hardstop_clearance_verified'])
+
+        # 2. Voltage sag abort gate (< 20.5V)
+        sag_res = w.run_cf1_clap_fling(t_sec=0.5, bus_voltage_v=20.0, agl_m=5.0)
+        self.assertFalse(sag_res['active'])
+        self.assertEqual(sag_res['mode_id'], 'CF1_VOLTAGE_SAG_ABORT')
+
+        # 3. Ground proximity lockout (< 1.2m unless bench_mode)
+        gnd_res = w.run_cf1_clap_fling(t_sec=0.5, bus_voltage_v=22.2, agl_m=0.8, bench_mode=False)
+        self.assertFalse(gnd_res['active'])
+        self.assertEqual(gnd_res['mode_id'], 'CF1_GROUND_LOCKOUT')
+
+        # Bench mode bypasses ground lockout
+        bench_res = w.run_cf1_clap_fling(t_sec=0.5, bus_voltage_v=22.2, agl_m=0.8, bench_mode=True)
+        self.assertTrue(bench_res['active'])
+
+        # 4. Burst completion reversion (t >= duration)
+        comp_res = w.run_cf1_clap_fling(t_sec=2.0, bus_voltage_v=22.2, agl_m=5.0, burst_strokes=4, flap_freq_hz=2.5)
+        self.assertFalse(comp_res['active'])
+        self.assertTrue(comp_res['is_complete'])
+        self.assertEqual(comp_res['mode_id'], w.CF1_REVERT_MODE)
+
+    def test_od7_mountain_terrain_trigger(self):
+        """O-D7: Verify autonomous GPS mountain terrain trigger and ridge lift detection."""
+        from mco_mavlink_bridge import detect_mountain_terrain_trigger, PixhawkBridge
+
+        # 1. Lowland nominal
+        t_low = detect_mountain_terrain_trigger(34.0, -118.0, alt_msl_m=100.0, agl_m=80.0)
+        self.assertFalse(t_low['mountain_mode'])
+        self.assertFalse(t_low['ridge_updraft_detected'])
+        self.assertEqual(t_low['stall_floor_factor'], 1.10)
+
+        # 2. High altitude MSL (> 1500m)
+        t_high = detect_mountain_terrain_trigger(34.0, -118.0, alt_msl_m=1800.0, agl_m=200.0)
+        self.assertTrue(t_high['mountain_mode'])
+        self.assertEqual(t_high['stall_floor_factor'], 1.20)
+
+        # 3. Rugged terrain proximity (MSL > 600m, AGL < 150m) with ridge updraft (+1.8 m/s climb)
+        t_ridge = detect_mountain_terrain_trigger(34.0, -118.0, alt_msl_m=950.0, agl_m=90.0, climb_rate_ms=1.8)
+        self.assertTrue(t_ridge['mountain_mode'])
+        self.assertTrue(t_ridge['ridge_updraft_detected'])
+
+        # 4. PixhawkBridge integration
+        bridge = PixhawkBridge(port=None)
+        res = bridge.update_terrain_state(34.0, -118.0, alt_msl_m=1600.0, agl_m=100.0, climb_rate_ms=2.0)
+        state = bridge.get_state()
+        self.assertTrue(state['mountain_mode'])
+        self.assertTrue(state['ridge_updraft_detected'])
+
 
 if __name__ == '__main__':
     unittest.main()

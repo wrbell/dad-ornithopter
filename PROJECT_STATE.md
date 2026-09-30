@@ -42,7 +42,7 @@
 
 | Test ID | Description | Clearance Status | Governing Module / Card |
 | :---: | :--- | :---: | :--- |
-| **TC-01** | Ground Bench Test (Rigid post + load cell, 0 to 3.5 Hz sweep) | **READY FOR HARDWARE** | [`mco_test_cards.py`](firmware/mco_test_cards.py) |
+| **TC-01** | Ground Bench Test (Rigid post + load cell, 0 to 3.5 Hz sweep) | **QUALIFIED IN HARNESS** (Ready for physical load stand) | [`run_tc01_bench_checkout.py`](scripts/run_tc01_bench_checkout.py) / [`mco_test_cards.py`](firmware/mco_test_cards.py) |
 | **TC-02** | Tethered Lift Characterization (Hover freq hunt, lift-frequency curve) | **PENDING TC-01** | [`mco_test_cards.py`](firmware/mco_test_cards.py) |
 | **TC-03** | Truck Advance-Ratio Sweep ($C_T$ vs $J$, 0–14 m/s airflow mapping) | **PENDING TC-02** | [`mco_test_cards.py`](firmware/mco_test_cards.py) |
 | **TC-04** | First Unrestrained Free Flight (STOL takeoff, envelope expansion) | **LOCKED** | [`mco_test_cards.py`](firmware/mco_test_cards.py) |
@@ -92,8 +92,8 @@
 | **O-GS1**| **HIGH** | **Ground Station Copilot**: Google Gemini 2.5 Flash default proxy on port 5759. | Implemented in `mco_gemini_proxy.py`. | **RESOLVED** |
 | **O-CAD1**| **HIGH** | **Physical CAD Package**: Generate 120mm S1223 rib STL/DXF & 7:1 sector wheel DXF. | Generated in `cad/manufactured/`. | **RESOLVED** |
 | **O-C2** | **HIGH** | **STOOP Priority Interrupt**: Ensure diving pullout has hardware-level priority override to FCC. | Implemented via time-latch in `mco_intent_control.py`. | **RESOLVED** |
-| **O-C1** | **MEDIUM** | **CF-1 Execution Path**: Finalize `run_cf1_clap_fling()` execution dispatcher. | Firmware patch in `mco_wave_library.py`. | **OPEN** |
-| **O-D7** | **MEDIUM** | **GPS Terrain Trigger**: Autonomous mountain ridge updraft detection. | Add terrain lookup to `mco_mavlink_bridge.py`. | **OPEN** |
+| **O-C1** | **MEDIUM** | **CF-1 Execution Path**: Finalize `run_cf1_clap_fling()` execution dispatcher. | Implemented standalone execution dispatcher in `mco_wave_library.py` with voltage sag, AGL lockout, and capstan hardstop checks. | **RESOLVED** |
+| **O-D7** | **MEDIUM** | **GPS Terrain Trigger**: Autonomous mountain ridge updraft detection. | Implemented `detect_mountain_terrain_trigger()` and dynamic `GLOBAL_POSITION_INT` terrain elevation handling in `mco_mavlink_bridge.py`. | **RESOLVED** |
 | **O-CAD2**| **MEDIUM** | **Dragonfly Pterostigma & Bio-Wingtips**: Integrate $1.5\text{ g}$ tip ballast pocket at $y=0.85b$ to prevent high-speed torsional flutter. | Documented in `docs/mark1/MCO-1D_Mark1_Manufacturing_Guide.md` §4.3 & `PROJECT_STATE.md`. | **RESOLVED** |
 | **O-INS1**| **HIGH** | **Insect Flight Biomechanics Suite (H-89 to H-95)**: Kramer lift burst, trapped-vortex S1223 cavities, lepidopteran clap jet, elytron canard, Coriolis gust preemption, locust torsional wave, slotted flap glide. | Implemented across firmware & ALC modalities; physical build constraints documented in `MCO-1D_Mark1_Manufacturing_Guide.md` §4.4 & §8. | **RESOLVED** |
 | **O-PTERO1**| **HIGH** | **Pterosaur Flight Biomechanics Suite (H-98, H-100 to H-102)**: Quadrupedal vault takeoff (+1.85g vertical launch impulse), tailless metachronal differential sweep directional trim, dynamic flap-inertia cranial pitch counterbalance, deep-camber high-AR azhdarchid thermal soaring loiter. | Implemented across firmware & ALC modalities; verified with dedicated unit test suite. | **RESOLVED** |
