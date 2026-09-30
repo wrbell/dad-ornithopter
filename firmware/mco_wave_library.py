@@ -93270,6 +93270,7 @@ _ADV_NEW_HYPS = [
             'freq_hz': 2.2, 'aoa_deg': 65.0, 'sweep_deg': 40.0,
             'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
             'cascade_phase_deg': 180.0, 'dihedral_deg': 6.0,
+            'fin_mode': True,
             '_h54_clamshell': True, 'h54_opposed_stroke': True,
             'h54_lift_cancel_pct': 98.0,
             '_scorer': 'scissor_brake_decel_g',
@@ -94699,7 +94700,7 @@ _ADV_NEW_HYPS = [
             'the upwash street of upstream tip vortices (H-49 Katzmayr thrust recovery), while pre-biasing pitch trim (+2.2° fore, '
             '-1.0° aft) to counteract membrane AC shift (H-AC-SHIFT-1) and dilating torque loops to suppress dynamic stall (H-DSH-1).',
         'config': {
-            'freq_hz': 5.5, 'aoa_deg': 8.0, 'sweep_deg': 45.0,
+            'freq_hz': 3.5, 'aoa_deg': 8.0, 'sweep_deg': 45.0,
             'amp_port_deg': 16.0, 'amp_stbd_deg': 16.0,
             'cascade_phase_deg': 15.0, 'dihedral_deg': 4.0,
             '_compound': True,
@@ -94743,7 +94744,7 @@ _ADV_NEW_HYPS = [
             'retraction during stroke reversal to generate 10.1 Nm of pure mechanical yaw torque, achieving >300°/s flat yaw '
             'rotations at zero forward airspeed while Cetacean fluke damping (H-105) suppresses structural recoil.',
         'config': {
-            'freq_hz': 4.0, 'aoa_deg': 18.0, 'sweep_deg': 30.0,
+            'freq_hz': 3.2, 'aoa_deg': 18.0, 'sweep_deg': 30.0,
             'amp_port_deg': 85.0, 'amp_stbd_deg': 85.0,
             'cascade_phase_deg': 90.0, 'dihedral_deg': -15.0,
             '_compound': True,

@@ -99,7 +99,7 @@ def run_full_adversarial_simulation():
     for h in wl.AERO_HYPOTHESES:
         hid = h['id']
         sticks = {'pitch': 0.0, 'roll': 0.0, 'yaw': 0.0, 'lever_pct': 50.0}
-        env = {'test_hyp_override': hid}
+        env = {'active_hypothesis': hid}
         for _ in range(2):
             sim.step(sticks, external_env=env)
         sim.hypotheses_tested.add(hid)
