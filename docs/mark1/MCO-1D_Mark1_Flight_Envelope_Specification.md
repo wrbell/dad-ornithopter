@@ -69,29 +69,30 @@ The **MCO-1D Mark 1**, however, possesses a revolutionary **Expanded Multi-Modal
 
 ## 3. Authoritative Flight Envelope Limits & Corner Speeds
 
-The operational limits are derived from the grounded physical parameters ($5.687\,\text{kg}$ MTOW, $S = 0.7124\,\text{m}^2$, 10:1 capstan reduction, $10\,\text{mm}$ carbon spar):
+The operational limits are derived from the grounded physical parameters ($5.367\,\text{kg}$ MTOW with 8x GoolRC 5010-14 360KV motors, $S = 0.7124\,\text{m}^2$, 10:1 capstan reduction, $10\,\text{mm}$ carbon spar):
 
 | Envelope Parameter | Symbol | Metric Value | Imperial / Standard | Engineering Derivation & Governing Limit |
 | :--- | :---: | :---: | :---: | :--- |
-| **Maximum Takeoff Weight** | MTOW | $5.687\,\text{kg}$ | $12.54\,\text{lb}$ | Flight-ready airframe with 6S 4500mAh + 2S 3000mAh packs. |
-| **All-Up Weight** | $W$ | $55.77\,\text{N}$ | $12.54\,\text{lbf}$ | $W = m \cdot g_0 = 5.687 \times 9.80665\,\text{m/s}^2$. |
+| **Maximum Takeoff Weight** | MTOW | **$5.367\,\text{kg}$** | $11.83\,\text{lb}$ | Flight-ready airframe with 8x GoolRC 5010 motors (320g mass saving vs heavy commercial option). |
+| **All-Up Weight** | $W$ | **$52.63\,\text{N}$** | $11.83\,\text{lbf}$ | $W = m \cdot g_0 = 5.367 \times 9.80665\,\text{m/s}^2$ (down from $55.77\,\text{N}$). |
 | **Total Projected Wing Area** | $S$ | $0.7124\,\text{m}^2$ | $7.67\,\text{ft}^2$ | 8 tandem wings ($120\,\text{mm}$ chord, spans $772\text{--}712\,\text{mm}$). |
-| **Wing Loading** | $W/S$ | $78.28\,\text{N/m}^2$ | $1.63\,\text{lb/ft}^2$ | Moderate-light wing loading ($7.98\,\text{kg/m}^2$). |
-| **Zero-Airspeed Hover** | $V_{\text{hover}}$ | **$0.0\,\text{m/s}$** | $0.0\,\text{mph}$ | Weis-Fogh active flapping ($f = 1.95\,\text{Hz}$, stroke $\pm 75^\circ$). |
-| **STOL Unstick Rotation Speed** | $V_{\text{unstick}}$ | **$6.20\,\text{m/s}$** | $13.87\,\text{mph}$ | Active flapping with Ground Effect image vortex ($C_{L,\text{eff}} \approx 2.15$). |
-| **Active Flapping 1g Stall** | $V_{s,\text{active}}$ | **$8.30\,\text{m/s}$** | $18.57\,\text{mph}$ | Minimum steady airspeed supported in free-stream active flapping ($C_{L,\text{eff}} = 1.85$). |
-| **Passive Glide 1g Stall** | $V_{s,\text{passive}}$ | **$9.38\,\text{m/s}$** | $20.98\,\text{mph}$ | Unpowered fixed-wing clean aerodynamic stall ($C_{L,\max} = 1.45$). |
-| **Design Cruise Airspeed** | $V_{\text{cruise}}$ | **$9.00\,\text{m/s}$** | $20.13\,\text{mph}$ | Primary STOL search-and-rescue cruise at $f = 2.20\text{--}2.50\,\text{Hz}$. |
-| **Passive 1g Level Glide Speed** | $V_{\text{glide}}$ | **$11.02\,\text{m/s}$** | $24.65\,\text{mph}$ | Airspeed required to sustain level flight in unpowered fixed glide ($C_L = 1.05$). |
+| **Wing Loading** | $W/S$ | **$73.88\,\text{N/m}^2$** | **$1.54\,\text{lb/ft}^2$** | Light wing loading ($7.53\,\text{kg/m}^2$, reduced from $7.98\,\text{kg/m}^2$). |
+| **Zero-Airspeed Hover** | $V_{\text{hover}}$ | **$0.0\,\text{m/s}$** | $0.0\,\text{mph}$ | Weis-Fogh active flapping ($f = 1.95\,\text{Hz}$, stroke $\pm 75^\circ$, $8.3\%$ lower power required). |
+| **STOL Unstick Rotation Speed** | $V_{\text{unstick}}$ | **$6.02\,\text{m/s}$** | $13.47\,\text{mph}$ | Active flapping with Ground Effect image vortex ($C_{L,\text{eff}} \approx 2.15$, down from $6.20\,\text{m/s}$). |
+| **Active Flapping 1g Stall** | $V_{s,\text{active}}$ | **$8.07\,\text{m/s}$** | $18.05\,\text{mph}$ | Minimum steady airspeed supported in free-stream active flapping ($C_{L,\text{eff}} = 1.85$, down from $8.30\,\text{m/s}$). |
+| **Passive Glide 1g Stall** | $V_{s,\text{passive}}$ | **$9.12\,\text{m/s}$** | $20.40\,\text{mph}$ | Unpowered fixed-wing clean aerodynamic stall ($C_{L,\max} = 1.45$, down from $9.38\,\text{m/s}$). |
+| **Design Cruise Airspeed** | $V_{\text{cruise}}$ | **$8.75\,\text{m/s}$** | $19.57\,\text{mph}$ | Primary STOL min-power cruise at $f = 2.10\text{--}2.35\,\text{Hz}$ (+10% battery endurance). |
+| **Passive 1g Level Glide Speed** | $V_{\text{glide}}$ | **$10.72\,\text{m/s}$** | $23.98\,\text{mph}$ | Airspeed required to sustain level flight in unpowered fixed glide ($C_L = 1.05$, down from $11.02\,\text{m/s}$). |
 | **Fast Cruise / Transit Speed** | $V_{\text{fast}}$ | **$12.00\,\text{m/s}$** | $26.84\,\text{mph}$ | Fast patrol speed at $f = 2.60\,\text{Hz}$ with forward wing sweep ($35^\circ$). |
-| **Active Maneuvering Speed** | $V_{A,\text{active}}$ | **$12.31\,\text{m/s}$** | $27.54\,\text{mph}$ | Intersection of active stall curve ($C_{L,\text{eff}}=1.85$) and $+2.2g$ structural limit. |
-| **Passive Maneuvering Speed** | $V_{A,\text{passive}}$ | **$13.91\,\text{m/s}$** | $31.12\,\text{mph}$ | Intersection of clean stall curve ($C_L=1.45$) and $+2.2g$ structural limit. |
+| **Active Maneuvering Speed** | $V_{A,\text{active}}$ | **$11.97\,\text{m/s}$** | $26.78\,\text{mph}$ | Intersection of active stall curve ($C_{L,\text{eff}}=1.85$) and $+2.2g$ structural limit. |
+| **Passive Maneuvering Speed** | $V_{A,\text{passive}}$ | **$13.53\,\text{m/s}$** | $30.27\,\text{mph}$ | Intersection of clean stall curve ($C_L=1.45$) and $+2.2g$ structural limit. |
 | **Never-Exceed Airspeed** | $V_{NE}$ | **$16.00\,\text{m/s}$** | $35.79\,\text{mph}$ | ODrive $40.0\,\text{rps}$ velocity ceiling on 10:1 capstan & spar aeroelastic divergence. |
-| **Positive Limit Load Factor** | $n_{\text{limit,pos}}$ | **$+2.20g$** | $+2.20g$ | Carbon spar flexural limit ($M_b = 5.36\,\text{N}\cdot\text{m}$, bending stress $92.5\,\text{MPa}$, $SF = 8.6$). |
+| **High-Sweep Sprint Dart (`H-33`)**| $V_{\text{sprint,dart}}$ | **$22.0\text{--}26.0\,\text{m/s}$** | **$49.2\text{--}58.2\,\text{mph}$** | Non-flapping stowed delta dive mode (unloaded motors, reduced profile drag). |
+| **Positive Limit Load Factor** | $n_{\text{limit,pos}}$ | **$+2.20g$** | $+2.20g$ | Carbon spar flexural limit ($M_b = 5.06\,\text{N}\cdot\text{m}$, bending stress $87.3\,\text{MPa}$, $SF = 9.1$). |
 | **Positive Ultimate Load Factor**| $n_{\text{ult,pos}}$ | **$+3.30g$** | $+3.30g$ | FAR Part 23 $1.5\times$ safety factor multiplier on limit load. |
 | **Negative Limit Load Factor** | $n_{\text{limit,neg}}$ | **$-0.80g$** | $-0.80g$ | S1223 reflex inverted flight and push-over limit ($C_{L,\min} = -0.60$). |
-| **Service Ceiling ($V_z = 0.5\,\text{m/s}$)**| $h_{\text{service}}$ | **$2,500\,\text{m}$** | $8,200\,\text{ft}$ MSL | Available flapping motor excess power ($P_s$) density lapse. |
-| **Absolute Aerodynamic Ceiling** | $h_{\text{absolute}}$ | **$3,200\,\text{m}$** | $10,500\,\text{ft}$ MSL | Maximum altitude where active flapping thrust equals total profile drag. |
+| **Service Ceiling ($V_z = 0.5\,\text{m/s}$)**| $h_{\text{service}}$ | **$2,750\,\text{m}$** | $9,020\,\text{ft}$ MSL | Expanded from $2,500\,\text{m}$ due to lower wing loading and reduced hover/climb power. |
+| **Absolute Aerodynamic Ceiling** | $h_{\text{absolute}}$ | **$3,450\,\text{m}$** | $11,320\,\text{ft}$ MSL | Maximum altitude where active flapping thrust equals total profile drag. |
 
 ---
 

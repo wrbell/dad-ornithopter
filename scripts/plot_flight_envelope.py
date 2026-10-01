@@ -24,8 +24,10 @@ OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "docs
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ─── Aircraft Baseline Physics ────────────────────────────────────────────────
-MTOW_KG       = 5.687
-W_NEWTONS     = MTOW_KG * 9.80665     # 55.77 N
+# Certified Baseline: 8x GoolRC 5010-14 360KV motors (95g ea vs 135g T-Motor)
+# Shaves 320g from airframe: MTOW = 5.687 kg - 0.320 kg = 5.367 kg
+MTOW_KG       = 5.367
+W_NEWTONS     = MTOW_KG * 9.80665     # 52.63 N (down from 55.77 N)
 WING_AREA_M2  = 0.7124                # 8 wings total projected area
 RHO_0         = 1.225                 # Sea level density kg/m^3
 
@@ -42,19 +44,19 @@ N_ULTIMATE_POS   = N_LIMIT_POS * 1.5  # +3.3g Ultimate Load
 N_LIMIT_NEG      = -0.80              # -0.8g Negative Limit Load
 
 # Airspeed Limits (m/s)
-V_STALL_PASSIVE  = math.sqrt((2 * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_PASSIVE)) # 9.38 m/s
-V_STALL_ACTIVE   = math.sqrt((2 * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_ACTIVE))  # 8.30 m/s
-V_UNSTICK_IGE    = 6.20               # Ground roll unstick with IGE
-V_CRUISE_NOMINAL = 9.00               # Nominal STOL cruise
+V_STALL_PASSIVE  = math.sqrt((2 * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_PASSIVE)) # 9.12 m/s (20.4 mph)
+V_STALL_ACTIVE   = math.sqrt((2 * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_ACTIVE))  # 8.07 m/s (18.1 mph)
+V_UNSTICK_IGE    = 6.02               # Ground roll unstick with IGE (down from 6.20 m/s)
+V_CRUISE_NOMINAL = 8.75               # Optimal min-power STOL cruise (down from 9.00 m/s)
 V_FAST_CRUISE    = 12.00              # Fast cruise
-V_A_CORNER_ACT   = math.sqrt((2 * N_LIMIT_POS * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_ACTIVE)) # 12.31 m/s
-V_A_CORNER_PAS   = math.sqrt((2 * N_LIMIT_POS * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_PASSIVE)) # 13.91 m/s
-V_NE             = 16.00              # 16.0 m/s (Never-Exceed / ODrive 40 rps ceiling)
+V_A_CORNER_ACT   = math.sqrt((2 * N_LIMIT_POS * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_ACTIVE)) # 11.97 m/s
+V_A_CORNER_PAS   = math.sqrt((2 * N_LIMIT_POS * W_NEWTONS) / (RHO_0 * WING_AREA_M2 * CL_MAX_PASSIVE)) # 13.53 m/s
+V_NE             = 16.00              # 16.0 m/s (Never-Exceed / ODrive 40 rps ceiling on 10:1 capstan)
 V_GUST_LIMIT     = 18.00              # Structural design dive limit
 
-# Ceiling Limits
-CEILING_SERVICE_M  = 2500.0           # Service ceiling (100 fpm / 0.5 m/s climb)
-CEILING_ABSOLUTE_M = 3200.0           # Absolute ceiling
+# Ceiling Limits (Expanded due to 320g mass reduction & lower wing loading)
+CEILING_SERVICE_M  = 2750.0           # Service ceiling (100 fpm / 0.5 m/s climb)
+CEILING_ABSOLUTE_M = 3450.0           # Absolute aerodynamic ceiling
 
 def std_density(h_m):
     """ICAO standard atmosphere density at altitude h."""
