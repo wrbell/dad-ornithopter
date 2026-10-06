@@ -29,8 +29,8 @@ def render_views():
         p_side = pv.Plotter(off_screen=True, window_size=[1600, 900])
         p_side.set_background('white')
         p_side.add_mesh(mesh_fus, color='#0284c7', specular=0.3, ambient=0.2, diffuse=0.8, smooth_shading=True)
-        p_side.camera_position = [(500, -1500, 0), (500, 0, 0), (0, 0, 1)]
-        p_side.camera.zoom(1.1)
+        p_side.camera_position = [(350, -1400, 25), (350, 0, 25), (0, 0, 1)]
+        p_side.camera.zoom(1.2)
         p_side.screenshot(os.path.join(OUT_DIR, 'mco_fuselage_side.png'))
         print("  ✓ Rendered: mco_fuselage_side.png")
 
@@ -38,8 +38,8 @@ def render_views():
         p_iso = pv.Plotter(off_screen=True, window_size=[1600, 1000])
         p_iso.set_background('white')
         p_iso.add_mesh(mesh_fus, color='#0284c7', specular=0.4, ambient=0.2, diffuse=0.8, smooth_shading=True)
-        p_iso.camera_position = [(-500, -900, 700), (450, 0, 0), (0, 0, 1)]
-        p_iso.camera.zoom(1.1)
+        p_iso.camera_position = [(-400, -800, 600), (350, 0, 25), (0, 0, 1)]
+        p_iso.camera.zoom(1.2)
         p_iso.screenshot(os.path.join(OUT_DIR, 'mco_fuselage_iso.png'))
         print("  ✓ Rendered: mco_fuselage_iso.png")
 
@@ -47,8 +47,8 @@ def render_views():
         p_front = pv.Plotter(off_screen=True, window_size=[1400, 1000])
         p_front.set_background('white')
         p_front.add_mesh(mesh_fus, color='#0284c7', specular=0.3, ambient=0.2, diffuse=0.8, smooth_shading=True)
-        p_front.camera_position = [(-1200, 0, 50), (400, 0, 0), (0, 0, 1)]
-        p_front.camera.zoom(1.2)
+        p_front.camera_position = [(-900, 0, 40), (350, 0, 25), (0, 0, 1)]
+        p_front.camera.zoom(1.3)
         p_front.screenshot(os.path.join(OUT_DIR, 'mco_fuselage_front.png'))
         print("  ✓ Rendered: mco_fuselage_front.png")
 

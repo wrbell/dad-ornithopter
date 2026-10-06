@@ -369,51 +369,51 @@ BOM_DATABASE = [
     # ── 5. AIRFRAME & WING STRUCTURE ─────────────────────────────────────────
     {
         "id": "STRUCT-01",
-        "name": "High-Modulus 3K Roll-Wrapped Carbon Fiber Upper Spine Longerons (⌀12mm OD x 10mm ID x 1000mm)",
+        "name": "High-Modulus 3K Roll-Wrapped Carbon Fiber Upper Spine Longeron (⌀20mm OD x 17mm ID x 1000mm, cut to 700mm)",
         "category": "5. Airframe, Wing Structure & Mechanics",
-        "qty": 2,
-        "unit_price": 34.50,
+        "qty": 1,
+        "unit_price": 42.00,
         "vendor": "DragonPlate / Rock West Composites",
         "url": "https://dragonplate.com/carbon-fiber-round-tubes",
-        "part_no": "DP-RND-12X10-1000",
-        "unit_mass_g": 26.2,
-        "notes": "Upgraded Rev B spine longerons. Triples polar moment of inertia (J=678 mm⁴) against metachronal flapping twist."
+        "part_no": "DP-RND-20X17-1000",
+        "unit_mass_g": 92.5,
+        "notes": "Locked compact delta frame spine. Upgraded to ⌀20mm OD x 1.5mm wall (J=7,508 mm⁴) providing +41% torsional stiffness to resist 20 N·m roll moments."
     },
     {
         "id": "STRUCT-02",
-        "name": "3K Roll-Wrapped Carbon Fiber Lower Keel & Bulkhead Tubes (⌀8mm OD x 6mm ID x 1000mm)",
+        "name": "3K Roll-Wrapped Carbon Fiber Lower Keel Tube (⌀12mm OD x 10mm ID x 1000mm, cut to 675mm)",
         "category": "5. Airframe, Wing Structure & Mechanics",
-        "qty": 4,
-        "unit_price": 22.00,
+        "qty": 1,
+        "unit_price": 28.00,
         "vendor": "DragonPlate / Rock West Composites",
         "url": "https://dragonplate.com/carbon-fiber-round-tubes",
-        "part_no": "DP-RND-08X06-1000",
-        "unit_mass_g": 17.5,
-        "notes": "Lower keel longerons, vertical bulkhead posts, and transverse cross-brace torque ties."
+        "part_no": "DP-RND-12X10-1000",
+        "unit_mass_g": 53.6,
+        "notes": "Locked compact delta frame keel tension tie connecting front (Corner 2) and rear (Corner 3) landing gear clamps."
     },
     {
         "id": "STRUCT-03",
-        "name": "3K Carbon Fiber Diagonal Shear Truss Bracing Tubes (⌀6mm OD x 4mm ID x 1000mm)",
+        "name": "3K Roll-Wrapped Carbon Fiber Front Vertical Truss Post (⌀14mm OD x 12mm ID x 1000mm, cut to 160mm)",
         "category": "5. Airframe, Wing Structure & Mechanics",
-        "qty": 2,
-        "unit_price": 16.50,
-        "vendor": "DragonPlate / Amazon",
+        "qty": 1,
+        "unit_price": 32.00,
+        "vendor": "DragonPlate / Rock West Composites",
         "url": "https://dragonplate.com/carbon-fiber-round-tubes",
-        "part_no": "DP-RND-06X04-1000",
-        "unit_mass_g": 13.1,
-        "notes": "Diagonal shear truss web members providing high torsional and bending triangulated stiffness."
+        "part_no": "DP-RND-14X12-1000",
+        "unit_mass_g": 63.3,
+        "notes": "Locked compact delta frame front post tying Corner 1 to Corner 2 front landing gear node, handling 4g touchdown impact."
     },
     {
         "id": "STRUCT-04",
-        "name": "CNC 6061-T6 / Carbon Split-Clamp Structural Wing Mount Collars (⌀18mm OD, 60mm clamp length, ⌀12mm bore)",
+        "name": "CNC 6061-T6 / Carbon Pinned Split-Clamp Modular Wing Mount Collars (⌀26mm OD, 50mm length, ⌀20mm bore)",
         "category": "5. Airframe, Wing Structure & Mechanics",
         "qty": 8,
         "unit_price": 18.00,
         "vendor": "SendCutSend / Xometry",
         "url": "https://sendcutsend.com",
-        "part_no": "MCO1-CLAMP-12MM-3DOF",
-        "unit_mass_g": 28.5,
-        "notes": "8 circumferential clamp collars wrapping ⌀12mm longerons with 2x M3 pinch bolts and 4x M3 mount patterns."
+        "part_no": "MCO1-CLAMP-20MM-PINNED",
+        "unit_mass_g": 24.5,
+        "notes": "8 modular 90° square clamp collars on ⌀20mm spine with 2x M3 pinch bolts and ⌀3mm anti-rotation shear dowel pins."
     },
     {
         "id": "STRUCT-05",

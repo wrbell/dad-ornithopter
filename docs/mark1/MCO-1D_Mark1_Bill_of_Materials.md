@@ -2,7 +2,7 @@
 
 **Aircraft Designation**: MCO-1D Mark 1 Metachronal Cascade Ornithopter  
 **Demonstrator Program**: MCO-1A Search-and-Rescue (SAR) Subscale Prototype  
-**Last Refreshed / Price Verified**: `2026-09-27 20:48:16 UTC`  
+**Last Refreshed / Price Verified**: `2026-10-05 22:02:28 UTC`  
 **Classification**: Authoritative Engineering Sourcing Record (Mark 1 Baseline)  
 
 ---
@@ -10,21 +10,21 @@
 ## Executive Sourcing Summary
 
 - **Total Line Items**: 46 distinct components
-- **Total Physical Parts Count**: 177 parts (complete airframe + spares)
-- **Total Estimated Procurement Cost**: **$3,875.78 USD**
+- **Total Physical Parts Count**: 172 parts (complete airframe + spares)
+- **Total Estimated Procurement Cost**: **$3,787.78 USD**
 - **Operational Flight MTOW**: **5.897 kg (5,897 g)** (certified flight mass with 1.15m wings & GoolRC motors)
-- **Gross Kit & Spares Mass**: **8.230 kg (8,230 g)** (all line items including spares & bench gear)
+- **Gross Kit & Spares Mass**: **8.259 kg (8,259 g)** (all line items including spares & bench gear)
 - **Longitudinal Balance (CG)**: **467.6 mm aft of datum (-5.1% MAC reference, 43.3 mm forward of NP)** on quick-pin slide rail (Safe Envelope: -10.0%–25.0% MAC)
 
 | Category | Line Items | Subtotal (USD) | Subtotal Mass (g) | % of Cost |
 | :--- | :---: | :---: | :---: | :---: |
-| **1. Propulsion & Kinematic Drivetrain** | 6 | $1,094.00 | 2,098 g | 28.2% |
-| **2. Morphing Actuation & Servo Systems** | 4 | $1,216.41 | 1,410 g | 31.4% |
-| **3. Avionics, Computing & Sensors** | 11 | $337.99 | 202 g | 8.7% |
-| **4. Power Storage & Electrical Distribution** | 7 | $234.98 | 908 g | 6.1% |
-| **5. Airframe, Wing Structure & Mechanics** | 12 | $831.90 | 3,363 g | 21.5% |
-| **6. Precision Hardware, Fasteners & Consumables** | 6 | $160.50 | 249 g | 4.1% |
-| **TOTAL (All Subsystems)** | **46** | **$3,875.78** | **8,230 g** | **100.0%** |
+| **1. Propulsion & Kinematic Drivetrain** | 6 | $1,094.00 | 2,098 g | 28.9% |
+| **2. Morphing Actuation & Servo Systems** | 4 | $1,216.41 | 1,410 g | 32.1% |
+| **3. Avionics, Computing & Sensors** | 11 | $337.99 | 202 g | 8.9% |
+| **4. Power Storage & Electrical Distribution** | 7 | $234.98 | 908 g | 6.2% |
+| **5. Airframe, Wing Structure & Mechanics** | 12 | $743.90 | 3,392 g | 19.6% |
+| **6. Precision Hardware, Fasteners & Consumables** | 6 | $160.50 | 249 g | 4.2% |
+| **TOTAL (All Subsystems)** | **46** | **$3,787.78** | **8,259 g** | **100.0%** |
 
 ---
 
@@ -83,14 +83,14 @@
 | `PWR-07` | **Texas Instruments INA226 High-Side Current & Power Monitor Breakout (0.005Ω Shunt)** | 1 | $12.50 | **$12.50** | 4.5 g | [Adafruit / Mouser / Texas Instruments](https://www.adafruit.com/product/4982) | `TI-INA226-BRK`<br>*Inline between 2S 7.4V LiPo and 16-port servo bus (pre-buffer capacitor). I2C (0x40) to Pi 4B GPIO 2/3. Closes 60–105W servo blind spot for H-SERVO-1.* |
 
 ### 5. Airframe, Wing Structure & Mechanics
-*Category Subtotal: **$831.90 USD** | Mass: **3,363 g***
+*Category Subtotal: **$743.90 USD** | Mass: **3,392 g***
 
 | Item ID | Component & Description | Qty | Unit Price | Ext. Price | Unit Mass | Vendor / Sourcing Link | Part Number / Notes |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- | :--- |
-| `STRUCT-01` | **High-Modulus 3K Roll-Wrapped Carbon Fiber Upper Spine Longerons (⌀12mm OD x 10mm ID x 1000mm)** | 2 | $34.50 | **$69.00** | 26.2 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-12X10-1000`<br>*Upgraded Rev B spine longerons. Triples polar moment of inertia (J=678 mm⁴) against metachronal flapping twist.* |
-| `STRUCT-02` | **3K Roll-Wrapped Carbon Fiber Lower Keel & Bulkhead Tubes (⌀8mm OD x 6mm ID x 1000mm)** | 4 | $22.00 | **$88.00** | 17.5 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-08X06-1000`<br>*Lower keel longerons, vertical bulkhead posts, and transverse cross-brace torque ties.* |
-| `STRUCT-03` | **3K Carbon Fiber Diagonal Shear Truss Bracing Tubes (⌀6mm OD x 4mm ID x 1000mm)** | 2 | $16.50 | **$33.00** | 13.1 g | [DragonPlate / Amazon](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-06X04-1000`<br>*Diagonal shear truss web members providing high torsional and bending triangulated stiffness.* |
-| `STRUCT-04` | **CNC 6061-T6 / Carbon Split-Clamp Structural Wing Mount Collars (⌀18mm OD, 60mm clamp length, ⌀12mm bore)** | 8 | $18.00 | **$144.00** | 28.5 g | [SendCutSend / Xometry](https://sendcutsend.com) | `MCO1-CLAMP-12MM-3DOF`<br>*8 circumferential clamp collars wrapping ⌀12mm longerons with 2x M3 pinch bolts and 4x M3 mount patterns.* |
+| `STRUCT-01` | **High-Modulus 3K Roll-Wrapped Carbon Fiber Upper Spine Longeron (⌀20mm OD x 17mm ID x 1000mm, cut to 700mm)** | 1 | $42.00 | **$42.00** | 92.5 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-20X17-1000`<br>*Locked compact delta frame spine. Upgraded to ⌀20mm OD x 1.5mm wall (J=7,508 mm⁴) providing +41% torsional stiffness to resist 20 N·m roll moments.* |
+| `STRUCT-02` | **3K Roll-Wrapped Carbon Fiber Lower Keel Tube (⌀12mm OD x 10mm ID x 1000mm, cut to 675mm)** | 1 | $28.00 | **$28.00** | 53.6 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-12X10-1000`<br>*Locked compact delta frame keel tension tie connecting front (Corner 2) and rear (Corner 3) landing gear clamps.* |
+| `STRUCT-03` | **3K Roll-Wrapped Carbon Fiber Front Vertical Truss Post (⌀14mm OD x 12mm ID x 1000mm, cut to 160mm)** | 1 | $32.00 | **$32.00** | 63.3 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-round-tubes) | `DP-RND-14X12-1000`<br>*Locked compact delta frame front post tying Corner 1 to Corner 2 front landing gear node, handling 4g touchdown impact.* |
+| `STRUCT-04` | **CNC 6061-T6 / Carbon Pinned Split-Clamp Modular Wing Mount Collars (⌀26mm OD, 50mm length, ⌀20mm bore)** | 8 | $18.00 | **$144.00** | 24.5 g | [SendCutSend / Xometry](https://sendcutsend.com) | `MCO1-CLAMP-20MM-PINNED`<br>*8 modular 90° square clamp collars on ⌀20mm spine with 2x M3 pinch bolts and ⌀3mm anti-rotation shear dowel pins.* |
 | `STRUCT-05` | **Universal Rib & Segment Filament: ColorFabb LW-PLA Lightweight PLA (750g Spools)** | 3 | $48.00 | **$144.00** | 632.0 g | [ColorFabb Official / MatterHackers](https://colorfabb.com/lw-pla-natural) | `CF-LW-PLA-750`<br>*3 spools to print all 32 modular 250mm wing segments (4 per wing x 8 wings), 8 mounts, and 8 skeleton wingtips.* |
 | `STRUCT-06` | **Pultruded Carbon Fiber Leading Edge Spar Tubes (⌀10mm OD x 1.0mm wall x 1200mm, 8 Rods)** | 8 | $12.50 | **$100.00** | 58.0 g | [DragonPlate / Rock West Composites](https://dragonplate.com/carbon-fiber-rods) | `DP-TUBE-10MM-1200`<br>*Continuous 1.2m main spar running through root mount, all 4 segments (1.0m run), and anchoring into skeleton wingtip.* |
 | `STRUCT-07` | **Solid Carbon Fiber Secondary Alignment Spar Rods (⌀2.0mm & ⌀3.0mm x 1200mm, 10-Pack)** | 4 | $16.00 | **$64.00** | 55.0 g | [DragonPlate / Amazon](https://dragonplate.com) | `DP-ROD-2MM-1200-PACK`<br>*Inserted through continuous internal alignment bores across all 4 segments at 1.8mm and 72mm chord positions.* |
