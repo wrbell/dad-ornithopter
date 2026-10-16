@@ -1195,7 +1195,7 @@ class MCOMain:
 
         return result
 
-    def start(self):
+    def start(self, duration=None):
         """Start all subsystems and enter flight loop."""
         self.mavlink.start()
         self.logger.start()
@@ -1204,13 +1204,18 @@ class MCOMain:
             self.cot_bridge.start()
         print(f"\nMCO-1D flight loop starting at {self.TICK_RATE_HZ} Hz")
         print(f"Sim mode: {self.sim_mode}")
+        if duration is not None:
+            print(f"Running for {duration:.1f}s...")
         print("Ready. Pre-flight check via ground station or panel.\n")
 
         tick_count  = 0
         _gc_counter = 0
         last_tick_t = time.monotonic()
+        loop_start_t = time.monotonic()
 
         while self.alive:
+            if duration is not None and (time.monotonic() - loop_start_t) >= duration:
+                break
             tick_start = time.monotonic()
 
             # ── Inbound ATAK CoT Tasking check ────────────────────
@@ -1501,6 +1506,8 @@ def main():
                         help='Launch MCO-1D first-run hardware configuration wizard')
     parser.add_argument('--discover', action='store_true',
                         help='Run autonomous physical plant self-discovery and parameter validation')
+    parser.add_argument('--duration', type=float, default=None,
+                        help='Run flight loop for specified duration (seconds) then shutdown cleanly')
     args = parser.parse_args()
 
     if args.wizard:
@@ -1515,7 +1522,7 @@ def main():
         return
 
     mco = MCOMain(port=args.port, baud=args.baud, sim=args.sim)
-    mco.start()
+    mco.start(duration=args.duration)
 
 
 if __name__ == '__main__':

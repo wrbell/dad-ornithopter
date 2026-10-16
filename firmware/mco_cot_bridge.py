@@ -70,10 +70,17 @@ def generate_cot_xml(lat, lon, hae_m=0.0, speed_ms=0.0, course_deg=0.0,
         "stale": t_stale_str,
     })
 
+    safe_lat = float(lat if lat is not None else 0.0)
+    safe_lon = float(lon if lon is not None else 0.0)
+    safe_hae = float(hae_m if hae_m is not None else 0.0)
+    safe_speed = float(speed_ms if speed_ms is not None else 0.0)
+    safe_course = float(course_deg if course_deg is not None else 0.0)
+    safe_batt = float(battery_pct if battery_pct is not None else 100.0)
+
     ET.SubElement(root, "point", {
-        "lat": f"{float(lat):.6f}",
-        "lon": f"{float(lon):.6f}",
-        "hae": f"{float(hae_m):.1f}",
+        "lat": f"{safe_lat:.6f}",
+        "lon": f"{safe_lon:.6f}",
+        "hae": f"{safe_hae:.1f}",
         "ce": "5.0",   # Circular error estimate in metres
         "le": "3.0",   # Linear error estimate in metres
     })
@@ -81,14 +88,14 @@ def generate_cot_xml(lat, lon, hae_m=0.0, speed_ms=0.0, course_deg=0.0,
     detail = ET.SubElement(root, "detail")
     ET.SubElement(detail, "contact", {"callsign": str(callsign)})
     ET.SubElement(detail, "track", {
-        "course": f"{float(course_deg % 360.0):.1f}",
-        "speed": f"{float(speed_ms):.1f}",
+        "course": f"{safe_course % 360.0:.1f}",
+        "speed": f"{safe_speed:.1f}",
     })
     ET.SubElement(detail, "status", {
-        "battery": f"{int(max(0, min(100, battery_pct)))}",
+        "battery": f"{int(max(0, min(100, safe_batt)))}",
     })
 
-    remarks_text = f"MODE:{flight_mode} | BATT:{battery_pct:.0f}%"
+    remarks_text = f"MODE:{flight_mode} | BATT:{safe_batt:.0f}%"
     if extra_remarks:
         remarks_text += f" | {extra_remarks}"
     remarks = ET.SubElement(detail, "remarks")
