@@ -18,12 +18,15 @@ Commissioning the **MCO-1D Mark 1** involves high-torque oscillating drivetrains
 > **Electrical Isolation**: Never bridge the 7.4V servo bus ground to the 22.2V motor ground at any point other than the opto-isolated FCC interface. Never apply 6S main battery power without 50W dynamic brake resistors connected to each ODrive S1.
 
 ### 1.2 Initial Power-Up Checklist
-1. **Mechanical & Physical Verification Gate Sign-Off**: Confirm all 8 sections of the **Physical Build Quality Verification Gate** (`MFG-MK1` Section 8) have been signed off:
+1. **Physical Calibration Sheet Verification (MANDATORY GATE)**:
+   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) is filled out and signed for all 8 figures (`FIG-01` through `FIG-08`).
+   * Confirm the as-built flying mass (`FIG-01`, target $< 5,600\text{ g}$, e.g. $4,800\text{--}5,300\text{ g}$) is loaded into firmware.
    * Internal 6061-T6 aluminum spar crush ferrules epoxied (PHY-02).
-   * 48-hour Dyneema SK99 creep bedding complete; re-tensioned to $180\,\text{N} \pm 5\,\text{N}$ with witness marks (PHY-01).
+   * 48-hour Dyneema SK99 creep bedding complete; re-tensioned to $180\,\text{N} \pm 5\,\text{N}$ with witness marks (PHY-01 / FIG-06).
    * 0.5 mm thermal barrier gaskets installed on all motor mounts (PHY-04).
    * $4,700\,\mu\text{F}$ low-ESR capacitor verified on 7.4V servo bus (PHY-08).
    * Battery sled locked at Hole 3 ($250\,\text{mm}$ / $26.5\%$ MAC) with Hole 6 lockout pin inserted (PHY-05).
+   * Sector wheel physical stop-to-stop arc verified across full $200.0^\circ$ ($\pm 100.0^\circ$) (FIG-04).
 2. **Bench Supply Step-In**: Power the 22.2V motor bus initially using a current-limited DC bench supply set to **$22.0\text{V}$ and $2.0\text{A}$ current limit**.
 3. **Servo Bus Check**: Apply 7.4V from the 2S 3000mAh pack to the servo bus board. Verify with a DMM:
    * Voltage: $+7.4\text{V} \pm 0.4\text{V}$.
@@ -43,10 +46,10 @@ CAN Bus Topology:
 ```
 
 ### 2.1 Parameter Configuration via `odrivetool`
-Connect to each ODrive S1 individually via USB and execute the following configuration script:
+Connect to each ODrive S1 individually via USB and execute the configuration script. The default baseline uses the **GoolRC 5010-14 360KV** motor (with MN5008 parameters retained as upgrade option):
 
 ```python
-# Configure Motor Parameters for T-Motor MN5008 ~200KV
+# Configure Motor Parameters for GoolRC 5010-14 360KV (or MN5008)
 odrv0.config.dc_bus_overvoltage_trip_level = 26.5  # 6S LiPo max
 odrv0.config.dc_bus_undervoltage_trip_level = 19.0 # 6S LiPo min cut-off
 odrv0.config.dc_max_positive_current = 35.0        # Amps peak
@@ -56,12 +59,12 @@ odrv0.config.dc_max_negative_current = -15.0       # Regen braking limit
 odrv0.config.brake_resistor0.enable = True
 odrv0.config.brake_resistor0.resistance = 2.0      # Ohms (50W resistor)
 
-# Motor Physics (MN5008)
+# Motor Physics: GoolRC 5010-14 360KV (Baseline, saves 320g airframe mass)
 odrv0.axis0.config.motor.motor_type = MotorType.HIGH_CURRENT
-odrv0.axis0.config.motor.pole_pairs = 12           # 24N28P or 12 pole pairs
-odrv0.axis0.config.motor.torque_constant = 0.048   # N*m/A for 200KV
+odrv0.axis0.config.motor.pole_pairs = 7            # 12N14P = 7 pole pairs (MN5008 uses 12)
+odrv0.axis0.config.motor.torque_constant = 0.0265  # N*m/A for 360KV (MN5008 uses 0.048)
 odrv0.axis0.config.motor.current_soft_max = 25.0   # Continuous Amps
-odrv0.axis0.config.motor.current_hard_max = 35.0   # Peak Amps
+odrv0.axis0.config.motor.current_hard_max = 35.0   # Peak Amps (40A burst max)
 
 # Kinematic Limits (10:1 Capstan Reduction)
 # ODrive S1 native velocity is in turns/s (revolutions/s).

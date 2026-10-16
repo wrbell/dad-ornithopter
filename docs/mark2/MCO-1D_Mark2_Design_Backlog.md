@@ -60,8 +60,35 @@ These hypotheses require physical tooling, specialized composite manufacturing, 
 | **MK2-HW-01: Integrated Motor-Hinge Hub** | Odonata basalar fulcrum | Custom frameless brushless motors built directly inside the titanium wing root gimbal | Eliminates sector gear rope drive; cuts 320g nacelle weight |
 | **MK2-HW-02: Active Wingtip Pterostigma Pocket** | Pterosaur wingtip mass | CNC milled micro-cavities with remote micro-solenoids for variable tip inertia damping | Adaptive aeroelastic flutter suppression across wide speed bands |
 | **MK2-HW-03: Quick-Release Folding Spar Joints** | Pterosaur wing folding | Spring-loaded collet locks on Station 2 & 3 spars | 45-second pack-down to 800mm backpack footprint |
+| **MK2-AERO-01: Symmetrical / Morphing Reflex Airfoil** | Aerobatic monoplanes & Cetacean fluke | Articulated dynamic trailing edge morphing (Selig 8036 base with dynamic +/-25° reflex) | Replaces fixed S1223 undercamber; enables sustained inverted flight (-2.5g) & outside loops |
+| **MK2-AERO-02: Fuselage Knife-Edge Aerodynamic Strakes**| Extra 330SC & shark dorsal keel | Molded ultra-light carbon-foam cheek fences between wing stations (0.22 m² lateral projected area) | Provides 1.0g passive side lift at 90° bank, enabling continuous unlimited knife-edge flight |
+| **MK2-AERO-03: Staggered Bi-Delta Cascade & W4 Tailplane Trim**| Peregrine falcon high-speed stoop morph | Asymmetric fanned sweep (W1 canard +5°, W2 15°, W3 30°, W4 55° tail) with negative reflex pitch on W4 | Solves tandem chord clashing and cancels -40 N·m nose-down tuck moment for level cruise >30 m/s |
 
 ---
+
+### MK2-AERO-01: Symmetrical / Variable-Camber Morphing Reflex Airfoil Suite
+- **Requirement Type**: Negative-G & Inverted Competition Aerobatics (Outside Loops, Inverted Level Flight)
+- **Problem Solved**:
+  - The Mark 1 airframe retains the ultra-high camber Selig S1223 airfoil for maximum low-speed STOL and forward-flight SAR lift ($C_{L,\max} = 1.85\text{--}2.15$). However, its deep concave undercamber produces asymmetric inverted drag and limits passive inverted lift to $C_{L,\min} = -0.65$.
+  - While Mark 1 firmware utilizes active metachronal flapping (`H-INV-1`) to achieve inverted $1.0g$ level flight, sustaining inverted flight under pure passive glide and pulling high negative Gs ($-3.0g$) in outside push loops requires an aerodynamically balanced airfoil.
+- **Mechanical & Aerodynamic Specification**:
+  - **Base Airfoil Profile**: Symmetrical/semi-symmetrical aerobatic section (Selig 8036 / NACA 0012 baseline) with an internal micro-servo-driven morphing elastomeric trailing edge.
+  - **Dynamic Camber Range**: Flexes seamlessly from $+15^\circ$ positive camber ($C_{L,\max} = +2.20$, matching S1223 for STOL takeoff and hover) to $-15^\circ$ negative camber ($C_{L,\min} = -1.85$ for outside loops and inverted cruise).
+  - Eliminates the inverted drag penalty and allows unrestricted unlimited-category competition aerobatics.
+
+---
+
+### MK2-AERO-03: Staggered Bi-Delta Morphing Cascade & W4 Reflex Tailplane
+- **Requirement Type**: High-Speed Level Cruise ($V \ge 30\,\text{m/s}$ / $67\,\text{mph}$) & Pitch Tuck Neutralization
+- **Problem Solved**:
+  - In high-speed sweep ($\Lambda \ge 35^\circ$), sweeping all 8 tandem wings uniformly causes adjacent chordwise overlapping ($-18\,\text{mm}$ to $-75\,\text{mm}$ perpendicular planform collision) and shifts the aircraft Neutral Point aft by $+360\,\text{mm}$ to $+896\,\text{mm}$, generating an unrecoverable $-20\,\text{N}\cdot\text{m}$ to $-43\,\text{N}\cdot\text{m}$ nose-down pitching moment.
+- **Aerodynamic & Kinematic Specification**:
+  - **Fanned Sweep Schedule**: Station 1 ($W_1$) sets to $+5^\circ$ forward (canard); Station 2 ($W_2$) sweeps to $+15^\circ$ aft; Station 3 ($W_3$) sweeps to $+30^\circ$ aft; Station 4 ($W_4$) sweeps to $+55^\circ$ aft. This maintains $>18\,\text{mm}$ positive perpendicular clearance between all adjacent spars across the entire semi-span.
+  - **W4 Tailplane Reflex Download**: Station 4 ($W_4$, $S = 0.306\,\text{m}^2$, moment arm $l_{\text{tail}} = 0.763\,\text{m}$) commands negative incidence ($\alpha = -4^\circ\text{ to }-8^\circ$, $C_{L,\text{tail}} = -0.3\text{ to }-0.5$), generating $+25\,\text{N}\cdot\text{m}$ to $+40\,\text{N}\cdot\text{m}$ of pitch-up restoring torque to achieve perfect trim.
+  - **Propulsion Partitioning**: In high-speed dash, Stations 1, 2, and 3 provide micro-stroke flapping thrust ($f \approx 2.4\text{--}3.0\,\text{Hz}$, $\theta_0 \approx \pm 18^\circ$), while Station 4 is held stationary as an active fly-by-wire horizontal stabilizer, reducing electrical motor bus load by $25\%$.
+
+---
+
 
 ## 3. Cargo Drone & eVTOL Hardware Requirements (Mark 2 Expansion)
 

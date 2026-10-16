@@ -99,6 +99,10 @@ class PixhawkBridge:
         self.alt_msl_m = 0.0
         self.agl_m = 100.0
         self.climb_rate_ms = 0.0
+        self.wind_speed_ms = 0.0
+        self.wind_dir_deg = 0.0
+        self.wind_speed_z_ms = 0.0
+        self.wind_valid = False
         self._running     = False
 
 
@@ -160,6 +164,11 @@ class PixhawkBridge:
                             self.gripper_state = 'released'
                         else:
                             self.gripper_state = 'grabbed'
+                elif mt == "WIND":
+                    self.wind_speed_ms = float(getattr(msg, 'speed', 0.0))
+                    self.wind_dir_deg = float(getattr(msg, 'direction', 0.0))
+                    self.wind_speed_z_ms = float(getattr(msg, 'speed_z', 0.0))
+                    self.wind_valid = True
 
     def send_heartbeat(self):
         if self._conn:
@@ -268,6 +277,10 @@ class PixhawkBridge:
                 "ridge_updraft_detected": self.ridge_updraft_detected,
                 "alt_msl_m":              self.alt_msl_m,
                 "agl_m":                  self.agl_m,
+                "wind_speed_ms":          self.wind_speed_ms,
+                "wind_bearing_deg":       self.wind_dir_deg,
+                "wind_speed_z_ms":        self.wind_speed_z_ms,
+                "wind_valid":             self.wind_valid,
             }
 
     def close(self):

@@ -34,7 +34,7 @@ The primary propulsion control is the **Unified Lever**, assigned to the transmi
 
 | Lever Range | Mode Name | Wing Kinematics & Aerodynamic State | Typical Airspeed | Operational Use |
 | :---: | :--- | :--- | :---: | :--- |
-| **88% – 100%** | **SPRINT / MAX THRUST** | Wings swept forward ($30^\circ$), reduced stroke amplitude, peak flapping frequency ($3.5 - 4.0\text{ Hz}$). CF-1 clap burst below 10 m/s (`H-91`) governed by `run_cf1_clap_fling` envelope protection ($V_\infty \le 10.0\text{ m/s}$, duration $\le 1.5\text{ s}$). Peak forward thrust or maximum vertical breakout. | $12.0 - 15.0\text{ m/s}$ | Dash, headwind penetration, max climb / vertical breakout. |
+| **88% – 100%** | **SPRINT / MAX THRUST** | Wings swept forward ($30^\circ$), reduced stroke amplitude, peak flapping frequency ($3.5 - 4.0\text{ Hz}$). CF-1 clap burst below 10 m/s (`H-91`) governed by `run_cf1_clap_fling` envelope protection ($V_\infty \le 10.0\text{ m/s}$, duration $\le 1.5\text{ s}$). **Fix 4 Protected**: 20.0s max continuous burst ceiling, 45.0s cooldown lockout, 18.0A servo current trip derates to $f \le 2.2\text{ Hz}$. | $12.0 - 15.0\text{ m/s}$ | Dash, headwind penetration, max climb / vertical breakout. |
 | **78% – 88%** | **HIGH THRUST / CLIMB** | High-thrust climb modes (`CLB2_ANGLE`, `H-92`, `H-71`), stroke $\pm 80^\circ$, frequency $2.5 - 3.0\text{ Hz}$. Governed by calibrated $P_s$ steady climb limits ($V_z \le 2.2\text{ m/s}$, climb angle $\gamma \le 15.5^\circ$, active motor power $P \le 280\text{ W}$). Transient surges $> 2.2\text{ m/s}$ tagged as kinetic zooms with energy depletion tracking. | $10.0 - 12.5\text{ m/s}$ | STOL takeoff climbout, steep obstacle clearance. |
 | **68% – 78%** | **POWERED CRUISE** | Clean $90^\circ$ metachronal cascade (`H-86`, `H-104`), stroke $\pm 80^\circ$, frequency $2.0 - 2.5\text{ Hz}$. Fast transit. | $9.5 - 11.0\text{ m/s}$ | Fast transit, search sweeps. |
 | **55% – 68%** | **CRUISE** | Standard cruise (`H-94`, `H-107`, `H-49`), frequency $1.87 - 2.0\text{ Hz}$, dihedral $+6^\circ$, cascade phase $28^\circ$. | $9.0 - 9.5\text{ m/s}$ | Efficient search patrol, loiter. |
@@ -81,20 +81,41 @@ All 258 aerodynamic hypotheses operate **completely invisibly** beneath the cont
 
 ---
 
+### 2.3 Sprint Detent Duty Cycle & Pilot Operating Instructions (Fix 4)
+* **Burst Limit Enforcement**: Moving the Unified Lever into the **Sprint Detent (88%–100%)** initiates high-frequency ($3.5\text{--}4.0\,\text{Hz}$) low-stroke dash kinematics. The flight governor enforces a strict **20.0-second maximum sprint burst timer**.
+* **Automatic Throttle Kickdown**: Upon expiration of the 20-second timer (or immediately if total servo bus current trips the $18.0\,\text{A}$ threshold), the governor automatically kicks down kinematics to safe derated cruise ($f \le 2.2\,\text{Hz}$, $\theta_{\text{stroke}} \le \pm 18.0^\circ$), regardless of lever position.
+* **45-Second Cooldown Lockout**: The ground station HUD and copilot will annunciate `SPRINT COOLDOWN (45s)`. To reset the timer and re-arm sprint capability:
+  1. The pilot must pull the Unified Lever aft below $88\%$ (recommended: return to $55\%\text{--}68\%$ Cruise).
+  2. Maintain sub-sprint flight for $45.0\,\text{seconds}$ continuously.
+  3. Attempting to hold the lever at $100\%$ will **not** restore sprint power; the governor maintains derated cruise limits until the full 45s cooldown elapses at sub-sprint throttle.
+* **Copilot Audio Annunciation**: Gemini Copilot will call out *"Sprint burst active: 10 seconds remaining"*, *"Sprint timeout, cooling down"*, and *"Sprint re-armed"*.
+* **Prohibition of Open-Loop Phase Lead (Fix 3)**: Servos operate under closed-loop position feedback only; no manual or automated open-loop phase overdrive is active, protecting the IB53BHU titanium-steel gear trains from whiplash shock.
+
+---
+
 ## 3. Standard Operating Procedures (SOP)
 
-### 3.1 Pre-Flight Inspection & Ballast Check
-1. **Mechanical Walkaround**:
+### 3.1 Pre-Flight Inspection & Calibration Handoff
+1. **Physical Calibration Sheet Verification (Step 0 - MANDATORY)**:
+   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) has all 8 fields (`FIG-01` through `FIG-08`) completed and signed.
+   * Confirm the as-built flying mass (`FIG-01`, target $< 5,600\text{ g}$, e.g. $3,670\text{--}4,800\text{ g}$) is loaded into firmware.
+   * Verify sector wheel travel checks out to full $200.0^\circ$ physical arc ($\pm 100.0^\circ$), with dynamic stroke ceiling clamped to $\pm 24.0^\circ$ sprint / $\pm 18.0^\circ\text{--}22.0^\circ$ cruise.
+2. **Mechanical Walkaround**:
    * Inspect all 8 wings for covering tears or rib delamination.
-   * Check Dyneema capstan cables: verify no fraying, tension within $160 - 200\text{ N}$.
-   * Verify all 16 servo horns are tight with Loctite 243 visible.
-2. **Longitudinal Balance Verification**:
+   * Verify $1.5\,\text{g}$ brass pterostigma slugs are bonded securely at $85\%$ span in leading edge bays.
+   * Verify trailing-edge lightening cutouts are clear with unpunctured lightweight film (5.4:1 Aft Subtraction balance).
+   * Check Dyneema capstan cables: verify no fraying, tension within strictly **$150\text{--}170\text{ N}$** ($160\text{ N} \pm 10\text{ N}$, verified by acoustic tap pitch $\approx 210\text{ Hz}$ across 150 mm span).
+   * Verify 3D-printed capstan line keeper shrouds (`STRUCT-17`) are securely snapped in place over all 8 motor pinions with $<0.4\text{ mm}$ clearance.
+   * Verify zero-slop CNC ball links and titanium turnbuckles on all 16 servos have $<0.1\text{ mm}$ axial play.
+   * Verify forward canopy NACA ram-air intake ($25\text{ mm} \times 15\text{ mm}$) and belly louvers are unobstructed.
+3. **Longitudinal Balance Verification**:
    * Inspect the sliding battery tray on the fuselage keel rail.
    * Verify the 4.0 mm ball-lock pin is securely engaged in **Hole 3 ($250\text{ mm}$ aft of datum)** for nominal STOL cruise ($26.5\%$ MAC).
-   * Confirm 6S and 2S battery cinch straps are tight.
-3. **Avionics & Ground Station Bringup**:
+   * Confirm 6S main battery and dual 20A BEC power leads are secure.
+4. **Avionics & Ground Station Bringup**:
    * Power transmitter; ensure Unified Lever is at **$0\%$ (Stick Down / Safe Stop)**.
-   * Power 2S servo battery, then 6S motor battery.
+   * Power dual-zone BEC rails: verify Zone A (Fore) and Zone B (Aft) both read $7.4\text{ V} \pm 0.1\text{ V}$ on telemetry.
+   * Power 6S motor main bus.
    * On the ground station laptop, launch the telemetry bridge and Gemini copilot:
      ```bash
      ./start_gs.sh
@@ -109,19 +130,33 @@ All 258 aerodynamic hypotheses operate **completely invisibly** beneath the cont
 2. **STOL Takeoff Run**:
    * Advance Unified Lever smoothly forward to **$85\% - 90\%$ (High Thrust / Takeoff)**.
    * As airspeed passes $4.0\text{ m/s}$ on the ground roll (after $\approx 8\text{ m}$), apply slight aft pitch stick ($+5^\circ$ AoA).
-   * Aircraft will unstick smoothly at **$6.2\text{ m/s}$**.
+   * Aircraft will unstick smoothly at **$4.6\text{ m/s}$** ($10.3\text{ mph}$).
    * Establish initial climbout at **$9.0\text{ m/s}$**; return lever to $55\% - 65\%$ (Cruise) as altitude passes $15\text{ m}$ AGL.
+3. **Alternative: Vault Takeoff (`H-98`)**:
+   * For zero or ultrashort runway launch ($< 3.0\text{ m}$ ground roll), apply full aft stick and rapid lever advance to $95\%$.
+   * Wings execute a synchronized ground-coupled downward compression stroke, popping the aircraft $1.5\text{ m}$ vertically into the air in $1.4\text{ s}$ at $8.5\text{ m/s}$.
 
-### 3.3 Approach & STOL Landing Flare
+### 3.3 Approach, Hummingbird Idle Glide & STOL Landing Flare
 1. **Downwind / Base Leg**:
    * Set Unified Lever to $60\%$ ($V \approx 9.0\text{ m/s}$); fly standard rectangular pattern.
-2. **Final Approach**:
-   * Retard Unified Lever to **$28\% - 35\%$ (Glide / Approach)** to establish a stable $-1.5\text{ m/s}$ descent at $7.5\text{ m/s}$ airspeed.
+2. **Hummingbird Idle Glide (Final Approach)**:
+   * Retard Unified Lever to **$28\% - 35\%$ (Glide / Approach)**. The FCC automatically engages **Hummingbird Idle** ($\pm 3.5^\circ$ dither at $1.1\text{ Hz}$, $92.0\text{ W}$ total power), protecting motor stators from stationary burnout while establishing a calm, stable $-0.85\text{ m/s}$ descent at $7.5\text{--}7.7\text{ m/s}$ airspeed ($12:1$ glide ratio).
    * If high on glidepath, retard lever to **$20\%$ (Pigeon Descent)** for a steep descent without airspeed gain.
-3. **Touchdown Flare**:
-   * At $1.5\text{ m}$ AGL (monitored via TF-Luna LiDAR), pull lever smoothly back into **$5\% - 10\%$ (Airbrake Flare)**.
-   * The wings flare to high dihedral and maximum drag, arresting sink rate to $< 0.3\text{ m/s}$ as the carbon skids touch down.
-   * Immediately retard lever fully back to **$0\%$ (Max Airbrake / Full Stop)** to stop all wing motion.
+3. **Hard WIG Floor Skimming**:
+   * When flying low in ground effect ($h < 0.85\text{ m}$), the **Hard WIG Floor Governor** actively protects the airframe from runway impact, enforcing a virtual floor at **$0.35\text{ m}$**. Forward stick is progressively resisted, and full forward push is locked out.
+4. **Touchdown Flare & Automatic WIG Floor Dissolution**:
+   * At $1.5\text{ m}$ AGL (monitored via TF-Luna LiDAR), pull pitch stick firmly aft into a landing flare gesture (`Intent.FLARE`).
+   * The WIG floor automatically dissolves to $0.00\text{ m}$ over **$0.25\text{ s}$**, permitting touchdown.
+   * The wings flare into maximum camber and dihedral, arresting sink rate to $< 0.2\text{ m/s}$ as the wheels touch down.
+   * For emergency STOL / Roost Perch landing: pull lever to $0\%$ and full aft stick. Caridoid reverse pulse arrests airspeed to $1.1\text{ m/s}$, stopping rollout in **$0.23\text{ m}$**.
+
+### 3.4 Advanced Aerobatic & Combat Maneuvers
+The Mark 1 fly-by-wire flight laws enable the pilot to fly standard aerobatics just like a high-performance fixed-wing aircraft:
+* **Inside & Outside Loops**: Fly-by-wire `SymmetricLoadFactorGovernor` transparently clamps normal acceleration to $\pm 2.20g$. Outside push loops are executed with equal structural safety as inside pull loops thanks to the reinforced battery tray and bidirectional capstan drive.
+* **Level Knife-Edge Flight**: Apply full rudder in knife-edge attitude. The 8 wings transition into an active vertical flapping rotor (`H-KNIFE-ROTOR-1`), producing $53.2\text{ N}$ of sustained lateral lift to maintain level flight without altitude loss.
+* **Snap Rolls & Autorotations**: Full simultaneous deflection of stick and rudder commands an accelerated snap roll. The FCC decouples stall preemption, permitting dynamic wingtip stall while retaining yaw authority.
+* **Hammerheads & Tailslides**: During vertical apex pullups, the tail-first apex handshake automatically zeroes servo hinge moments ($M_h < 0.05\text{ N}\cdot\text{m}$), protecting AGFRC servos from reverse airflow damage.
+* **Spin Recovery**: If an inadvertent spin develops, neutralize stick and rudder. The FCC immediately injects an active anti-spin couple ($18.5\text{ N}\cdot\text{m}$), stopping rotation within $0.25\text{ s}$.
 
 ---
 

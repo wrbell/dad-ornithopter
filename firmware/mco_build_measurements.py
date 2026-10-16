@@ -83,6 +83,25 @@ SECTIONS = [
 ]
 
 
+AIRFOIL_OPTIONS = {
+    '1': ('S1223', 'S1223 High-Lift STOL (143.7mm chord, 110.0g panel, CL_max 1.82)'),
+    '2': ('SD7062', 'SD7062 High-Speed Dash (165.0mm chord, 109.2g panel, L/D 14.8)'),
+}
+
+def ask_airfoil():
+    print(f"\n  Select Installed Wing Airfoil Option:")
+    print("    1: S1223 (High-Lift STOL - 143.7mm chord, 1.15m span, certified baseline)")
+    print("    2: SD7062 (High-Speed Dash - 165.0mm chord, 1.15m span, MCO-1.5D option)")
+    while True:
+        choice = input("  Enter option (1 or 2, default 1): ").strip()
+        if choice == '' or choice == '1':
+            return 'S1223'
+        elif choice == '2':
+            return 'SD7062'
+        elif choice.upper() in ['S1223', 'SD7062']:
+            return choice.upper()
+        print("  Invalid selection. Please enter 1 (S1223) or 2 (SD7062).")
+
 def ask(key, description, expected_range):
     lo, hi, unit, _ = expected_range
     while True:
@@ -182,6 +201,10 @@ def patch_wave_library(m, d):
 
     src = open(WAVE_LIB).read()
     patches = [
+        # Airfoil
+        ("AIRFOIL_TYPE",
+         f"# Wing airfoil profile — MEASURED {time.strftime('%Y-%m-%d')}",
+         f"AIRFOIL_TYPE             = '{m.get('airfoil_type', 'S1223')}'"),
         # Chord
         (f"CHORD_MM",
          f"# Wing chord mm — MEASURED {time.strftime('%Y-%m-%d')}",
@@ -291,6 +314,8 @@ def main():
     print("Take your time — accuracy here affects every aerodynamic calculation.\n")
 
     measurements = {}
+    airfoil_type = ask_airfoil()
+    measurements['airfoil_type'] = airfoil_type
 
     for section_name, fields in SECTIONS:
         print(f"\n{'─'*50}")
@@ -303,11 +328,13 @@ def main():
     derived = compute_derived(measurements)
 
     # Print summary
+    print(f"\n  AIRFOIL INSTALLED: {airfoil_type}")
     print_summary(measurements, derived)
 
     # Save
     os.makedirs(os.path.dirname(RESULTS_FILE), exist_ok=True)
     output = {
+        'airfoil': airfoil_type,
         'measured': measurements,
         'derived':  derived,
         'measured_at': time.strftime('%Y-%m-%dT%H:%M:%S'),

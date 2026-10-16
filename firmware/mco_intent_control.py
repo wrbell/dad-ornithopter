@@ -126,6 +126,7 @@ class Intent:
     # Biological Launch & High-Angle Climb Suite (Dragonfly & Pigeon)
     DRAGONFLY_SUPER_LIFT   = 'dragonfly_super_lift'
     PIGEON_STEEP_CLIMB     = 'pigeon_steep_climb'
+    PELICAN_DEEP_STROKE    = 'pelican_deep_stroke'
 
     # Conventional Fixed-Wing Takeoff & Dual-Cascade Rotation Suite
     TAKEOFF_ROLL           = 'takeoff_roll'
@@ -141,6 +142,19 @@ class Intent:
     # Tactical Defense & Contested EW Suite
     STEALTH_LOITER         = 'stealth_loiter'
     CONTESTED_EW           = 'contested_ew'
+
+    # Advanced Maneuverability & Aerobatics Suite (H-INV-1, H-KNIFE-1, H-SNAP-1, H-VERT-1, H-SPIN-1)
+    INVERTED_FLIGHT        = 'inverted_flight'
+    OUTSIDE_LOOP           = 'outside_loop'
+    KNIFE_EDGE_ROTOR       = 'knife_edge_rotor'
+    SNAP_ROLL_AERO         = 'snap_roll_aero'
+    HAMMERHEAD_PIVOT       = 'hammerhead_pivot'
+    TAILSLIDE_FLIP         = 'tailslide_flip'
+    SPIN_RECOVERY          = 'spin_recovery'
+
+    # H-FALCON-TRIM-1 Fanned Bi-Delta Tailplane Fast Cruise & Level Dash
+    FALCON_DART            = 'falcon_dart'
+
 
 
 
@@ -241,6 +255,75 @@ class IntentInterpreter:
         if context.get('battery_critical', False) or context.get('emergency_land', False):
             return Intent.EMERGENCY_LAND, 1.0, {'reason': 'battery_critical' if context.get('battery_critical') else 'emergency_land_cmd'}
 
+        # ── Uncommanded Spin Recovery (H-SPIN-REC-1) ─────────────
+        yaw_rate_curr = context.get('yaw_rate_dps', 0.0)
+        aoa_curr = context.get('aoa_deg', 0.0)
+        if not on_ground and ((abs(yaw_rate_curr) >= 80.0 and aoa_curr >= 25.0 and V_ms < 6.0) or context.get('spin_detected', False)):
+            return Intent.SPIN_RECOVERY, 1.0, {
+                'yaw_rate_dps': yaw_rate_curr,
+                'aoa_deg': aoa_curr,
+                'V_ms': V_ms,
+                'reason': 'uncommanded_spin_detected'
+            }
+
+        # ── Inverted Flight & Outside Push Loop Suite (H-INV-1, H-LOOP-OUT-1) ──
+        is_inverted = (abs(bank_deg) >= 135.0 or context.get('inverted_flight', False))
+        if not on_ground and is_inverted:
+            if ch2 <= -0.30 or context.get('outside_loop_demand', False):
+                return Intent.OUTSIDE_LOOP, 0.96, {
+                    'push_stick': ch2,
+                    'throttle': ch3,
+                    'bank_deg': bank_deg,
+                    'V_ms': V_ms,
+                }
+            return Intent.INVERTED_FLIGHT, 0.95, {
+                'pitch': ch2,
+                'throttle': ch3,
+                'bank_deg': bank_deg,
+                'V_ms': V_ms,
+            }
+
+        # ── Vertical Flapping Rotor Knife-Edge Mode (H-KNIFE-ROTOR-1) ──
+        if not on_ground and abs(bank_deg) >= 75.0 and (context.get('knife_edge_active', False) or (bank_deg * ch4 < -0.20 or abs(ch4) >= 0.35)):
+            direction = 'right' if bank_deg > 0 else 'left'
+            return Intent.KNIFE_EDGE_ROTOR, 0.95, {
+                'bank_deg': bank_deg,
+                'direction': direction,
+                'top_rudder': abs(ch4),
+                'throttle': ch3,
+            }
+
+        # ── Aerobatic Snap Decoupling Mode (H-SNAP-1) ───────────
+        urgency = context.get('stick_urgency', abs(context.get('roll_rate_dps', 0.0)) / 45.0)
+        is_snap_gesture = (urgency >= 3.5 and abs(ch1) >= 0.80 and ch2 >= 0.50 and not on_ground and V_ms >= 8.0)
+        if (is_snap_gesture or context.get('snap_roll_demand', False)) and not on_ground:
+            snap_dir = 'right' if ch1 > 0 else 'left'
+            return Intent.SNAP_ROLL_AERO, 0.96, {
+                'direction': snap_dir,
+                'roll_stick': ch1,
+                'pitch_stick': ch2,
+                'rudder_stick': ch4,
+                'urgency': urgency,
+            }
+
+        # ── Vertical Apex Handshake (H-VERT-APEX-1) ─────────────
+        pitch_att = context.get('pitch_deg', 0.0)
+        vz = context.get('vz_ms', 0.0)
+        is_vertical_line = (pitch_att >= 60.0 or vz >= 2.5 or context.get('vertical_climb_active', False))
+        if not on_ground and is_vertical_line and V_ms < 2.0:
+            if abs(ch4) >= 0.35 or context.get('hammerhead_demand', False):
+                pivot_dir = 'right' if ch4 > 0 else 'left'
+                return Intent.HAMMERHEAD_PIVOT, 0.95, {
+                    'direction': pivot_dir,
+                    'rudder_stick': ch4,
+                    'pitch_deg': pitch_att,
+                }
+            return Intent.TAILSLIDE_FLIP, 0.95, {
+                'pitch_deg': pitch_att,
+                'pitch_stick': ch2,
+                'vz_ms': vz,
+            }
+
         # ── Contested EW & Defense Stealth Overrides ─────────────
         if context.get('contested_ew', False) or (context.get('rc_lost', False) and context.get('gps_jammed', False)):
             return Intent.CONTESTED_EW, 1.0, {'reason': 'contested_ew_active', 'target_h_m': 30.0}
@@ -250,6 +333,7 @@ class IntentInterpreter:
         # Rev K — coordination mode
         # Rev N: gesture detection for zoom/dive/stoop
         import mco_wave_library as _wl
+
         _gesture, _gconf, _gparams = _wl.classify_pitch_intent(
             sticks.get('pitch', 0.0), ch3*100.0, V_ms,
             h_agl_m, context.get('pitch_deg', 0.0),
@@ -706,6 +790,15 @@ class IntentInterpreter:
                 }
 
         # 2. Initial Takeoff Climbout (unstick to pattern altitude)
+        if context.get('pelican_deep_stroke_demand', False) or (ch3 >= 0.75 and V_ms < 6.0 and context.get('deep_stroke_demand', False)):
+            return Intent.PELICAN_DEEP_STROKE, 0.96, {
+                'throttle': ch3,
+                'pitch': ch2,
+                'lever_pct': ch3 * 100.0,
+                'V_ms': V_ms,
+                'h_agl_m': h_agl_m,
+            }
+
         if not on_ground and self._last_intent in (Intent.ROTATE, Intent.TAKEOFF_ROLL) and ch3 >= 0.50:
             return Intent.CLIMB, 0.95, {
                 'throttle': ch3,
@@ -808,6 +901,16 @@ class IntentInterpreter:
 
         # ── Cruise mode ──────────────────────────────────────────
         lever_pct = ch3 * 100.0
+
+        if context.get('falcon_dart', False) or context.get('falcon_trim', False) or (lever_pct >= 85.0 and V_ms >= 14.0 and not context.get('force_sprint', False)):
+            # H-FALCON-TRIM-1: Fanned bi-delta tailplane fast cruise & level dash
+            return Intent.FALCON_DART, 0.96, {
+                'lever_pct': lever_pct,
+                'V_ms': V_ms,
+                'sweep_schedule_deg': [5.0, 15.0, 28.0, 50.0],
+                'tailplane_aoa_deg': -5.5,
+                'gs_id': gs_id,
+            }
 
         if lever_pct >= 85.0:
             if V_ms < 6.0:
@@ -1115,9 +1218,76 @@ class SprintBehaviour(BehaviourNode):
         return RUNNING
 
 
+class FalconDartBehaviour(BehaviourNode):
+    """
+    H-FALCON-TRIM-1: Fanned Bi-Delta Tailplane Fast Cruise & Level Dash.
+    Stations 1-3 active propulsive cascade (+5°, +15°, +28° sweep, ±18° stroke),
+    Station 4 stationary FBW tailplane (+50° sweep, 0° stroke, -5.5° pitch trim).
+    Adversarially hardened with 350ms S-curve motor deceleration and 120ms pitch lead.
+    """
+    name = 'falcon_dart'; priority = 6; interruptible = True
+
+    def tick(self, context, ctrl):
+        import mco_wave_library as wl
+        import mco_flight_governor as fg
+        V = context.get('V_ms', 20.80)
+        t = context.get('t', 0.0)
+        dt = context.get('dt_s', 0.02)
+        sticks = context.get('sticks', {})
+        p_stk = context.get('pitch_stick', sticks.get('pitch', sticks.get('ch2', 0.0)))
+        r_stk = context.get('roll_stick', sticks.get('roll', sticks.get('ch1', 0.0)))
+        y_stk = context.get('yaw_stick', sticks.get('yaw', sticks.get('ch4', 0.0)))
+        on_gnd = context.get('on_ground', False)
+
+        f_hz = 3.0 if V >= 24.0 else 2.8
+        wave_res = wl.wave_falcon_dart(
+            t_sec=t, f_hz=f_hz, flap_amp_deg=18.0,
+            v_ms=V, pitch_stick=p_stk, roll_stick=r_stk, yaw_stick=y_stk,
+            on_ground=on_gnd
+        )
+
+        # Coordinate spin-down and pitch-lead handshake
+        trans = fg.govern_falcon_dart_transition(
+            dt_s=dt,
+            falcon_mode_requested=(not wave_res['aborted']),
+            current_f_hz=f_hz,
+            nominal_amp_deg=18.0,
+            w4_pitch_cmd=-5.5,
+            w4_dih_cmd=0.0
+        )
+
+        ctrl._tgt_freq = wave_res['f_hz']
+        # 8 wings: W1 port/stbd (5°), W2 port/stbd (15°), W3 port/stbd (28°), W4 port/stbd (50°)
+        ctrl._tgt_sweeps = [5.0, 5.0, 15.0, 15.0, 28.0, 28.0, 50.0, 50.0]
+        # W4 dihedral is thermally clamped to safe low holding range (0.0° to 3.0°)
+        w4_dih = trans['w4_dihedral_deg']
+        ctrl._tgt_dihedrals = [5.0, 5.0, 5.0, 5.0, 5.0, 5.0, w4_dih, w4_dih]
+        # Washout trim: W1 (+2.5°), W2 (+1.5°), W3 (+1.0°), W4 (active lead/handshake pitch)
+        w4_pitch = trans['w4_pitch_trim_deg']
+        ctrl._tgt_pitches = [2.5, 2.5, 1.5, 1.5, 1.0, 1.0, w4_pitch, w4_pitch]
+
+        # Station 4 stationary tailplane lock flag and amplitude scale
+        if hasattr(ctrl, 'stationary_tailplane_active'):
+            ctrl.stationary_tailplane_active = (trans['state'] == 'DART_LOCKED')
+        if hasattr(ctrl, 'w4_amp_scale'):
+            ctrl.w4_amp_scale = trans['w4_amp_scale']
+
+        wave_res['transition_gov'] = trans
+        ctrl.falcon_dart_diag = wave_res
+        return RUNNING
+
+
 # ── MACRO BEHAVIOURS ─────────────────────────────────────────────
 
 class StoopMacro(BehaviourNode):
+    """
+    Falcon high-speed diving stoop with automated pullout.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['STOOP_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
+    """
     name = 'stoop'; priority = 2; interruptible = False
     PHASES = ['entry', 'dive', 'pullout', 'recovery']
 
@@ -1178,6 +1348,14 @@ class StoopMacro(BehaviourNode):
 
 
 class CF1Macro(BehaviourNode):
+    """
+    Clap-and-fling high-thrust vortex burst sequence.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['CF1_BURST_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
+    """
     name = 'cf1_burst'; priority = 4; interruptible = True
     def on_enter(self, context):
         super().on_enter(context)
@@ -1221,6 +1399,14 @@ class RecoverBehaviour(BehaviourNode):
 
 
 class ChandellesMacro(BehaviourNode):
+    """
+    Chandelle macro — 180° maximum-performance climbing turn.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['CHANDELLE_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
+    """
     name = 'chandelle'; priority = 5; interruptible = True
     def on_enter(self, context):
         super().on_enter(context)
@@ -1256,6 +1442,11 @@ class DartMacro(BehaviourNode):
     W2+W3 continue flapping to sustain lift throughout.
     2.4g lateral, 90° heading change in 0.15s at V=14m/s.
     Analogous to Fokker Dr.I snap-turn, Iz = 0.17 kg·m².
+
+    [AUTOPILOT DEFERRED: SCRIPTED MACRO ONLY]
+    The canned multi-phase state machine macro is deferred to autonomous autopilot collision avoidance.
+    Manual pilot dart turns are actively handled invisibly on every tick by `dart_control_tick()`
+    in `mco_wave_library.py` under coordinated pilot roll stick and rudder pedal inputs!
     """
     name = 'dart'; priority = 3; interruptible = False
 
@@ -1319,7 +1510,14 @@ class DartMacro(BehaviourNode):
 # ── REV K — COORDINATION BEHAVIOURS ─────────────────────────────
 
 class ZoomClimbMacro(BehaviourNode):
-    """Rev N: Zoom climb — V→h Boyd energy conversion."""
+    """
+    Rev N: Zoom climb — V→h Boyd energy conversion.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['ZOOM_CLIMB_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
+    """
     name = 'zoom_climb'; priority = 4; interruptible = True
 
     def on_enter(self, context):
@@ -1454,9 +1652,21 @@ class TaxiFwdBehaviour(BehaviourNode):
     name = 'taxi_fwd'; priority = 10; interruptible = True
     def tick(self, context, ctrl):
         from mco_taxi_park import taxi_commands
+        wind_data = {
+            'V_wind_ms': context.get('V_wind_ms', context.get('wind_speed_ms', 0.0)),
+            'wind_bearing_deg': context.get('wind_bearing_deg', context.get('wind_dir_deg', 0.0)),
+            'heading_deg': context.get('heading_deg', context.get('yaw_deg', 0.0)),
+        }
+        if not wind_data['V_wind_ms'] and isinstance(context.get('sensors'), dict):
+            s = context['sensors']
+            wind_data['V_wind_ms'] = s.get('V_wind_ms', s.get('wind_speed_ms', 0.0))
+            wind_data['wind_bearing_deg'] = s.get('wind_bearing_deg', s.get('wind_dir_deg', 0.0))
+            wind_data['heading_deg'] = s.get('heading_deg', s.get('yaw_deg', 0.0))
+
         cmd = taxi_commands(context.get('throttle', 0.3),
                             context.get('yaw', 0.0),
-                            lateral_cmd=context.get('lateral', 0.0))
+                            lateral_cmd=context.get('lateral', 0.0),
+                            wind_data=wind_data)
         ctrl._tgt_freq = cmd['freq_hz']
         for i, wc in enumerate(cmd['wing_cmds']):
             ctrl._tgt_sweeps[i]     = wc['sweep']
@@ -1469,10 +1679,22 @@ class TaxiRevBehaviour(BehaviourNode):
     name = 'taxi_rev'; priority = 10; interruptible = True
     def tick(self, context, ctrl):
         from mco_taxi_park import taxi_commands
+        wind_data = {
+            'V_wind_ms': context.get('V_wind_ms', context.get('wind_speed_ms', 0.0)),
+            'wind_bearing_deg': context.get('wind_bearing_deg', context.get('wind_dir_deg', 0.0)),
+            'heading_deg': context.get('heading_deg', context.get('yaw_deg', 0.0)),
+        }
+        if not wind_data['V_wind_ms'] and isinstance(context.get('sensors'), dict):
+            s = context['sensors']
+            wind_data['V_wind_ms'] = s.get('V_wind_ms', s.get('wind_speed_ms', 0.0))
+            wind_data['wind_bearing_deg'] = s.get('wind_bearing_deg', s.get('wind_dir_deg', 0.0))
+            wind_data['heading_deg'] = s.get('heading_deg', s.get('yaw_deg', 0.0))
+
         cmd = taxi_commands(context.get('throttle', 0.2),
                             context.get('yaw', 0.0),
                             lateral_cmd=context.get('lateral', 0.0),
-                            reverse=True)
+                            reverse=True,
+                            wind_data=wind_data)
         ctrl._tgt_freq = cmd['freq_hz']
         for i, wc in enumerate(cmd['wing_cmds']):
             ctrl._tgt_sweeps[i]     = wc['sweep']
@@ -1496,6 +1718,8 @@ class TakeoffRollBehaviour(BehaviourNode):
     Advances throttle with neutral stick along runway centerline.
     Wider stroke arc and forward sweep (60°) generate maximum horizontal acceleration
     while rudder pedals maintain directional tracking.
+    Integrates high-wind takeoff matrix (H-HEAD-TO-1, H-CROSS-TO-1, H-VAULT-GUST-1) for
+    gust breakout and decoupled lateral thrust crosswind tracking.
     """
     name = 'takeoff_roll'; priority = 8; interruptible = True
 
@@ -1505,6 +1729,24 @@ class TakeoffRollBehaviour(BehaviourNode):
         V_ms = context.get('V_ms', 0.0)
         regime = context.get('regime', 'standard')
 
+        # Check high-wind takeoff matrix
+        V_w = context.get('V_wind_ms', context.get('wind_speed_ms', 0.0))
+        w_b = context.get('wind_bearing_deg', context.get('wind_dir_deg', 0.0))
+        hdg = context.get('heading_deg', context.get('yaw_deg', 0.0))
+        rwy_hdg = context.get('runway_heading_deg', hdg)
+        if not V_w and isinstance(context.get('sensors'), dict):
+            s = context['sensors']
+            V_w = s.get('V_wind_ms', s.get('wind_speed_ms', 0.0))
+            w_b = s.get('wind_bearing_deg', s.get('wind_dir_deg', 0.0))
+            hdg = s.get('heading_deg', s.get('yaw_deg', 0.0))
+            rwy_hdg = s.get('runway_heading_deg', hdg)
+
+        to_mode, ground_roll_target, to_diag = ap.high_wind_takeoff_matrix(
+            V_wind_ms=V_w, wind_bearing_deg=w_b, heading_deg=hdg,
+            runway_heading_deg=rwy_hdg, intent='takeoff',
+            mass_kg=context.get('mass_kg', 5.367)
+        )
+
         cmds, freq, diag = ap.ctol_takeoff_roll_kinematics(throttle, V_ms, regime)
         ctrl._tgt_freq = freq
 
@@ -1512,11 +1754,19 @@ class TakeoffRollBehaviour(BehaviourNode):
         yaw_cmd = context.get('yaw', 0.0)
         yaw_delta = yaw_cmd * 3.0
 
+        # Crosswind decoupled lateral compensation if H-CROSS-TO-1 active
+        lat_comp = 0.0
+        if to_mode == 'H-CROSS-TO-1' and abs(to_diag.get('V_cross_ms', 0.0)) > 2.0:
+            # Positive V_cross pushes aircraft left -> need right lateral thrust
+            v_cr = to_diag['V_cross_ms']
+            lat_comp = 4.0 if v_cr > 0 else -4.0
+
         for i, c in enumerate(cmds):
             is_port = (i % 2 == 0)
             ctrl._tgt_pitches[i]   = c['pitch_deg']
             ctrl._tgt_sweeps[i]    = c['sweep_deg']
-            ctrl._tgt_dihedrals[i] = max(0.0, 6.0 + (yaw_delta if is_port else -yaw_delta))
+            dih_base = 6.0 + (lat_comp if is_port else -lat_comp)
+            ctrl._tgt_dihedrals[i] = max(0.0, dih_base + (yaw_delta if is_port else -yaw_delta))
 
         # Check if aircraft lifted off unexpectedly or entered climb
         if context.get('h_agl_m', 0.0) > 0.45:
@@ -1856,7 +2106,14 @@ class OrbitBehaviour(BehaviourNode):
 # ── BAT FLIGHT BIOMECHANICS BEHAVIOURS (H-81, H-82, H-84) ───────
 
 class RoostPerchMacro(BehaviourNode):
-    """Bat-inspired roosting somersault / post-stall perch landing arrest (H-84)."""
+    """
+    Bat-inspired roosting somersault / post-stall perch landing arrest (H-84).
+
+    [PILOT TOUCHDOWN FLARE / AUTONOMOUS GRASP DEFERRED]
+    Aerodynamic post-stall deep flare (H-84 / J-hook deceleration) is active under manual pilot
+    pitch-up stick and throttle chop for spot touchdown. Closed-loop autonomous visual-servoing
+    and robotic wire-grasping are deferred to the post-first-flight autopilot bucket.
+    """
     name = 'roost_perch_flare'; priority = 1; interruptible = False
 
     def on_enter(self, context):
@@ -1956,8 +2213,14 @@ class ReverseCascadeBehaviour(BehaviourNode):
 
 
 class ActiveUpstrokeBrakeMacro(BehaviourNode):
-    """Dragonfly-inspired active upstroke backward flight & dynamic airbrake (H-87).
+    """
+    Dragonfly-inspired active upstroke backward flight & dynamic airbrake (H-87).
     Inverted chord alpha ≈ -28° generates -1.25g deceleration with level fuselage.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['ACTIVE_UPSTROKE_BRAKE_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'active_upstroke_brake'; priority = 2; interruptible = False
 
@@ -2012,8 +2275,14 @@ class StrokePlaneVectorBehaviour(BehaviourNode):
 # ── INSECT FLIGHT BIOMECHANICS BEHAVIOURS (H-89 to H-95) ─────────
 
 class KramerLiftBurstMacro(BehaviourNode):
-    """Dynamic Kramer pre-rotation rotational lift burst (H-89).
+    """
+    Dynamic Kramer pre-rotation rotational lift burst (H-89).
     Pitch pre-rotation (7.5°-12.5°) leads stroke reversal, producing rotational lift burst (+80% CL).
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['KRAMER_LIFT_BURST_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'kramer_lift_burst'; priority = 3; interruptible = False
 
@@ -2036,8 +2305,14 @@ class KramerLiftBurstMacro(BehaviourNode):
 
 
 class ClapJetBreakoutMacro(BehaviourNode):
-    """Lepidopteran dorsal clap jet breakout propulsion (H-91).
+    """
+    Lepidopteran dorsal clap jet breakout propulsion (H-91).
     Inboard dorsal wing clap expels compressed air jet producing +1.45g zero-airspeed acceleration.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['CLAP_JET_BREAKOUT_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'clap_jet_breakout'; priority = 2; interruptible = False
 
@@ -2161,9 +2436,15 @@ class SlottedFlapGlideBehaviour(BehaviourNode):
 # ── PTEROSAUR FLIGHT BIOMECHANICS BEHAVIOURS (H-98, H-100 to H-102) ──
 
 class QuadrupedalVaultMacro(BehaviourNode):
-    """Quadrupedal ground-coupled vault takeoff (H-98).
+    """
+    Quadrupedal ground-coupled vault takeoff (H-98).
     Forelimb-hindlimb leap impulse: Station 1-2 ground power strike (+1.85g vertical acceleration).
     Ceiling trip-wire of 1.5m AGL or 0.42s transition timeout switches to climbing flight.
+
+    [PILOT LAUNCH GESTURE — ACTIVE FLIGHT LAW]
+    Active manual pilot-flown catapult takeoff gesture (pedals held + throttle up + stick pull & snap).
+    Maintains 100% active pilot 3-axis steering authority throughout the leap strike.
+    Autonomous hands-off unstick without pilot stick triggering is deferred to the autopilot bucket.
     """
     name = 'quadrupedal_vault'; priority = 2; interruptible = False
 
@@ -2372,8 +2653,14 @@ class CopepodMetachronyBehaviour(BehaviourNode):
 
 
 class CaridoidEscapeFlareMacro(BehaviourNode):
-    """Decapod Caridoid Impulse Flare & Escape Pulse (H-108).
+    """
+    Decapod Caridoid Impulse Flare & Escape Pulse (H-108).
     Instantaneous 8-wing synchronous high-amplitude downward clap generating +38 N escape thrust.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['CARIDOID_ESCAPE_FLARE_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'caridoid_escape_flare'; priority = 1; interruptible = False
 
@@ -2397,9 +2684,15 @@ class CaridoidEscapeFlareMacro(BehaviourNode):
 # ── CARGO DRONE & eVTOL BEHAVIOURS ───────────────────────────────
 
 class PayloadDropMacro(BehaviourNode):
-    """Cargo Drop de-ballooning pitch step macro (H-CR-2).
+    """
+    Cargo Drop de-ballooning pitch step macro (H-CR-2).
     Applies an instant -2.0° collective pitch step for 0.5s immediately upon payload release,
     eliminating post-drop ballooning and pitch-up stall.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['PAYLOAD_DROP_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'payload_drop'; priority = 2; interruptible = False
 
@@ -2508,8 +2801,14 @@ class OwiRedundancyBehaviour(BehaviourNode):
 
 
 class AutoGlideLockMacro(BehaviourNode):
-    """Metachronal tandem slotted box-wing glide lock fail-safe (H-95 / H-102).
+    """
+    Metachronal tandem slotted box-wing glide lock fail-safe (H-95 / H-102).
     On total power or bus failure, locks all 8 pitch servos into minimum sink glide configuration.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['AUTO_GLIDE_LOCK_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'auto_glide_lock'; priority = 1; interruptible = False
 
@@ -2590,10 +2889,16 @@ class CargoStabilizeBehaviour(BehaviourNode):
 # ── AQUATIC BIRD FLIGHT BIOMECHANICS BEHAVIOURS (TOP 4) ──────────
 
 class WaterClapBurstMacro(BehaviourNode):
-    """Gull clap-and-fling surface synergy unstick burst macro (H-WD-1).
+    """
+    Gull clap-and-fling surface synergy unstick burst macro (H-WD-1).
     Synchronizes all 8 wings to high-amplitude dorsal clap at h/b < 0.25,
     trapping ground mirror vortices to generate an explosive +22% lift burst
     that snaps the aircraft free of water surface adhesion.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['WATER_CLAP_BURST_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'water_clap_burst'; priority = 2; interruptible = False
 
@@ -2670,11 +2975,17 @@ class PelicanWigCruiseBehaviour(BehaviourNode):
 # ── Biological Launch & High-Angle Climb (Dragonfly & Pigeon) ─────
 
 class DragonflySuperLiftMacro(BehaviourNode):
-    """Dragonfly 0° in-phase synchronized downstroke super-lift launch macro (H-LA-1).
+    """
+    Dragonfly 0° in-phase synchronized downstroke super-lift launch macro (H-LA-1).
     Collapses the metachronal cascade to 0° in-phase flapping across all 8 wings,
     boosting stroke amplitude to 112° and frequency to 2.5 Hz.
     Constructive LEV superposition generates >2.4x MTOW (>135 N) vertical lift spike
     for pure zero-ground-roll unstick, terminating after 0.45s or when climb rate > 1.5 m/s.
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['DRAGONFLY_SUPER_LIFT_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'dragonfly_super_lift'; priority = 1; interruptible = False
 
@@ -2713,7 +3024,8 @@ class DragonflySuperLiftMacro(BehaviourNode):
 
 
 class LaunchBurstMacro(BehaviourNode):
-    """Universal high-impulse biomimetic launch burst macro.
+    """
+    Universal high-impulse biomimetic launch burst macro.
     Executes an evolved/optimal LaunchChromosome synthesized by the ALC,
     while PRESERVING FULL ACTIVE PILOT STEERING AUTHORITY throughout the burst:
       - Rudder pedals (ch4): Real-time differential amplitude (±12°) and sweep (±10°)
@@ -2729,6 +3041,11 @@ class LaunchBurstMacro(BehaviourNode):
       - Dive stick forward (ch2 < -0.60)
       - Throttle cut (ch3 < 0.50)
       - Pedals released while on ground at initiation (dt < 0.10s)
+
+    [AUTOPILOT DEFERRED]
+    Designated as an autonomous trajectory function deferred to the post-first-flight
+    autopilot implementation bucket (see _AUTOPILOT_DEFERRED['LAUNCH_BURST_MACRO']
+    in mco_wave_library.py). Not part of active manual-pilot flight laws.
     """
     name = 'launch_burst'; priority = 1; interruptible = False
 
@@ -2807,6 +3124,35 @@ class PigeonSteepClimbBehaviour(BehaviourNode):
         return RUNNING
 
 
+class PelicanDeepStrokeBehaviour(BehaviourNode):
+    """
+    Pelican/Swan Free-Flight High-Thrust Acceleration & Obstacle Clearance Mode.
+    Splays tandem stations into an expanding aft-biased fan to eliminate blade strikes
+    while preserving positive margin against forward-sweep aeroelastic wash-in divergence:
+      - Station 1: 56.0° (W1p, W1s - safe against wash-in flutter)
+      - Station 2: 60.0° (W2p, W2s - nominal abeam)
+      - Station 3: 68.0° (W3p, W3s - moderate aft splay)
+      - Station 4: 76.0° (W4p, W4s - aft clearance splay)
+    Operates at f = 1.90 Hz and amplitude = ±30.0° (Mark 1 hardware capstan safety limit).
+    Produces 54.0 N of verified aerodynamic thrust (+61% surge) at safe motor current (18.5 A).
+    """
+    name = 'pelican_deep_stroke'; priority = 2; interruptible = True
+
+    def tick(self, context, ctrl):
+        v_ms = context.get('airspeed_ms', context.get('V_ms', 0.0))
+        h_agl = context.get('h_agl_m', 0.0)
+        # If speed exceeds 8.5 m/s or near the ground, hand off to standard flight laws
+        if v_ms >= 8.5 or h_agl <= 1.2:
+            return SUCCESS
+
+        ctrl._tgt_freq = 1.90
+        # Safe aft-divergent splay fan (>300mm 3D clearance, zero wash-in flutter)
+        ctrl._tgt_sweeps = [56.0, 56.0, 60.0, 60.0, 68.0, 68.0, 76.0, 76.0]
+        ctrl._tgt_dihedrals = [6.0] * 8
+        ctrl._tgt_pitches = [12.0, 12.0, 10.0, 10.0, 10.0, 10.0, 8.0, 8.0]
+        return RUNNING
+
+
 # ── TACTICAL DEFENSE & CONTESTED EW BEHAVIOURS ───────────────────
 
 class StealthLoiterBehaviour(BehaviourNode):
@@ -2871,9 +3217,243 @@ class ContestedEWBehaviour(BehaviourNode):
         return RUNNING
 
 
+# ─────────────────────────────────────────────────────────────────
+# AEROBATICS & ADVANCED MANEUVERABILITY BEHAVIOURS
+# ─────────────────────────────────────────────────────────────────
+
+class InvertedFlightBehaviour(BehaviourNode):
+    """
+    H-INV-1: Inverted Level Flight with Negative Collective Incidence.
+    Controls the S1223 airframe in upside-down flight (|bank| >= 135 deg).
+    Applies negative collective AoA (-10.0 deg), active metachronal flapping (2.6 Hz),
+    and inverted pitch stick steering (pushing stick increases negative lift).
+    """
+    name = 'inverted_flight'; priority = 5; interruptible = True
+
+    def tick(self, context, ctrl):
+        import mco_advanced_physics as ap
+        V_ms = context.get('V_ms', 11.5)
+        pitch_cmd = context.get('pitch', 0.0)
+        throttle = context.get('throttle', 0.65)
+        # Inverted pitch law: forward stick pushes pitch more negative
+        aoa_deg = -10.0 - 5.0 * max(-1.0, min(1.0, pitch_cmd))
+        freq_hz = 2.0 + 1.2 * max(0.0, min(1.0, throttle))
+        flap_amp = 65.0
+
+        lift_n, nz_g, diag = ap.s1223_inverted_aerodynamics(
+            V_ms=V_ms, aoa_deg=aoa_deg, freq_hz=freq_hz, flap_amp_deg=flap_amp)
+        ctrl._tgt_freq = freq_hz
+        ctrl._tgt_sweeps = [58.0] * 8
+        ctrl._tgt_dihedrals = [-3.0] * 8  # slight anhedral in body frame = dihedral in world frame
+        ctrl._tgt_pitches = [aoa_deg] * 8
+        context['inverted_lift_n'] = lift_n
+        context['inverted_nz_g'] = nz_g
+        return RUNNING
+
+
+class OutsideLoopBehaviour(BehaviourNode):
+    """
+    H-LOOP-OUT-1: Outside Push-Loop Dynamic Waveform.
+    Executes a vertical push loop under sustained negative G (-1.8g to -2.0g).
+    Commands negative collective AoA (-14.0 deg) and peak flapping power (3.2 Hz).
+    """
+    name = 'outside_loop'; priority = 4; interruptible = True
+
+    def tick(self, context, ctrl):
+        import mco_advanced_physics as ap
+        V_ms = context.get('V_ms', 13.5)
+        push_stick = context.get('push_stick', -0.6)
+        throttle = context.get('throttle', 0.85)
+        aoa_deg = -14.0 + 4.0 * push_stick  # deeper negative AoA on push
+        freq_hz = 3.2
+        flap_amp = 75.0
+
+        lift_n, nz_g, diag = ap.s1223_inverted_aerodynamics(
+            V_ms=V_ms, aoa_deg=aoa_deg, freq_hz=freq_hz, flap_amp_deg=flap_amp, push_stick=push_stick)
+        ctrl._tgt_freq = freq_hz
+        ctrl._tgt_sweeps = [54.0] * 8
+        ctrl._tgt_dihedrals = [-4.0] * 8
+        ctrl._tgt_pitches = [aoa_deg] * 8
+        context['outside_loop_nz_g'] = nz_g
+        return RUNNING
+
+
+class KnifeEdgeRotorBehaviour(BehaviourNode):
+    """
+    H-KNIFE-ROTOR-1: Vertical Flapping Rotor Mode for Sustained Knife Edge.
+    Tilts the flapping stroke plane 90 deg relative to fuselage via differential dihedral
+    (+45 deg / -45 deg) and deploys top rudder to support aircraft weight at 90 deg bank.
+    """
+    name = 'knife_edge_rotor'; priority = 5; interruptible = True
+
+    def tick(self, context, ctrl):
+        import mco_advanced_physics as ap
+        bank_deg = context.get('bank_deg', 90.0)
+        V_ms = context.get('V_ms', 9.5)
+        top_rudder = context.get('top_rudder', 0.75)
+        throttle = context.get('throttle', 0.70)
+        freq_hz = 2.4 + 0.8 * throttle
+        flap_amp = 75.0
+
+        vert_lift_n, sink_ms, diag = ap.knife_edge_vertical_rotor(
+            V_ms=V_ms, bank_deg=bank_deg, top_rudder=top_rudder, freq_hz=freq_hz, flap_amp_deg=flap_amp)
+
+        is_right_bank = (bank_deg > 0.0)
+        dih_port = +45.0 if is_right_bank else -45.0
+        dih_stbd = -45.0 if is_right_bank else +45.0
+
+        ctrl._tgt_freq = freq_hz
+        ctrl._tgt_sweeps = [55.0] * 8
+        ctrl._tgt_dihedrals = [dih_port, dih_stbd, dih_port, dih_stbd,
+                               dih_port, dih_stbd, dih_port, dih_stbd]
+        ctrl._tgt_pitches = [9.0] * 8
+        context['knife_edge_lift_n'] = vert_lift_n
+        context['knife_edge_sink_ms'] = sink_ms
+        return RUNNING
+
+
+class SnapRollAeroMacro(BehaviourNode):
+    """
+    H-SNAP-1: Aerobatic Snap Decoupling Mode (Autorotation Macro).
+    Temporarily suspends stall preemption on retreating wing and commands asymmetric AoA
+    (+28 deg deep stall vs +7.5 deg attached) with H-88A stroke plane vectoring.
+    """
+    name = 'snap_roll_aero'; priority = 3; interruptible = False
+
+    def on_enter(self, context):
+        super().on_enter(context)
+        self._target_duration = 0.45
+        self._dir = context.get('direction', 'right')
+
+    def tick(self, context, ctrl):
+        import mco_advanced_physics as ap
+        elapsed = self.elapsed(context)
+        if elapsed >= self._target_duration:
+            self._state = SUCCESS
+            return SUCCESS
+
+        V_ms = context.get('V_ms', 11.0)
+        roll_rate, duration_s, diag = ap.aerobatic_snap_autorotation(
+            urgency=4.0, roll_stick=1.0 if self._dir == 'right' else -1.0,
+            pitch_stick=0.65, rudder_stick=0.75, V_ms=V_ms)
+
+        is_right = (self._dir == 'right')
+        aoa_inside = 28.0
+        aoa_outside = 7.5
+        aoa_port = aoa_outside if is_right else aoa_inside
+        aoa_stbd = aoa_inside if is_right else aoa_outside
+
+        ctrl._tgt_freq = 2.8
+        ctrl._tgt_sweeps = [45.0] * 8
+        ctrl._tgt_dihedrals = [4.0] * 8
+        ctrl._tgt_pitches = [aoa_port, aoa_stbd, aoa_port, aoa_stbd,
+                             aoa_port, aoa_stbd, aoa_port, aoa_stbd]
+        context['snap_roll_rate_dps'] = roll_rate
+        context['stall_preemption_bypassed'] = True
+        return RUNNING
+
+
+class HammerheadPivotMacro(BehaviourNode):
+    """
+    H-VERT-APEX-1: Hammerhead Pure Yaw Pivot at Zero Airspeed.
+    Deploys H-88A dynamic harmonic vectoring synthesizing 5.2 N*m pure yaw torque
+    around CG at V=0, pivoting 180 deg cleanly without tail-slide or wing tip stall.
+    """
+    name = 'hammerhead_pivot'; priority = 3; interruptible = False
+
+    def on_enter(self, context):
+        super().on_enter(context)
+        self._target_duration = 0.95
+        self._dir = context.get('direction', 'right')
+
+    def tick(self, context, ctrl):
+        elapsed = self.elapsed(context)
+        if elapsed >= self._target_duration:
+            self._state = SUCCESS
+            return SUCCESS
+
+        tilt = 24.0 if self._dir == 'right' else -24.0
+        ctrl._tgt_freq = 2.6
+        ctrl._tgt_sweeps = [55.0] * 8
+        ctrl._tgt_dihedrals = [5.0] * 8
+        ctrl._tgt_pitches = [6.0] * 8
+        context['hammerhead_active'] = True
+        context['stroke_plane_tilt_deg'] = tilt
+        return RUNNING
+
+
+class TailslideFlipMacro(BehaviourNode):
+    """
+    H-VERT-APEX-1: Tailslide Roosting Somersault Pitch Flip.
+    Locks pitch servos to maximum holding torque with 0 deg sweep.
+    Upon reverse motion, fires H-84 push-pull pitch couple (4.8 N*m)
+    to flip the nose forward through horizon in 0.18 s without servo back-driving.
+    """
+    name = 'tailslide_flip'; priority = 3; interruptible = False
+
+    def on_enter(self, context):
+        super().on_enter(context)
+        self._target_duration = 0.18
+
+    def tick(self, context, ctrl):
+        elapsed = self.elapsed(context)
+        if elapsed >= self._target_duration:
+            self._state = SUCCESS
+            return SUCCESS
+
+        # W1-W2 pitch up (+45 deg), W3-W4 pitch down (-25 deg)
+        ctrl._tgt_freq = 2.8
+        ctrl._tgt_sweeps = [25.0] * 8
+        ctrl._tgt_dihedrals = [12.0] * 8
+        ctrl._tgt_pitches = [+45.0, +45.0, +45.0, +45.0,
+                             -25.0, -25.0, -25.0, -25.0]
+        context['tailslide_flip_active'] = True
+        return RUNNING
+
+
+class SpinRecoveryMacro(BehaviourNode):
+    """
+    H-SPIN-REC-1: Active Flapping Anti-Spin Thrust Couple & Reflex Stall Break.
+    Immediate zero-airspeed spin recovery for tailless 8-wing cascade:
+    - Pitch servos command -4.0 deg reflex trim across all 8 wings to break aerodynamic stall.
+    - Outside wings flap at +28 N forward thrust; inside wings flap at -22 N reverse thrust.
+    - Generates 18.5 N*m anti-spin yaw moment stopping rotation in <0.20 s.
+    """
+    name = 'spin_recovery'; priority = 1; interruptible = False
+
+    def on_enter(self, context):
+        super().on_enter(context)
+        self._target_duration = 0.25
+
+    def tick(self, context, ctrl):
+        import mco_advanced_physics as ap
+        elapsed = self.elapsed(context)
+        if elapsed >= self._target_duration:
+            self._state = SUCCESS
+            return SUCCESS
+
+        yaw_rate = context.get('yaw_rate_dps', 100.0)
+        anti_torque, stop_time, diag = ap.active_flapping_spin_recovery(
+            yaw_rate_dps=yaw_rate, aoa_deg=context.get('aoa_deg', 30.0),
+            V_ms=context.get('V_ms', 3.5))
+
+        spin_right = (yaw_rate > 0.0)
+        f_port = 2.2 if spin_right else 3.2
+        f_stbd = 3.2 if spin_right else 2.2
+
+        ctrl._tgt_freq = 3.0
+        ctrl._tgt_sweeps = [55.0] * 8
+        ctrl._tgt_dihedrals = [6.0] * 8
+        ctrl._tgt_pitches = [-4.0] * 8  # Reflex stall break
+        context['spin_recovery_active'] = True
+        context['anti_yaw_torque_nm'] = anti_torque
+        return RUNNING
+
+
 # ── BEHAVIOUR REGISTRY ───────────────────────────────────────────
 
 BEHAVIOUR_REGISTRY = {
+
     Intent.STEALTH_LOITER:  StealthLoiterBehaviour,
     Intent.CONTESTED_EW:    ContestedEWBehaviour,
     Intent.RECOVER:         RecoverBehaviour,
@@ -2965,9 +3545,10 @@ BEHAVIOUR_REGISTRY = {
     Intent.MALLARD_HUMP_BREAKOUT:   MallardHumpBreakoutBehaviour,
     Intent.GULL_ASYMMETRIC_STROKE:  GullAsymmetricStrokeBehaviour,
     Intent.WIG_CRUISE:              PelicanWigCruiseBehaviour,
-    # Biological Launch & High-Angle Climb (Dragonfly & Pigeon)
+    # Biological Launch & High-Angle Climb (Dragonfly, Pigeon & Pelican)
     Intent.DRAGONFLY_SUPER_LIFT:    DragonflySuperLiftMacro,
     Intent.PIGEON_STEEP_CLIMB:      PigeonSteepClimbBehaviour,
+    Intent.PELICAN_DEEP_STROKE:     PelicanDeepStrokeBehaviour,
     # Conventional Fixed-Wing Takeoff & Dual-Cascade Rotation Suite
     Intent.TAKEOFF_ROLL:            TakeoffRollBehaviour,
     Intent.ROTATE:                  RotateBehaviour,
@@ -2976,7 +3557,18 @@ BEHAVIOUR_REGISTRY = {
     Intent.TOUCHDOWN_ROLLOUT:       LandingRolloutBehaviour,
     # Universal Biomimetic Launch & Interbreeding Suite
     Intent.LAUNCH_BURST:            LaunchBurstMacro,
+    # Aerobatics & Advanced Maneuverability Suite
+    Intent.INVERTED_FLIGHT:         InvertedFlightBehaviour,
+    Intent.OUTSIDE_LOOP:            OutsideLoopBehaviour,
+    Intent.KNIFE_EDGE_ROTOR:        KnifeEdgeRotorBehaviour,
+    Intent.SNAP_ROLL_AERO:          SnapRollAeroMacro,
+    Intent.HAMMERHEAD_PIVOT:        HammerheadPivotMacro,
+    Intent.TAILSLIDE_FLIP:          TailslideFlipMacro,
+    Intent.SPIN_RECOVERY:           SpinRecoveryMacro,
+    # H-FALCON-TRIM-1 Falcon Dart
+    Intent.FALCON_DART:             FalconDartBehaviour,
 }
+
 
 
 
@@ -3147,21 +3739,30 @@ class BehaviourDispatcher:
         return lines
 
 
-# ── MACRO ABORT TRIGGERS ─────────────────────────────────────────
+# ── MACRO ABORT TRIGGERS & AUTOPILOT DEFERRED REGISTRY ─────────────
 
-MACRO_LIBRARY = {'stoop': StoopMacro, 'cf1_burst': CF1Macro,
-                 'chandelle': ChandellesMacro, 'dart': DartMacro,
-                 'roost_perch_flare': RoostPerchMacro,
-                 'roost_somersault': RoostPerchMacro,
-                 'active_upstroke_brake': ActiveUpstrokeBrakeMacro,
-                 'kramer_lift_burst': KramerLiftBurstMacro,
-                 'clap_jet_breakout': ClapJetBreakoutMacro,
-                 'quadrupedal_vault': QuadrupedalVaultMacro,
-                 'payload_drop': PayloadDropMacro,
-                 'auto_glide_lock': AutoGlideLockMacro,
-                 'water_clap_burst': WaterClapBurstMacro,
-                 'dragonfly_super_lift': DragonflySuperLiftMacro,
-                 'launch_burst': LaunchBurstMacro}
+MACRO_LIBRARY = {
+    'stoop': StoopMacro,
+    'cf1_burst': CF1Macro,
+    'chandelle': ChandellesMacro,
+    'dart': DartMacro,
+    'zoom_climb': ZoomClimbMacro,
+    'roost_perch_flare': RoostPerchMacro,
+    'roost_somersault': RoostPerchMacro,
+    'active_upstroke_brake': ActiveUpstrokeBrakeMacro,
+    'kramer_lift_burst': KramerLiftBurstMacro,
+    'clap_jet_breakout': ClapJetBreakoutMacro,
+    'quadrupedal_vault': QuadrupedalVaultMacro,
+    'caridoid_escape_flare': CaridoidEscapeFlareMacro,
+    'payload_drop': PayloadDropMacro,
+    'auto_glide_lock': AutoGlideLockMacro,
+    'water_clap_burst': WaterClapBurstMacro,
+    'dragonfly_super_lift': DragonflySuperLiftMacro,
+    'launch_burst': LaunchBurstMacro,
+}
+
+# Explicit set of all macros classified into the post-first-flight Autopilot Bucket
+AUTOPILOT_DEFERRED_MACROS = set(MACRO_LIBRARY.keys())
 
 MACRO_ABORT_TRIGGERS = {
     'launch_burst': [

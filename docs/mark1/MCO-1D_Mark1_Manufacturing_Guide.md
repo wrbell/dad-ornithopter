@@ -108,12 +108,34 @@ Cut the 10 mm OD pultruded carbon fiber leading-edge tubes and 2.0 mm / 3.0 mm s
    * Wrap smoothly over upper camber, tack to the trailing edge strip, and fold under the lower reflex surface.
    * Heat iron to $135^\circ\text{C}$ and shrink evenly from center to tips until drum-tight with no wrinkles.
 
-### 4.3 Biomimetic Pterostigma Leading-Edge Mass Balancing (Dragonfly Principle)
-To suppress aeroelastic torsional flutter at high flapping frequencies ($f > 3.0\text{ Hz}$) and sprint airspeeds ($V > 12\text{ m/s}$), each of the 8 wingtips incorporates a biomimetic pterostigma ballast mass forward of the torsional elastic axis (Norberg 1972):
-1. **Ballast Specification**: Use a $1.5\text{ g} \pm 0.1\text{ g}$ cylindrical brass slug ($\varnothing 3.0\text{ mm} \times 24\text{ mm}$) or tungsten putty.
-2. **Placement**: Insert into the dedicated ballast cavity at $85\%$ span ($y = 0.85b$, approximately $106\text{ mm}$ outboard on the $125\text{ mm}$ `Balanced-125` wingtip), located at $x/c \approx 0.08$ immediately behind the forward carbon spar rod socket.
-3. **Retention**: Secure with a drop of medium cyanoacrylate (CA) before sliding the 3D-printed wingtip shell onto the spar pins.
-4. **Verification**: Verify that the localized center of gravity shifts forward of the quarter-chord torsional axis ($x_{\text{cg}} < x_{ea}$), producing a passive nose-down pitch restoring moment under upward aeroelastic deflection.
+### 4.3 Biomimetic Pterostigma Leading-Edge Mass Balancing & High-Speed Aft Skeletonization
+To suppress aeroelastic torsional flutter at high flapping frequencies ($f > 3.0\text{ Hz}$) and sprint airspeeds ($V > 12\text{ m/s}$), while avoiding heavy rotational inertia ($J_{\text{wing}}$) penalties, each of the 8 wing panels follows a strict mass-balancing and skeletonization protocol:
+
+1. **Biomimetic Pterostigma Tip Slug Ballast (Dragonfly Principle)**:
+   * **Ballast Specification**: Use a **$1.5\text{ g} \pm 0.1\text{ g}$ cylindrical brass slug** ($\varnothing 3.0\text{ mm} \times 24\text{ mm}$) or tungsten putty.
+   * **Placement**: Insert into the dedicated ballast cavity at $85\%$ span ($y = 0.85b$, approximately $106\text{ mm}$ outboard on the $125\text{ mm}$ `Balanced-125` wingtip), located at $x/c \approx 0.08$ immediately behind the forward carbon spar pin socket.
+   * **Retention**: Secure with a drop of medium cyanoacrylate (CA) before sliding the 3D-printed wingtip shell onto the spar pins.
+   * **Aeroelastic Function**: Modeled on dragonfly wing morphology (*Norberg 1972*), this shifts the localized wingtip center of gravity forward of the torsional elastic axis ($x_{\text{cg}} < x_{\text{ea}}$). Under upward aeroelastic deflection, the slug exerts a passive nose-down restoring torque, increasing the critical flutter boundary ($V_{\text{flutter}}$) from $16\text{ m/s}$ to well beyond $28\text{ m/s}$ ($V_{ne}$).
+   * **Low Inertia Penalty**: At $r = 0.65\text{ m}$, the $1.5\text{ g}$ slug adds only $J_{\text{slug}} = m r^2 \approx 0.00063\text{ kg}\cdot\text{m}^2$ ($<2.5\%$ of total wing inertia $J_{\text{wing}}$), costing less than $0.08\text{ Hz}$ of flapping frequency.
+
+2. **The "Aft Subtraction" Principle (The 5.4 : 1 Lever Arm Rule)**:
+   * **Design Directive**: Do **NOT** attempt whole-chord mass balancing by adding heavy lead weights at the wing root or mid-span. Adding $12\text{--}15\text{ g}$ of dead nose ballast per wing would add over $100\text{ g}$ to MTOW and severely penalize flapping motor current ($I_q \propto J_{\text{wing}}$).
+   * **The Lever Arm Geometry**:
+     * Forward ballast pocket: $x/c \approx 0.08$ (arm to spar = $12\% c$).
+     * Trailing-edge structure: $x/c \approx 0.85$ (arm to spar = $65\% c$).
+     * Mechanical ratio: $\frac{65\% c}{12\% c} \approx \mathbf{5.4 : 1}$.
+   * **Manufacturing Rule**: Removing **$1.0\text{ g}$** of aft plastic or adhesive behind the main spar shifts the chordwise CG forward by the exact same amount as adding **$5.4\text{ g}$** of dead nose ballast—while reducing total airframe weight and flapping inertia!
+   * **Shop-Floor Skeletonization Actions**:
+     * Print all 216 universal ribs with $0\%$ infill aft of the main spar ($x/c \ge 0.20$), retaining only the single-perimeter truss ribs.
+     * Sand down the trailing-edge composite/balsa flat strip to a knife-edge ($<0.4\text{ mm}$ trailing-edge thickness).
+     * Apply lightweight Oralight film ($36\text{ g/m}^2$) over the aft $60\%$ of the wing cord; avoid thick adhesives or reinforcement tape on the trailing edge.
+
+3. **High-Speed Sprint Thermal & Battery Duty Cycle Operational Limits (Expanded Faired Baseline)**:
+   * **Continuous Fast Cruise**: $V = 20.80\text{ m/s}$ ($46.5\text{ mph}$) operates **$100\%$ unconstrained** with zero time clamp ($P_{\text{shaft}} \approx 400\text{ W}$, motor current $<3.0\text{ A}$ per phase).
+   * **Max Sprint Burst Duration**: High-speed dash ($V \ge 24\text{ m/s}$, $f = 3.2\text{ Hz}$, $792\text{ W}$ burst) is clamped to **$\tau_{\text{sprint}} \le 90.0\text{ seconds}$** (expanded from legacy $20.0\text{ s}$ due to $49\%$ drag reduction, 10:1 capstans, and $20\text{ A}$ switching BEC).
+   * **Rapid Cooldown Lockout**: Requires an accelerated **$10.0\text{ seconds}$** cruise/loiter cooling period ($f \le 2.2\text{ Hz}$, $\theta_0 \le 18.0^\circ$) before sprint can be re-engaged (reduced from legacy $45.0\text{ s}$ thanks to fresh-air NACA scoops).
+   * **Servo Current Ceiling**: Total 7.4V servo bus current is bounded at **$18.0\text{ A}$** as a hardware fail-safe against mechanical cable binding.
+   * **Prohibition of Open-Loop Phase-Lead Feedforward**: Software-driven artificial phase-lead advances (Fix 3) are strictly prohibited on stock geared servos to prevent gear tooth stripping, command whiplash, and aeroelastic negative-damping resonance.
 
 ### 4.4 Insect Biomechanics Airframe Enhancements (H-89 to H-95 Physical Build Requirements)
 To enable the full aerodynamic performance of the Insect Flight Biomechanics Suite (H-89 to H-95), the physical build must address seven critical mechanical, electrical, and structural requirements:
@@ -164,9 +186,10 @@ To enable the full aerodynamic performance of the Insect Flight Biomechanics Sui
 4. Install aluminum station brackets using M3 Grade 5 titanium bolts and Nyloc nuts.
 
 ### 5.2 Motor & Servo Mounting
-1. Mount the 8× T-Motor MN5008 motors to their respective station mounting plates using M3 $\times$ 8 mm hex-socket cap screws with Loctite 243.
+1. **Motor Installation & Thermal Isolation (HW-08 / PROP-01)**: Mount the 8× **GoolRC 5010-14 360KV** motors to their respective station mounting plates. Between each motor baseplate and the CNC 6061-T6 aluminum mounting plate, install one precision-cut **0.5 mm FR4 / ceramic-filled silicone thermal isolator gasket (`HW-08`)**. Fasten using M3 $\times$ 8 mm Grade 12.9 socket head cap screws with Loctite 243, torqued to $1.8\text{ N}\cdot\text{m}$. This gasket physically interrupts metallic heat conduction from the stator into the carbon spine and electronics pod, forcing dissipated stator heat into the NACA forced-air cooling stream.
 2. Mount the 8× AGFRC IB53BHU pitch servos directly to the wing root pivot yokes.
 3. Mount the 8× AGFRC IB53BHU sweep servos to the station chassis with carbon tie-rods linking to the wing root collars.
+4. **Reinforced Battery Sled Mount**: Mount the sliding carbon battery tray with double shear gussets to support symmetric normal load factor ($\pm 2.20g$ limit, $\pm 3.30g$ ultimate), ensuring zero tray deflection under inverted flight and outside push loops.
 
 ### 5.3 Dedicated Fresh-Air Motor Cooling Architecture & Ducting
 To ensure that all 8 motors maintain continuous stator temperatures below the $65^\circ\text{C}$ advisory threshold ($80^\circ\text{C}$ critical clamp) during sustained cruise and high-power hovering, the physical installation must enforce dedicated, uncontaminated fresh-air airflow across every motor:
@@ -215,10 +238,17 @@ Rigging Schematic:
 3. **Sector Return**: Continue routing up to the opposite side of the sector wheel rim and pass through the cable tensioning cam.
 4. **Pre-Tensioning**:
    * Attach a digital hanging scale to the free cable end.
-   * Draw tension to **$180\text{ N} \pm 10\text{ N}$** (verified on scale).
+### 6.1 Cable Rigging Steps
+1. **Anchor Pin Setup**: Terminate a 1.2 m length of 0.8 mm Dyneema SK99 line at the top-left anchor hole of the sector wheel using a figure-eight dead-end knot.
+2. **Capstan Wrap**: Route the cable down to the helical motor drum. Wrap **3 full turns** clockwise around the drum grooves.
+3. **Sector Return**: Continue routing up to the opposite side of the sector wheel rim and pass through the cable tensioning cam.
+4. **Pre-Tensioning**:
+   * Attach a digital hanging scale to the free cable end.
+   * Draw tension to **$160\text{ N} \pm 10\text{ N}$** (verified on scale and by acoustic tap pitch of **$210\text{ Hz}$** across a 150 mm free cable span).
    * Tighten the M3 brass clamping screw on the sector wheel to lock the cable in place.
    * Apply a drop of Loctite 480 flexible cyanoacrylate to the clamp to eliminate micro-slippage.
-5. **Repeat for all 8 wings**. Verify by manually deflecting each wing $\pm 45^\circ$: there must be zero perceptible backlash, zero slackening of the opposite run, and smooth bearing rotation.
+5. **Install 3D Line Keeper Shroud**: Snap the 3D-printed capstan line keeper shroud (`STRUCT-17`) over the motor pinion drum, verifying $<0.4\text{ mm}$ radial clearance over the drum grooves to physically trap the Dyneema line.
+6. **Repeat for all 8 wings**. Verify by manually deflecting each wing $\pm 45^\circ$: there must be zero perceptible backlash, zero slackening of the opposite run, and smooth bearing rotation.
 
 ---
 
@@ -243,6 +273,25 @@ Fuselage Keel Track (230 mm to 340 mm aft of datum):
 3. **Engraving**: Laser-engrave the corresponding `% MAC` labels adjacent to each hole.
 4. **Battery Sled**: Mount the 4.0 mm stainless-steel ball-lock quick-release pin through the 3D-printed PETG sled body. Verify that depressing the release button allows smooth sliding and releasing instantly locks into the detent.
 
+### 7.3 Aerodynamic Fairing Package Manufacturing & Installation
+
+The aerodynamic fairing package slashes parasite drag by $49.1\%$ ($f_{\text{par}}$ drops from $0.0550\text{ m}^2$ to $0.0280\text{ m}^2$), unlocking $20.80\text{ m/s}$ ($46.5\text{ mph}$) continuous fast cruise and $26.35\text{ m/s}$ ($58.9\text{ mph}$) dash bursts:
+
+1. **Fuselage Delta Truss Infill Fairing Panels**:
+   * **Material**: ColorFabb LW-PLA (Lightweight Foaming PLA), foamed at $235^\circ\text{C}$ (density $\approx 0.45\text{ g/cm}^3$).
+   * **Print Settings**: 1 perimeter ($0.4\text{ mm}$ wall), $0.20\text{ mm}$ layer height, $3\%$ gyroid infill for panel shear stability. Total printed mass: **$95.0\text{ g}$**.
+   * **Mounting**: Snaps onto the upper spine (⌀20 mm) and lower keel (⌀12 mm) using integrated semi-circular clip channels with 2.5 mm silicone cushioning tape.
+   * **Cooling Pathing**: Forward canopy integrates an active $25\text{ mm} \times 15\text{ mm}$ NACA ram-air scoop directing freestream air over the ODrive S1 heatsinks and dual 20A BEC units; aft $40\text{ mm}$ negative-pressure exhaust louvers on the belly tub provide continuous suction scavenging.
+   * **Service Access**: Removable canopy hatch secured via 4× ⌀6mm neodymium rare-earth magnets and forward tongue-in-groove tab.
+
+2. **Wing Root Sector & Apparatus Teardrop Nacelles (8×)**:
+   * **Material**: ColorFabb LW-PLA shell ($6.0\text{ g}$ each $\times 8 = \mathbf{48.0\text{ g}}$ total).
+   * **Internal Geometry**: Encloses the 10:1 capstan sector wheel, Dyneema lines, AGFRC IB53BHU pitch/sweep servos, and root pivot collars.
+   * **Spar Flapping Slit & Compliant Wiper Seals**:
+     * A vertical chordwise slot allows full dynamic stroke authority ($\pm 24^\circ$ sprint / $\pm 18^\circ\text{--}22^\circ$ cruise, accommodating macro stops up to $\pm 100^\circ$).
+     * Dual flexible $0.1\text{ mm}$ clear mylar / silicone wiper blades line both edges of the slit, maintaining aerodynamic streamlining around the oscillating ⌀10 mm spar without binding or friction.
+   * **Fastening**: Secured to the modular split-clamp collars via 2× countersunk M2.5 titanium machine screws into brass heat-set inserts.
+
 ---
 
 ## 8. Physical Build Quality Verification Gate & Actionable Assembly To-Do List
@@ -250,32 +299,38 @@ Fuselage Keel Track (230 mm to 340 mm aft of datum):
 Before proceeding to electrical commissioning and initial motor spin, the mechanical build team must execute and verify each item on this authoritative assembly checklist, incorporating all findings from the Physical Readiness Audit (`MCO-1D-AUD-PHYS-MK1`):
 
 ### 8.1 Mechanical, Drivetrain & Structural Integrity
-* [ ] **Total Airframe Dry Mass**: Structural airframe without batteries must weigh $\le 4,972\text{ g}$ (Target MTOW with 6S 4500mAh + 2S 3000mAh: $5,687\text{ g}$).
+* [ ] **Total Airframe Dry Mass**: Structural airframe without batteries must weigh $\le 4,972\text{ g}$ (Target MTOW with 6S 4500mAh + 2S 3000mAh: $5,687\text{ g}$; target lightweight flight AUW: $3,670\text{--}4,489\text{ g}$).
 * [ ] **Wing Alignment & Zero-Twist**: All 4 pairs show $0.0^\circ \pm 0.2^\circ$ dihedral at rest and zero geometric wash-in/wash-out across span.
+* [ ] **Strict 25.0% MAC Spar Pivot Alignment**: Main spar centerline verified at exactly **$36.0\text{ mm} \pm 0.5\text{ mm}$ aft of the wing leading edge** (25.0% MAC) across all 8 panels, eliminating aerodynamic lift pitch couples on AGFRC servos.
 * [ ] **Carbon Spar Internal Root Ferrules (PHY-02)**: CNC 6061-T6 aluminum internal crush sleeves ($\varnothing 8.0\,\text{mm} \times 40.0\,\text{mm}$ with $0.5\,\text{mm}$ collar) epoxied into the root bore of all 8 main spars. Clamp split-collars torqued to $2.2\,\text{N}\cdot\text{m}$ with Loctite 243. Prevents composite crush under $2.2g$ flapping ($M_b = 5.36\,\text{N}\cdot\text{m}$).
+* [ ] **PC-CF Corner Clamps Torquing (STRUCT-14)**: Frame truss corner clamps printed in 100% infill PC-CF torqued to **$2.2\,\text{N}\cdot\text{m}$** with Grade 12.9 M3 bolts and split lock washers.
+* [ ] **Zero-Slop CNC Linkages (HW-07)**: Zero-slop CNC aluminum ball links with M3 titanium turnbuckles installed on all 16 servos, verified for $<0.1\,\text{mm}$ axial play ($<0.2^\circ$ angular play).
 * [ ] **Dyneema SK99 48-Hour Creep Settlement (PHY-01)**: All 8 capstan drive cables pre-stretched at $200\,\text{N}$ on an inline tension scale for a minimum of 48 hours to exhaust viscoelastic primary creep.
-* [ ] **Final Capstan Pre-Tensioning & Witness Marks (PHY-01)**: Cables re-tensioned to $180\,\text{N} \pm 5\,\text{N}$. Clamping cam screws locked with Loctite 480 flexible CA. High-contrast paint witness marks applied across cable, screw, and sector rim.
+* [ ] **Final Capstan Pre-Tensioning & Witness Marks (PHY-01)**: Cables re-tensioned to strictly **$160\,\text{N} \pm 10\,\text{N}$**, verified by acoustic tap pitch of **$210\,\text{Hz}$** across a 150 mm free span. Clamping cam screws locked with Loctite 480 flexible CA. High-contrast paint witness marks applied across cable, screw, and sector rim.
+* [ ] **Line Keeper Shroud Clearance (STRUCT-17)**: 3D-printed capstan shrouds installed over all 8 motor pinions, verifying radial drum clearance $<0.4\,\text{mm}$ to prevent line derailment.
 * [ ] **10:1 Transmission Ratio & Groove Seating**: Motor pinion drum ($d_{\text{pitch}} = 15.4\text{ mm}$ or $18.0\text{ mm}$) and sector wheel ($R = 77.0\text{ mm}$ or $90.0\text{ mm}$) verify exact $10.0:1$ transmission ratio with 3 full Dyneema wraps seated in the helical groove without crossover.
 * [ ] **Bearing Freedom**: Sector wheels and motor drums rotate smoothly with zero binding across full $100^\circ$ stroke arc.
 * [ ] **Fastener Security**: Every M2/M3 fastener has Loctite 243 visible on threads.
 
 ### 8.2 Thermal Isolation & Cooling Architecture
-* [ ] **Motor Mount Thermal Isolator Gaskets (PHY-04)**: $0.5\,\text{mm}$ silicone/FR4 thermal barrier gaskets installed between all 8 T-Motor MN5008 baseplates and station brackets. Motor faceplates verified as 6061-T6 aluminum ($2.0\,\text{mm}$).
-* [ ] **Ram-Air NACA Inlets & Exhaust Louvers (PHY-04 / H-BUS-3)**: All 8 motor pods verify unobstructed internal airflow through staggered forward scoops ($+35\,\text{mm} / +55\,\text{mm}$ lateral offset) and $45^\circ$ negative-pressure scavenge louvers. Prevents LW-PLA pod softening ($T_g = 55^\circ\text{C}$).
-* [ ] **ODrive S1 Inverter Thermal Coupling**: Aluminum heatsinks on all 8 ODrive S1 boards coupled to fuselage ventilation louvers via $1.5\,\text{mm}$ silicone thermal pads ($k \ge 6.0\,\text{W/m}\cdot\text{K}$).
+* [ ] **Motor Mount Thermal Isolator Gaskets (HW-08 / PHY-04)**: Precision 0.5 mm high-temp FR4 / silicone thermal barrier gaskets (`HW-08`) installed between all 8 GoolRC motor baseplates and aluminum station brackets. Verified torqued to $1.8\text{ N}\cdot\text{m}$ with Loctite 243. Prevents stator heat from conducting into the primary spine structure.
+* [ ] **Ram-Air NACA Inlets & Exhaust Louvers (STRUCT-09 / STRUCT-15 / H-BUS-3)**: Forward canopy $25\text{ mm} \times 15\text{ mm}$ NACA ram-air intake scoop (`STRUCT-09`), delta fairing secondary scoops (`STRUCT-15`), and dual $40\text{ mm}$ belly negative-pressure exhaust louvers verified unobstructed. Individual motor station scoops ($+35\,\text{mm} / +55\,\text{mm}$ lateral offset) and $45^\circ$ scavenge louvers verified clear. Prevents bay and pod temperatures from exceeding $55^\circ\text{C}$ even during continuous 92W Hummingbird Idle glide.
+* [ ] **ODrive S1 Inverter Thermal Coupling**: Aluminum heatsinks on all 8 ODrive S1 boards coupled to airflow via $1.5\,\text{mm}$ silicone thermal pads ($k \ge 6.0\,\text{W/m}\cdot\text{K}$).
 
 ### 8.3 Aerodynamics, Kinematics & Stability Envelopes
 * [ ] **Longitudinal CG & Battery Sled Calibration (PHY-03 / PHY-05)**: Sled quick-release pin locked into **Hole 3 ($250.0\,\text{mm}$ setting)**. Complete aircraft balanced on knife-edge: center of gravity verified at **$311.8\,\text{mm} \pm 3.0\,\text{mm}$ aft of datum ($26.5\%$ MAC)**.
 * [ ] **Aft CG Mechanical Lockout**: Physical roll pin installed in Hole 6 of the battery keel track to mechanically prevent sled insertion beyond Hole 5 ($270\,\text{mm}$ / $29.5\%$ MAC aft stability boundary).
-* [ ] **Vertical Staircase & Tandem Clearance (PHY-05)**: Vertical drop of $41.25\,\text{mm}$ per station ($123.75\,\text{mm}$ total) and longitudinal stagger of $250.0\,\text{mm}$ verified. Minimum dynamic clearance between adjacent wingtips $\ge 35.0\,\text{mm}$ across all stroke phases.
+* [ ] **Vertical Staircase & Tandem Clearance (PHY-05)**: Vertical drop of $32.0\,\text{mm}$ per station ($96.0\,\text{mm}$ total) and longitudinal stagger of $180.0\text{--}250.0\,\text{mm}$ verified. Minimum dynamic clearance between adjacent wingtips $\ge 35.0\,\text{mm}$ across all stroke phases.
 * [ ] **Software Sweep-Differential Limit Enforcement**: Firmware governor clamped to $\Delta \Lambda \le 15.0^\circ$ during high-rate opposing strokes to eliminate inter-station blade clashing.
-* [ ] **Active Flapping Cruise Floor & Glide Protocol (PHY-03)**: Autopilot configured with active flapping floor $f \ge 1.87\,\text{Hz}$ in cruise to cover the $18.64\,\text{N}$ passive lift deficit at $9.0\,\text{m/s}$. Emergency unpowered dead-stick glide speed set to $V_{\text{glide}} \ge 11.0\,\text{m/s}$.
+* [ ] **Active Lift Surplus & Glide Speed Calibration**: With verified physical wing area ($S = 1.224\,\text{m}^2$), passive aerodynamic lift at $9.0\,\text{m/s}$ provides **$63.76\,\text{N}$** ($+16.56\text{ N}$ to $+19.74\text{ N}$ surplus over weight). Minimum unpowered $1g$ clean glide speed calibrated to $V_{\text{glide}} = 7.48\text{--}7.74\,\text{m/s}$ ($16.7\text{--}17.3\,\text{mph}$).
+* [ ] **Aerodynamic Fairing Package Installation**: Delta truss infill panels ($95\,\text{g}$) and 8× teardrop wing root nacelles ($48\,\text{g}$) installed; compliant wiper seals verified on spar flapping slits; NACA intake scoops and aft exhaust louvers verified unobstructed. Continuous cruise envelope verified up to $16.0\,\text{m/s}$ (clamped to prevent high-camber S1223 lower-surface separation bubble stall).
 
-### 8.4 Actuation, Servos & Electrical Protection
-* [ ] **Servo Linkage Backlash (H-89 / PHY-07)**: All 16 AGFRC IB53BHU carbon tie-rods and ball-links verify $< 0.1\text{ mm}$ mechanical play. Pitch horn mechanical advantage verified at $1.2:1$ for dynamic load headroom.
+### 8.4 Actuation, Servos & Electrical Protection (Dual-Zone Architecture)
+* [ ] **Dual-Zone Split Servo Rail Wiring (PWR-02)**: Servo power rail split into Zone A (Stations 1 & 2, Fore) and Zone B (Stations 3 & 4, Aft), each independently powered by a 20A synchronous switching BEC. Verified zero shared positive wiring between Zone A and Zone B.
+* [ ] **Dual Low-ESR Buffer Capacitors (PWR-04)**: Two $4,700\,\mu\text{F} \times 16\,\text{V}$ low-ESR electrolytic capacitors soldered directly across Zone A and Zone B bus terminals with leads $<20\,\text{mm}$ (9,400 µF total buffering).
+* [ ] **Servo Linkage Backlash (H-89 / PHY-07)**: All 16 AGFRC IB53BHU carbon tie-rods and CNC ball-links verify $< 0.1\text{ mm}$ mechanical play. Pitch horn mechanical advantage verified at $1.2:1$ for dynamic load headroom.
 * [ ] **Servo Travel Clamping**: All 16 servos programmed via `AGF-SPV3` to $170^\circ$ max travel ($333\,\text{Hz}$ PWM, $1.0\,\mu\text{s}$ deadband) to prevent MCP3208 ADC rail saturation.
-* [ ] **Servo Bus Decoupling Capacitor (PHY-08)**: $4,700\,\mu\text{F} \times 16\,\text{V}$ ultra-low ESR capacitor soldered directly across the 7.4V servo distribution bus with leads $< 20\,\text{mm}$.
-* [ ] **Servo Rail Voltage Droop Test**: Simultaneous 16-servo step deflection under bench test verifies 7.4V rail voltage remains $\ge 7.1\,\text{V}$ (droop $\le 0.3\,\text{V}$).
+* [ ] **Servo Rail Voltage Droop Test**: Simultaneous 16-servo step deflection under bench test verifies both Zone A and Zone B rail voltages remain $\ge 7.1\,\text{V}$ (droop $\le 0.3\,\text{V}$ with zero brownout).
 
 ### 8.5 Avionics & Sensing Systems
 * [ ] **CAN-FD Bus Termination & Resistance**: Total line-to-line resistance across CAN_H and CAN_L measures exactly $60.0\,\Omega \pm 1.5\,\Omega$ with power off.
@@ -287,6 +342,12 @@ Before proceeding to electrical commissioning and initial motor spin, the mechan
 * [ ] **Pterostigma Tip Mass Balancing**: All 8 wingtips have $1.5\text{ g}$ brass/tungsten slug potted at $y = 0.85b$ forward of the pitch axis.
 * [ ] **Micro-Cavity Step Definition (H-90)**: Universal S1223 ribs verify 3 micro-step cavities ($1.2\text{ mm}$ deep) with tight Mylar covering without bridging or sagging.
 * [ ] **Pneumatic Clap Skirt (H-91)**: Inboard trailing edges of Stations 1 & 2 have $15\text{ mm}$ silicone skirts sealing cleanly at $+70^\circ$ dihedral.
+
+### 8.7 Formal Builder Calibration Sheet & Physical Handoff
+* [ ] **Builder Calibration Sheet Completion**: Complete all 8 measurement fields (`FIG-01` through `FIG-08`) on [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf).
+* [ ] **As-Built Gross Weight Recorded (`FIG-01`)**: All-up weight verified on calibrated scale (target $< 5,600\text{ g}$, e.g. $4,800\text{--}5,300\text{ g}$). Handed off to firmware lead for dynamic $V_s$ and $P_s$ scaling.
+* [ ] **200° Sector Stop Alignment (`FIG-04`)**: Sector wheel travel verified across full $200.0^\circ$ physical arc ($\pm 100.0^\circ$ stops). Software dynamic reciprocating flapping ceiling verified at $\pm 24.0^\circ$ sprint / $\pm 18.0^\circ\text{--}22.0^\circ$ cruise.
+* [ ] **Formal Signoff**: Chief Builder and Firmware Lead signatures recorded prior to mounting on outdoor test rig or proceeding to TC-01 bench testing.
 
 
 

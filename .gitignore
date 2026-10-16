@@ -31,9 +31,11 @@ flight_logs/
 knowledge/
 *.log
 
-# Ground station temp data
+# Ground station & slicer temp data
 temp/
 scratch/
+cad/sliced_output/
 
 # Archives
 files.zip
+

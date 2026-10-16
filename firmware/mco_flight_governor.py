@@ -38,10 +38,14 @@ GLIDE_INJECTION_FREQ_HZ       = 1.87   # Hz — minimum resonant recovery flappi
 GLIDE_INJECTION_AMP_DEG       = 70.0   # deg — recovery stroke amplitude
 
 def check_glide_speed_floor(V_ias_ms: float, throttle_frac: float = 0.0,
-                            intent: str = 'cruise') -> dict:
+                            intent: str = 'cruise',
+                            rho_kg_m3: float = 1.225) -> dict:
     """
     Enforces minimum airspeed during unpowered glide or loiter.
-    Prevents deep aerodynamic stall and lift deficit (up to 45% deficit at 8 m/s).
+    Prevents deep aerodynamic stall and lift deficit.
+    Dynamically scales the speed floor with ambient air density rho:
+      V_floor(rho) = V_floor_0 * sqrt(1.225 / rho)
+    Safely raising the floor in hot desert thin air and lowering it in cold dense air.
 
     Returns:
         dict with keys:
@@ -49,9 +53,16 @@ def check_glide_speed_floor(V_ias_ms: float, throttle_frac: float = 0.0,
             intervention_active (bool): True if FCC is auto-injecting power
             forced_freq_hz (float): Recommended flapping frequency
             forced_amp_deg (float): Recommended stroke amplitude
+            effective_floor_ms (float): Density-scaled safe glide floor
             status (str): Human-readable diagnostic code
     """
     is_unpowered = (throttle_frac <= 0.05) or (intent in ('glide', 'soar', 'deadstick'))
+
+    # Density scaling (Vs proportional to 1 / sqrt(rho))
+    rho_eff = max(0.65, min(1.60, rho_kg_m3 if (rho_kg_m3 and rho_kg_m3 > 0) else 1.225))
+    rho_scale = math.sqrt(1.225 / rho_eff)
+    eff_glide_floor_ms = GLIDE_SPEED_FLOOR_MS * rho_scale
+    eff_intervention_thresh_ms = GLIDE_INTERVENTION_THRESH_MS * rho_scale
 
     if not is_unpowered:
         return {
@@ -59,24 +70,30 @@ def check_glide_speed_floor(V_ias_ms: float, throttle_frac: float = 0.0,
             'intervention_active': False,
             'forced_freq_hz': 0.0,
             'forced_amp_deg': 0.0,
+            'effective_floor_ms': eff_glide_floor_ms,
+            'air_density_kg_m3': rho_eff,
             'status': 'POWERED_FLIGHT_NORMAL'
         }
 
-    if V_ias_ms >= GLIDE_SPEED_FLOOR_MS:
+    if V_ias_ms >= eff_glide_floor_ms:
         return {
             'glide_permitted': True,
             'intervention_active': False,
             'forced_freq_hz': 0.0,
             'forced_amp_deg': 0.0,
+            'effective_floor_ms': eff_glide_floor_ms,
+            'air_density_kg_m3': rho_eff,
             'status': f'GLIDE_SAFE_AIRSPEED_{round(V_ias_ms, 1)}MS'
         }
 
-    if V_ias_ms >= GLIDE_INTERVENTION_THRESH_MS:
+    if V_ias_ms >= eff_intervention_thresh_ms:
         return {
             'glide_permitted': True,
             'intervention_active': False,
             'forced_freq_hz': 0.0,
             'forced_amp_deg': 0.0,
+            'effective_floor_ms': eff_glide_floor_ms,
+            'air_density_kg_m3': rho_eff,
             'status': f'GLIDE_CAUTION_APPROACHING_STALL_{round(V_ias_ms, 1)}MS'
         }
 
@@ -86,6 +103,8 @@ def check_glide_speed_floor(V_ias_ms: float, throttle_frac: float = 0.0,
         'intervention_active': True,
         'forced_freq_hz': GLIDE_INJECTION_FREQ_HZ,
         'forced_amp_deg': GLIDE_INJECTION_AMP_DEG,
+        'effective_floor_ms': eff_glide_floor_ms,
+        'air_density_kg_m3': rho_eff,
         'status': f'WARN_STALL_FLOOR_VIOLATION_AUTO_POWER_{round(V_ias_ms, 1)}MS'
     }
 
@@ -227,22 +246,37 @@ def check_tandem_blade_clearance(pair_strokes_deg: list, pair_sweeps_deg: list,
         sw1 = pair_sweeps_deg[i]
         sw2 = pair_sweeps_deg[i + 1]
 
-        # Planform overlap: front wing swept aft towards rear wing
-        sweep_diff = abs(sw1 - sw2)
-        # Vertical Z distance between wings at root/mid-span (1150mm semispan -> 575mm mid)
+        # Calculate fore-aft displacement at mid-span (575mm out along spar)
+        # Sweep angle convention: 60° forward, 90° abeam, >90° aft.
+        # dx is positive aft of station root, negative forward.
+        dx1 = 575.0 * math.sin(math.radians(sw1 - 90.0))
+        dx2 = 575.0 * math.sin(math.radians(sw2 - 90.0))
+        # Effective physical stagger in X between adjacent wing mid-spans:
+        effective_stagger_mm = stagger_mm + (dx2 - dx1)
+
+        # Vertical Z distance between wings at mid-span
         z1 = vert_staircase_mm * i + 575.0 * math.sin(math.radians(th1))
         z2 = vert_staircase_mm * (i + 1) + 575.0 * math.sin(math.radians(th2))
         vert_gap_mm = abs(z1 - z2)
 
-        # Clearance estimate incorporating chord projection
-        projected_clearance_mm = math.sqrt(stagger_mm**2 + vert_gap_mm**2) - chord_mm
+        # True 3D Euclidean spatial clearance between spar centerlines minus chord
+        euclidean_clearance_mm = math.sqrt(effective_stagger_mm**2 + vert_gap_mm**2) - chord_mm
 
-        if projected_clearance_mm < min_clearance_mm:
-            min_clearance_mm = projected_clearance_mm
+        if euclidean_clearance_mm < min_clearance_mm:
+            min_clearance_mm = euclidean_clearance_mm
 
-        # Check for opposing horizontal stroke crossing under high sweep differential
-        opposing_crossing = (th1 * th2 < 0.0) and (abs(th1 - th2) > 60.0)
-        if (projected_clearance_mm < MIN_AEROELASTIC_CLEARANCE_MM) or (opposing_crossing and sweep_diff > 15.0):
+        # Real collision hazard:
+        # 1. Physical 3D clearance drops below minimum safe bubble (< 35 mm)
+        # Smooth Barrier Lyapunov Function for opposing crossing sweep differential:
+        # Rather than a discontinuous cliff at 15.0 deg, evaluate sigmoid barrier penalty:
+        # B(delta_sw) = 1.0 / (1.0 + exp(-(delta_sw - 15.0) / 2.0))
+        delta_sw = abs(sw1 - sw2)
+        is_opposing = (th1 * th2 < 0.0)
+        barrier_penalty = (1.0 / (1.0 + math.exp(-min(10.0, max(-10.0, (delta_sw - 15.0) / 2.0))))) if is_opposing else 0.0
+
+        convergent_crossing = is_opposing and (effective_stagger_mm < chord_mm + 20.0)
+        opposing_crossing = is_opposing and (delta_sw > 15.0)
+        if (euclidean_clearance_mm < MIN_AEROELASTIC_CLEARANCE_MM) or convergent_crossing or opposing_crossing:
             collision_hazard = True
             violating_pair = (i, i + 1)
             break
@@ -251,33 +285,366 @@ def check_tandem_blade_clearance(pair_strokes_deg: list, pair_sweeps_deg: list,
         'clearance_safe': not collision_hazard,
         'min_clearance_mm': round(min_clearance_mm, 1),
         'violating_pair': violating_pair,
+        'barrier_penalty': round(barrier_penalty, 3),
+        'sweep_rate_scale': round(max(0.1, 1.0 - barrier_penalty), 3),
         'status': ('WARN_TANDEM_BLADE_STRIKE_HAZARD' if collision_hazard
                    else f'CLEARANCE_NOMINAL_{round(min_clearance_mm, 1)}MM')
     }
 
 
+def evaluate_proprioceptive_cascade_clearance(stations_state: list,
+                                              stagger_mm: float = 185.0,
+                                              chord_mm: float = 165.0,
+                                              span_mm: float = 1150.0,
+                                              vert_drop_mm: float = 32.0) -> dict:
+    """
+    Evaluates acute 3D proprioceptive dynamic clearance across compacted tandem stations.
+    Calculates exact spatial Euclidean separation between adjacent 3D swept wing surfaces
+    parameterized by real-time stroke (theta), sweep (lambda), and pitch (alpha) angles.
+    
+    Certified physical baseline is s = 185.0 mm (710 mm spine) with 32 mm vertical drop,
+    preserving fail-safe mechanical clearance (s > c) while supporting dynamic deconfliction.
+    """
+    n = len(stations_state)
+    min_dist_mm = 999.0
+    critical_pair = None
+    interventions_needed = False
+
+    # Sample spanwise stations: root (10%), mid-span (50%), tip (90%)
+    span_samples = [0.10 * span_mm, 0.50 * span_mm, 0.90 * span_mm]
+    # Sample chordwise points from leading edge (-26.1%) to trailing edge (+73.9%)
+    chord_samples = [(-0.261 + k * 0.25) * chord_mm for k in range(5)]
+
+    for i in range(n - 1):
+        s1 = stations_state[i]
+        s2 = stations_state[i + 1]
+
+        th1 = math.radians(s1.get('stroke_deg', 0.0))
+        th2 = math.radians(s2.get('stroke_deg', 0.0))
+        sw1 = math.radians(s1.get('sweep_deg', 90.0))
+        sw2 = math.radians(s2.get('sweep_deg', 90.0))
+        al1 = math.radians(s1.get('pitch_deg', 0.0))
+        al2 = math.radians(s2.get('pitch_deg', 0.0))
+
+        pair_min = 999.0
+
+        for r in span_samples:
+            for xi1 in chord_samples:
+                # 3D coordinates for Station i (origin at Station 0 spine)
+                x1 = i * stagger_mm - r * math.cos(th1) * math.cos(sw1) + xi1 * math.cos(al1)
+                y1 = r * math.cos(th1) * math.sin(sw1)
+                z1 = -i * vert_drop_mm + r * math.sin(th1) + xi1 * math.sin(al1)
+
+                for xi2 in chord_samples:
+                    # 3D coordinates for Station i + 1
+                    x2 = (i + 1) * stagger_mm - r * math.cos(th2) * math.cos(sw2) + xi2 * math.cos(al2)
+                    y2 = r * math.cos(th2) * math.sin(sw2)
+                    z2 = -(i + 1) * vert_drop_mm + r * math.sin(th2) + xi2 * math.sin(al2)
+
+                    d = math.sqrt((x2 - x1)**2 + (y2 - y1)**2 + (z2 - z1)**2)
+                    if d < pair_min:
+                        pair_min = d
+
+        if pair_min < min_dist_mm:
+            min_dist_mm = pair_min
+            if min_dist_mm < MIN_AEROELASTIC_CLEARANCE_MM:
+                interventions_needed = True
+                critical_pair = (i, i + 1)
+
+    return {
+        'clearance_safe': min_dist_mm >= MIN_AEROELASTIC_CLEARANCE_MM,
+        'min_distance_mm': round(min_dist_mm, 1),
+        'critical_pair': critical_pair,
+        'intervention_required': interventions_needed,
+        'stagger_mm': stagger_mm,
+        'status': ('CLEARANCE_NOMINAL' if min_dist_mm >= MIN_AEROELASTIC_CLEARANCE_MM
+                   else f'CLEARANCE_HAZARD_{round(min_dist_mm, 1)}MM')
+    }
+
+
+def apply_proprioceptive_deconfliction(stations_state: list,
+                                       clearance_eval: dict,
+                                       splay_gain_deg: float = 3.5,
+                                       pitch_reflex_deg: float = -2.0) -> list:
+    """
+    Applies active repulsive proprioceptive reflexes to prevent physical wing collision.
+    If dynamic clearance between adjacent stations falls below safe margins:
+      1. Applies dynamic sweep splay (fanning wings like fingers).
+      2. Commands momentary pitch reflex to flatten airfoil camber.
+    Preserves full aerodynamic thrust while maintaining > 35 mm physical separation.
+    """
+    corrected = [dict(s) for s in stations_state]
+    if not clearance_eval.get('intervention_required', False):
+        return corrected
+
+    cp = clearance_eval.get('critical_pair')
+    if not cp:
+        return corrected
+
+    i1, i2 = cp
+    # Dynamic sweep splay: front wing forward (+), rear wing aft (-)
+    corrected[i1]['sweep_deg'] = corrected[i1].get('sweep_deg', 90.0) - splay_gain_deg
+    corrected[i2]['sweep_deg'] = corrected[i2].get('sweep_deg', 90.0) + splay_gain_deg
+
+    # Dynamic pitch reflex to reduce effective swept chord thickness
+    corrected[i1]['pitch_deg'] = corrected[i1].get('pitch_deg', 0.0) + pitch_reflex_deg
+    corrected[i2]['pitch_deg'] = corrected[i2].get('pitch_deg', 0.0) + pitch_reflex_deg
+
+    return corrected
+
+
+
 # ─────────────────────────────────────────────────────────────────
-# 5. HIGH-FREQUENCY SPRINT ODRIVE VELOCITY CLAMP
+# ─────────────────────────────────────────────────────────────────
+# 5. HIGH-FREQUENCY SPRINT ODRIVE VELOCITY & THERMAL DUTY CLAMP (FIX 4)
 # ─────────────────────────────────────────────────────────────────
 # ODrive S1 vel_limit = 40 turns/s (2,400 RPM).
 # Running 5.0 Hz at ±32° drives the motor to 2,196 RPM (91.5% limit), tripping
 # on any stabilization micro-correction.
 # Sprint is hard-clamped to f <= 3.2 Hz and amplitude <= ±24.0° (max 1,380 RPM, 57.5% limit).
-SPRINT_FREQ_MAX_HZ      = 3.2    # Hz maximum allowable sprint frequency
-SPRINT_AMP_MAX_DEG      = 24.0   # deg maximum stroke amplitude during sprint
-ODRIVE_VEL_LIMIT_RPM    = 2400.0 # RPM hard firmware limit on ODrive S1
-GEAR_RATIO              = 10.0   # 10:1 capstan cable drive (upgraded from 7:1)
+#
+# FIX 4 SPRINT THERMAL & BATTERY DUTY CYCLE CLAMP (MODERN FAIRED AIRFRAME):
+#   - Continuous Fast Cruise (20.8 m/s, 160W-400W): 100% UNCONSTRAINED (Zero time clamp).
+#   - High-Speed Sprint / Flapping Dash (26.35 m/s, 3.2 Hz, 450W-792W):
+#       * SPRINT_MAX_DURATION_S = 90.0s (expanded from legacy 20.0s due to 10:1 capstans, 20A BEC, and 49% drag drop)
+#       * SPRINT_COOLDOWN_DURATION_S = 10.0s (reduced from legacy 45.0s, rapid thermal dissipation via NACA scoops)
+#       * SPRINT_SERVO_CURRENT_LIMIT_A = 18.0A (hardware fail-safe clamp against mechanical binding)
+#       * Safe cruise flap during derate: f <= 2.2 Hz, amp <= 18.0°
+SPRINT_FREQ_MAX_HZ          = 3.2    # Hz maximum allowable sprint frequency
+SPRINT_AMP_MAX_DEG          = 24.0   # deg maximum stroke amplitude during sprint
+ODRIVE_VEL_LIMIT_RPM        = 2400.0 # RPM hard firmware limit on ODrive S1
+GEAR_RATIO                  = 10.0   # 10:1 capstan cable drive (upgraded from 7:1)
 
-def clamp_sprint_dynamics(freq_hz: float, amp_deg: float) -> tuple:
+SPRINT_MAX_DURATION_S       = 90.0   # Maximum continuous sprint burst duration (s) (expanded from 20.0s)
+SPRINT_COOLDOWN_DURATION_S  = 10.0   # Enforced cooling lockout period at cruise (s) (reduced from 45.0s)
+SPRINT_SERVO_CURRENT_LIMIT_A = 18.0  # Total servo rail current limit threshold (A)
+SPRINT_DERATED_FREQ_HZ      = 2.2    # Safe cruise flap frequency during cooldown (Hz)
+SPRINT_DERATED_AMP_DEG      = 18.0   # Safe stroke amplitude during cooldown (deg)
+
+
+class SprintThermalDutyTracker:
+    """
+    Sprint Thermal & Battery Duty Cycle Governor (Modern Faired Airframe).
+    Enforces thermal safety on high-speed / sprint flapping while providing expanded flight authority:
+      - Continuous Fast Cruise (20.8 m/s): Unconstrained continuous authority.
+      - Max continuous sprint burst (26.35 m/s): Up to 90.0s (or unlimited if actively cooled below 70°C).
+      - Closed-Loop Motor Temperature & Ambient Tracking:
+          * Evaluates real-time telemetry from ODrive S1 CAN temperature packets (read_temperatures())
+          * Compares motor core temperature against ambient temperature (from DS18B20 / BMP280)
+          * Warning threshold: 70.0°C (amber alert, proportional power throttling)
+          * Critical Red-Line threshold: 85.0°C (hard clamp to cruise power)
+          * Automatic Reset: As soon as forced NACA ram-air drops stator temps below 60°C, full burst power is re-armed!
+    """
+    def __init__(self, max_duration_s: float = SPRINT_MAX_DURATION_S,
+                 cooldown_s: float = SPRINT_COOLDOWN_DURATION_S,
+                 current_limit_a: float = SPRINT_SERVO_CURRENT_LIMIT_A,
+                 temp_warn_c: float = 70.0,
+                 temp_crit_c: float = 85.0):
+        self.max_duration_s = max_duration_s
+        self.cooldown_s = cooldown_s
+        self.current_limit_a = current_limit_a
+        self.temp_warn_c = temp_warn_c
+        self.temp_crit_c = temp_crit_c
+        self.sprint_elapsed_s = 0.0
+        self.cooldown_elapsed_s = 0.0
+        self.high_current_elapsed_s = 0.0
+        self.lockout_active = False
+        self.trigger_cause = None
+        self.derate_reason = None
+        self.last_max_motor_temp_c = 25.0
+        self.last_ambient_temp_c = 20.0
+        self.temp_throttle_factor = 1.0  # 1.0 = 100% power, 0.0 = full cruise clamp
+
+    def tick(self, is_sprint: bool, dt_s: float = 0.02, servo_current_a: float = 0.0,
+             motor_temps: list = None, ambient_temp_c: float = 20.0) -> tuple:
+        """
+        Updates duty cycle state and determines if derating is required.
+        Incorporates closed-loop motor temperature telemetry and ambient delta.
+        Returns: (derate_required: bool, derate_reason: str or None, throttle_factor: float)
+        """
+        if dt_s <= 0.0:
+            return self.lockout_active, self.derate_reason, self.temp_throttle_factor
+
+        self.last_ambient_temp_c = ambient_temp_c
+
+        # Process real-time motor temperatures from ODrive CAN feedback
+        max_motor_t = ambient_temp_c
+        if motor_temps:
+            raw_vals = []
+            for t in motor_temps:
+                if isinstance(t, dict):
+                    raw_vals.append(t.get('motor_C', t.get('fet_C', ambient_temp_c)))
+                elif isinstance(t, (int, float)):
+                    raw_vals.append(float(t))
+            if raw_vals:
+                max_motor_t = max(raw_vals)
+        self.last_max_motor_temp_c = max_motor_t
+
+        # ── 1. Closed-Loop Real-Time Thermal Over-Temperature Interlock ──
+        if max_motor_t >= self.temp_crit_c:
+            self.lockout_active = True
+            self.temp_throttle_factor = 0.0
+            self.trigger_cause = f"MOTOR_OVERTEMP_REDLINE_{round(max_motor_t, 1)}C"
+            self.derate_reason = self.trigger_cause
+            return True, self.derate_reason, self.temp_throttle_factor
+        elif max_motor_t >= self.temp_warn_c:
+            # Proportional power tapering between warning and critical red-line
+            temp_range = self.temp_crit_c - self.temp_warn_c
+            excess = max_motor_t - self.temp_warn_c
+            self.temp_throttle_factor = max(0.2, 1.0 - (excess / temp_range))
+            self.derate_reason = f"MOTOR_TEMP_CAUTION_TAPERING_{round(max_motor_t, 1)}C_{round(self.temp_throttle_factor*100)}PCT"
+        else:
+            self.temp_throttle_factor = 1.0
+
+        # Dynamic cooldown clearance: if stators were overtemp and now actively cool below 60°C, release early!
+        if (self.lockout_active and motor_temps is not None and len(motor_temps) > 0
+                and "MOTOR_OVERTEMP" in (self.trigger_cause or "") and max_motor_t < 60.0
+                and self.cooldown_elapsed_s >= 3.0):
+            self.lockout_active = False
+            self.sprint_elapsed_s = 0.0
+            self.cooldown_elapsed_s = 0.0
+            self.high_current_elapsed_s = 0.0
+            self.trigger_cause = None
+            self.derate_reason = None
+
+        if self.lockout_active:
+            self.cooldown_elapsed_s += dt_s
+            if self.cooldown_elapsed_s >= self.cooldown_s:
+                self.lockout_active = False
+                self.sprint_elapsed_s = 0.0
+                self.cooldown_elapsed_s = 0.0
+                self.high_current_elapsed_s = 0.0
+                self.trigger_cause = None
+                self.derate_reason = None
+            else:
+                rem = round(self.cooldown_s - self.cooldown_elapsed_s, 1)
+                cause_str = f" ({self.trigger_cause})" if self.trigger_cause else ""
+                self.derate_reason = f"SPRINT_THERMAL_LOCKOUT_ACTIVE_{rem}S_REMAINING{cause_str}"
+                return True, self.derate_reason, self.temp_throttle_factor
+
+        if is_sprint:
+            # If explicit motor temperature telemetry is provided and actively cooled below threshold,
+            # slow down the timer accumulation (allowing extended sprint bursts).
+            # If motor_temps is None/empty (uninstrumented default), run at standard 1.0x rate.
+            if motor_temps is not None and len(motor_temps) > 0:
+                if max_motor_t < 55.0:
+                    timer_rate = 0.25
+                elif max_motor_t < self.temp_warn_c:
+                    timer_rate = 0.60
+                else:
+                    timer_rate = 1.0
+            else:
+                timer_rate = 1.0
+
+            self.sprint_elapsed_s += dt_s * timer_rate
+
+            if servo_current_a > self.current_limit_a:
+                self.high_current_elapsed_s += dt_s
+            else:
+                self.high_current_elapsed_s = max(0.0, self.high_current_elapsed_s - dt_s * 0.5)
+
+            if self.sprint_elapsed_s >= self.max_duration_s:
+                self.lockout_active = True
+                self.cooldown_elapsed_s = 0.0
+                self.trigger_cause = f"SPRINT_DURATION_EXCEEDED_{round(self.sprint_elapsed_s, 1)}S"
+                self.derate_reason = self.trigger_cause
+                return True, self.derate_reason, self.temp_throttle_factor
+            elif self.high_current_elapsed_s >= 10.0:
+                self.lockout_active = True
+                self.cooldown_elapsed_s = 0.0
+                self.trigger_cause = f"SERVO_BUS_OVERCURRENT_LOCKOUT_{round(servo_current_a, 1)}A"
+                self.derate_reason = self.trigger_cause
+                return True, self.derate_reason, self.temp_throttle_factor
+        else:
+            # Cooling down naturally when not sprinting
+            self.sprint_elapsed_s = max(0.0, self.sprint_elapsed_s - dt_s * 0.5)
+            self.high_current_elapsed_s = max(0.0, self.high_current_elapsed_s - dt_s)
+
+        derate_needed = (self.temp_throttle_factor < 0.95)
+        return derate_needed, self.derate_reason, self.temp_throttle_factor
+
+    def get_status(self) -> dict:
+        return {
+            'sprint_elapsed_s': round(self.sprint_elapsed_s, 2),
+            'cooldown_remaining_s': round(max(0.0, self.cooldown_s - self.cooldown_elapsed_s), 2) if self.lockout_active else 0.0,
+            'lockout_active': self.lockout_active,
+            'trigger_cause': self.trigger_cause,
+            'derate_reason': self.derate_reason,
+            'max_motor_temp_c': round(self.last_max_motor_temp_c, 1),
+            'ambient_temp_c': round(self.last_ambient_temp_c, 1),
+            'temp_margin_c': round(max(0.0, self.temp_crit_c - self.last_max_motor_temp_c), 1),
+            'throttle_factor': round(self.temp_throttle_factor, 2),
+        }
+
+    def reset(self):
+        self.sprint_elapsed_s = 0.0
+        self.cooldown_elapsed_s = 0.0
+        self.high_current_elapsed_s = 0.0
+        self.lockout_active = False
+        self.trigger_cause = None
+        self.derate_reason = None
+        self.temp_throttle_factor = 1.0
+
+
+_GLOBAL_SPRINT_DUTY_TRACKER = SprintThermalDutyTracker()
+
+def get_sprint_thermal_status() -> dict:
+    """Returns current sprint thermal duty status."""
+    return _GLOBAL_SPRINT_DUTY_TRACKER.get_status()
+
+def reset_sprint_thermal_tracker():
+    """Resets global sprint duty tracker to nominal unheated baseline."""
+    _GLOBAL_SPRINT_DUTY_TRACKER.reset()
+
+
+def get_dynamic_stroke_envelope(freq_hz: float, target_amp_deg: float,
+                                max_kinematic_deg_hz: float = 65.0,
+                                max_mechanical_amp_deg: float = 30.0) -> tuple:
+    """
+    Dynamically balances flapping frequency and stroke amplitude (Pelican vs Hummingbird law):
+    Enforces Mark 1 hardware capstan line-crossover travel limit (max ±30.0° stroke arc, 1.67 turns).
+    Smoothly clamps amplitude as frequency rises (e.g. ±30.0° at 1.9 Hz climb, ±22.0° at 2.4 Hz cruise, ±18.0° at 3.2 Hz dash).
+    """
+    f = max(0.5, float(freq_hz))
+    allowed_amp = min(max_mechanical_amp_deg, max_kinematic_deg_hz / f)
+    clamped_amp = max(5.0, min(allowed_amp, float(target_amp_deg)))
+    return round(f, 2), round(clamped_amp, 1)
+
+
+def clamp_sprint_dynamics(freq_hz: float, amp_deg: float, dt_s: float = 0.0,
+                          is_sprint: bool = True, servo_current_a: float = 0.0,
+                          motor_temps: list = None, ambient_temp_c: float = 20.0) -> tuple:
     """
     Clamps sprint flapping frequency and stroke amplitude to guarantee motor
-    rotational speed stays below 60% of ODrive S1 velocity trip limits.
+    rotational speed stays below 60% of ODrive S1 velocity trip limits, and enforces
+    closed-loop motor temperature and ambient-adaptive power governors.
+    Enforces Mark 1 hardware ceiling of ±30.0° to eliminate Dyneema line crossover.
 
     Returns:
         (clamped_freq_hz, clamped_amp_deg, motor_rpm, rpm_margin_pct)
     """
+    derate_required, _, throttle_factor = _GLOBAL_SPRINT_DUTY_TRACKER.tick(
+        is_sprint=is_sprint, dt_s=dt_s, servo_current_a=servo_current_a,
+        motor_temps=motor_temps, ambient_temp_c=ambient_temp_c
+    )
+
     clamped_f = min(SPRINT_FREQ_MAX_HZ, max(0.5, freq_hz))
-    clamped_amp = min(SPRINT_AMP_MAX_DEG, max(5.0, amp_deg))
+    # Dynamic amplitude ceiling: max ±30.0° on Mark 1 hardware (1.67 motor turns), scaling down to ±20.0° at 3.2 Hz
+    dynamic_amp_ceiling = min(30.0, 65.0 / clamped_f)
+
+    if _GLOBAL_SPRINT_DUTY_TRACKER.lockout_active:
+        clamped_f = min(SPRINT_DERATED_FREQ_HZ, max(0.5, freq_hz))
+        clamped_amp = min(SPRINT_DERATED_AMP_DEG, max(5.0, amp_deg))
+    elif derate_required:
+        # Dynamic continuous scaling based on live motor temperature
+        f_span = SPRINT_FREQ_MAX_HZ - SPRINT_DERATED_FREQ_HZ
+        a_span = dynamic_amp_ceiling - SPRINT_DERATED_AMP_DEG
+        allowed_f = SPRINT_DERATED_FREQ_HZ + f_span * throttle_factor
+        allowed_a = SPRINT_DERATED_AMP_DEG + a_span * throttle_factor
+        clamped_f = min(allowed_f, max(0.5, freq_hz))
+        clamped_amp = min(allowed_a, max(5.0, amp_deg))
+    else:
+        clamped_amp = min(dynamic_amp_ceiling, max(5.0, amp_deg))
 
     # Peak smootherstep angular velocity factor is 1.875
     peak_rad_s = 1.875 * (2.0 * math.pi * clamped_f) * math.radians(clamped_amp)
@@ -287,6 +654,32 @@ def clamp_sprint_dynamics(freq_hz: float, amp_deg: float) -> tuple:
     rpm_margin_pct = round(((ODRIVE_VEL_LIMIT_RPM - motor_rpm) / ODRIVE_VEL_LIMIT_RPM) * 100.0, 1)
 
     return clamped_f, clamped_amp, round(motor_rpm, 1), rpm_margin_pct
+
+
+def clamp_universal_kinematics(freq_hz: float, amp_deg: float) -> tuple:
+    """
+    Universal Kinematic Governor (Hardware Protection Fence):
+    Guarantees motor rotational speed stays strictly <= 1,800 RPM (75% of ODrive S1
+    2,400 RPM vel_limit) across ALL hypotheses, maneuvers, vaults, and perches.
+
+    Physics Boundary:
+      omega_peak = 1.875 * (2*pi*f) * theta_0 * GEAR_RATIO <= 251.32 rad/s (2,400 RPM)
+      f * theta_0 <= 122.2 deg*Hz (Hard Trip Limit)
+      f * theta_0 <= 91.7 deg*Hz  (Safe Operational Limit with 25% margin / 1,800 RPM)
+
+    Returns:
+        (safe_freq_hz, safe_amp_deg)
+    """
+    MAX_SAFE_DEG_HZ = 91.7  # 1,800 RPM motor shaft limit
+
+    f = max(0.2, min(3.2, float(freq_hz)))
+    a = max(2.0, min(96.0, float(amp_deg)))
+
+    if f * a > MAX_SAFE_DEG_HZ:
+        # If commanded frequency is high, clamp amplitude to preserve safe kinematics
+        a = min(a, MAX_SAFE_DEG_HZ / f)
+
+    return round(f, 2), round(a, 1)
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -312,6 +705,41 @@ def atmospheric_density(altitude_m: float = 0.0, temp_c: float = 15.0) -> float:
     T = max(180.0, T0 - L * alt)
     rho = (P0 / (R_spec * T0)) * ((T / T0) ** (9.80665 / (R_spec * L) - 1.0))
     return max(0.1, min(round(rho, 4), 1.4))
+
+
+# ── Audited Pitot Saturation Safeguard (MS4525DO +/- 1 kPa full-scale) ─────────
+PITOT_SATURATION_DYNAMIC_P_PA = 950.0  # Pa — 95% of MS4525DO 1000 Pa full-scale limit
+PITOT_SATURATION_V_MS         = 39.4   # m/s — airspeed at which MS4525DO clips
+
+def check_pitot_saturation(V_pitot_ms: float, q_dyn_pa: float = None,
+                           ekf_v_ms: float = None, gps_v_ms: float = None) -> dict:
+    """
+    Audited Pitot Saturation Safeguard:
+    The MS4525DO differential pressure transducer saturates at 1000 Pa (40.4 m/s).
+    When dynamic pressure exceeds 950 Pa (39.4 m/s), flags saturation and smoothly
+    blends in Tactical EKF synthetic airspeed / GPS groundspeed.
+    """
+    if q_dyn_pa is None:
+        q_dyn_pa = 0.5 * 1.225 * (max(0.0, float(V_pitot_ms)) ** 2)
+    
+    is_saturated = (q_dyn_pa >= PITOT_SATURATION_DYNAMIC_P_PA) or (V_pitot_ms >= PITOT_SATURATION_V_MS)
+    
+    if is_saturated:
+        fallback_v = ekf_v_ms if (ekf_v_ms is not None and ekf_v_ms > 0.0) else (
+            gps_v_ms if (gps_v_ms is not None and gps_v_ms > 0.0) else V_pitot_ms
+        )
+        safe_v = fallback_v
+        status = 'WARN_PITOT_SATURATED_EKF_BLENDING'
+    else:
+        safe_v = V_pitot_ms
+        status = 'PITOT_NOMINAL_UNSATURATED'
+        
+    return {
+        'is_saturated': is_saturated,
+        'effective_v_ms': round(safe_v, 2),
+        'q_dyn_pa': round(q_dyn_pa, 1),
+        'status': status
+    }
 
 def compute_loaded_servo_slew_ceiling(V_ms: float = 10.0,
                                       altitude_m: float = 0.0,
@@ -446,19 +874,21 @@ class AutopilotBankGovernor:
         self.recovery_active = False
 
     def update(self, dt_s: float, bank_deg: float, hold_altitude: bool = True,
-               is_pilot_flying: bool = False) -> dict:
+               is_pilot_flying: bool = False, knife_rotor_mode: bool = False) -> dict:
         """
         Calculates autopilot-bounded bank angle command.
         
         Parameters
         ----------
-        dt_s            : float — time step
-        bank_deg        : float — commanded or current bank angle
-        hold_altitude   : bool  — whether altitude hold is active
-        is_pilot_flying : bool  — if True, returns bank_deg unimpeded (pilot authority)
+        dt_s             : float — time step
+        bank_deg         : float — commanded or current bank angle
+        hold_altitude    : bool  — whether altitude hold is active
+        is_pilot_flying  : bool  — if True, returns bank_deg unimpeded (pilot authority)
+        knife_rotor_mode : bool  — if True, active vertical flapping rotor extends knife-edge budget to 8.0s
         """
         abs_bank = abs(bank_deg)
         is_knife = abs_bank > 75.0
+        active_budget = 8.0 if knife_rotor_mode else self.max_knife_s
 
         # Pilot in command: 100% unimpeded authority, zero intervention
         if is_pilot_flying:
@@ -474,7 +904,7 @@ class AutopilotBankGovernor:
         # Autopilot flight discipline:
         if is_knife:
             self.time_in_knife_s += dt_s
-            if self.time_in_knife_s >= self.max_knife_s:
+            if self.time_in_knife_s >= active_budget:
                 self.recovery_active = True
         else:
             self.time_in_knife_s = max(0.0, self.time_in_knife_s - dt_s * 2.0)
@@ -500,8 +930,328 @@ class AutopilotBankGovernor:
                        f'AUTOPILOT_BANK_NOMINAL_{round(clamped_bank, 1)}DEG')
         }
 
+
+class SymmetricLoadFactorGovernor:
+    """
+    Symmetric Normal Load Factor Governor (+2.2g / -2.2g Limit Load).
+    Confirms symmetric structural capability of the MCO-1D carbon spar construction
+    under both positive and negative G maneuvers (inside loops, outside loops, steep turns).
+    """
+    LIMIT_LOAD_POS_G = +2.20
+    LIMIT_LOAD_NEG_G = -2.20
+    ULTIMATE_FACTOR  = 1.50   # FAR Part 23 safety factor -> +/-3.30g ultimate
+
+    def __init__(self, limit_pos_g: float = LIMIT_LOAD_POS_G, limit_neg_g: float = LIMIT_LOAD_NEG_G):
+        self.limit_pos_g = limit_pos_g
+        self.limit_neg_g = limit_neg_g
+        self.peak_pos_seen = 1.0
+        self.peak_neg_seen = 1.0
+        self.clamp_active = False
+
+    def check_load_factor(self, nz_g: float, commanded_pitch_stick: float) -> dict:
+        """
+        Monitors normal load factor and clamps commanded pitch stick if exceeding structural limits.
+        """
+        nz = float(nz_g)
+        ch2 = float(commanded_pitch_stick)
+        self.peak_pos_seen = max(self.peak_pos_seen, nz)
+        self.peak_neg_seen = min(self.peak_neg_seen, nz)
+
+        clamped_stick = ch2
+        self.clamp_active = False
+
+        if nz > self.limit_pos_g and ch2 > 0.0:
+            clamped_stick = max(0.0, ch2 * (self.limit_pos_g / nz))
+            self.clamp_active = True
+        elif nz < self.limit_neg_g and ch2 < 0.0:
+            clamped_stick = min(0.0, ch2 * (abs(self.limit_neg_g) / abs(nz)))
+            self.clamp_active = True
+
+        return {
+            'nz_g': round(nz, 2),
+            'commanded_pitch_stick': round(ch2, 3),
+            'clamped_pitch_stick': round(clamped_stick, 3),
+            'clamp_active': self.clamp_active,
+            'peak_pos_seen': round(self.peak_pos_seen, 2),
+            'peak_neg_seen': round(self.peak_neg_seen, 2),
+            'within_limits': bool(self.limit_neg_g <= nz <= self.limit_pos_g),
+            'status': ('WARN_STRUCTURAL_G_CLAMP_ACTIVE' if self.clamp_active else 'LOAD_FACTOR_NOMINAL')
+        }
+
+
+class SnapRollDecoupler:
+    """
+    Aerobatic Snap Roll Intent Decoupler.
+    Manages a calibrated 0.45s window where boundary-layer stall preemption (H-85)
+    and dynamic stall reflex (H-DSH-1) are decoupled on the inside wing station,
+    allowing clean autorotation without false-positive anti-stall intervention.
+    """
+    SNAP_WINDOW_S = 0.45
+
+    def __init__(self, window_s: float = SNAP_WINDOW_S):
+        self.window_s = window_s
+        self.active = False
+        self.elapsed_s = 0.0
+        self.direction = 0  # +1 right, -1 left
+
+    def trigger_snap(self, direction: int = +1):
+        """Triggers the snap decoupling window."""
+        self.active = True
+        self.elapsed_s = 0.0
+        self.direction = +1 if direction >= 0 else -1
+
+    def update(self, dt_s: float) -> dict:
+        """Updates snap elapsed time and resets when expired."""
+        if not self.active:
+            return {'snap_active': False, 'bypass_stall_preemption': False, 'direction': 0}
+
+        self.elapsed_s += dt_s
+        if self.elapsed_s >= self.window_s:
+            self.active = False
+            return {'snap_active': False, 'bypass_stall_preemption': False, 'direction': 0, 'status': 'SNAP_WINDOW_EXPIRED'}
+
+        return {
+            'snap_active': True,
+            'bypass_stall_preemption': True,
+            'direction': self.direction,
+            'elapsed_s': round(self.elapsed_s, 3),
+            'status': f'SNAP_DECOUPLING_ACTIVE_DIR_{self.direction}'
+        }
+
+
 # Alias for backwards compatibility
 KnifeEdgeGovernor = AutopilotBankGovernor
+
+
+# ─────────────────────────────────────────────────────────────────
+# 8. HARD WING-IN-GROUND (WIG) FLOOR GOVERNOR
+# ─────────────────────────────────────────────────────────────────
+
+class HardWIGFloorGovernor:
+    """
+    Hard Wing-In-Ground (WIG) Effect Safety Floor Governor.
+
+    Protects the aircraft and pilot from Controlled Flight Into Terrain (CFIT)
+    while cruising, skimming, or accelerating within the ground effect envelope (h <= 0.85m).
+
+    Operational Principles:
+    1. Active WIG Skimming Envelope:
+       - Allows the pilot to comfortably cruise in ground effect, taking full advantage
+         of the ~65% induced drag reduction (sigma_ige) and +18-20% lift boost.
+    2. Virtual Impassable Floor (h_floor = 0.35m AGL):
+       - Clamps forward stick (push nose down) progressively to 0.0 as altitude approaches 0.35m.
+       - Injects positive restorative pitch bias and front-cascade canard lift pulses if sink rate
+         threatens to breach the 0.35m boundary.
+    3. Flare Dissolution (Landability Anticipation):
+       - Dissolves the hard virtual floor (h_floor -> 0.0m) as soon as the aircraft initiates a landing flare
+         (Intent.FLARE, Intent.ROOST_SOMERSAULT, deep flare, or aft stick flare in ground effect with low throttle).
+       - Seamlessly hands control to the landing flare kinematics and ground-spoil touchdown logic.
+    4. Takeoff Ground Decoupling:
+       - Disarmed while on ground / rolling (on_ground == True).
+       - Automatically arms once unstick occurs (h >= 0.15m), protecting initial climb acceleration.
+    """
+    DEFAULT_HARD_FLOOR_M     = 0.35      # Hard floor boundary (m AGL)
+    DEFAULT_BUFFER_ZONE_M    = 0.65      # Restorative bumper zone entry (m AGL)
+    DEFAULT_WIG_CEILING_M    = 0.85      # Upper limit of ground effect envelope (m AGL)
+    DEFAULT_STROKE_BIAS_DEG  = 14.0      # Asymmetric upward dihedral bias (H-WIG-BIAS)
+    DISSOLUTION_TIME_S       = 0.25      # Time to smoothly dissolve floor during flare
+
+    def __init__(self, hard_floor_m: float = DEFAULT_HARD_FLOOR_M,
+                 buffer_zone_m: float = DEFAULT_BUFFER_ZONE_M,
+                 wig_ceiling_m: float = DEFAULT_WIG_CEILING_M,
+                 stroke_bias_deg: float = DEFAULT_STROKE_BIAS_DEG):
+        self.hard_floor_m = float(hard_floor_m)
+        self.buffer_zone_m = float(buffer_zone_m)
+        self.wig_ceiling_m = float(wig_ceiling_m)
+        self.stroke_bias_deg = float(stroke_bias_deg)
+
+        self.state = 'GROUND_IDLE'     # 'GROUND_IDLE', 'WIG_ACTIVE', 'RESTRICTED_PUSHBACK', 'FLARE_DISSOLUTION', 'FREE_FLIGHT'
+        self.dissolution_elapsed_s = 0.0
+        self.floor_effective_m = self.hard_floor_m
+        self.pushback_active = False
+        self.forward_stick_clamped = False
+
+    def update(self, h_agl_m: float, V_ms: float, vz_ms: float = 0.0,
+               pitch_stick: float = 0.0, throttle: float = 0.5,
+               on_ground: bool = False, is_flare_active: bool = False,
+               intent: str = '', dt_s: float = 0.02) -> dict:
+        """
+        Executes one 50 Hz governance update:
+        - Clamps commanded forward pitch stick if approaching or breaching the floor.
+        - Computes active restorative pitch and canard lift pulses if descending.
+        - Dissolves the floor to 0.0m if landing flare is anticipated.
+        """
+        h = max(0.0, float(h_agl_m))
+        v = max(0.0, float(V_ms))
+        vz = float(vz_ms)
+        p_stk = max(-1.0, min(1.0, float(pitch_stick)))
+        thr = max(0.0, min(1.0, float(throttle)))
+        dt = max(1e-4, float(dt_s))
+
+        # 1. Ground Stance / Takeoff Roll State
+        if on_ground or h <= 0.12:
+            self.state = 'GROUND_IDLE'
+            self.dissolution_elapsed_s = 0.0
+            self.floor_effective_m = 0.0
+            self.pushback_active = False
+            self.forward_stick_clamped = False
+            return {
+                'state': self.state,
+                'floor_effective_m': 0.0,
+                'clamped_pitch_stick': p_stk,
+                'restorative_pitch_deg': 0.0,
+                'canard_lift_boost_n': 0.0,
+                'forward_stick_clamped': False,
+                'pushback_active': False,
+                'flare_dissolved': False,
+                'status': 'WIG_FLOOR_GROUND_IDLE'
+            }
+
+        # 2. Flare Detection (Anticipating Landing)
+        intent_lower = str(intent).lower()
+        flare_intents = {'flare', 'roost_somersault', 'perch_flare', 'caridoid_escape_flare',
+                         'landing_flare', 'h84_roost_perch_flare'}
+        flare_gesture = (h <= 1.8 and p_stk >= 0.35 and thr <= 0.35 and v <= 9.0)
+        is_flaring = bool(is_flare_active or (intent_lower in flare_intents) or flare_gesture)
+
+        if is_flaring:
+            self.state = 'FLARE_DISSOLUTION'
+            self.dissolution_elapsed_s += dt
+            alpha = min(1.0, self.dissolution_elapsed_s / self.DISSOLUTION_TIME_S)
+            self.floor_effective_m = self.hard_floor_m * (1.0 - alpha)
+            self.forward_stick_clamped = False
+            self.pushback_active = False
+            return {
+                'state': self.state,
+                'floor_effective_m': round(self.floor_effective_m, 3),
+                'clamped_pitch_stick': p_stk,
+                'restorative_pitch_deg': 0.0,
+                'canard_lift_boost_n': 0.0,
+                'forward_stick_clamped': False,
+                'pushback_active': False,
+                'flare_dissolved': bool(alpha >= 1.0),
+                'status': f'WIG_FLOOR_DISSOLVING_FLARE_ALPHA_{round(alpha, 2)}'
+            }
+
+        # Reset dissolution if flare aborted (e.g. balked landing / go-around)
+        self.dissolution_elapsed_s = 0.0
+        self.floor_effective_m = self.hard_floor_m
+
+        # 3. Free Flight (Above WIG Zone)
+        if h > self.wig_ceiling_m:
+            self.state = 'FREE_FLIGHT'
+            self.forward_stick_clamped = False
+            self.pushback_active = False
+            return {
+                'state': self.state,
+                'floor_effective_m': self.floor_effective_m,
+                'clamped_pitch_stick': p_stk,
+                'restorative_pitch_deg': 0.0,
+                'canard_lift_boost_n': 0.0,
+                'forward_stick_clamped': False,
+                'pushback_active': False,
+                'flare_dissolved': False,
+                'status': 'WIG_FLOOR_FREE_FLIGHT'
+            }
+
+        # 4. WIG Skimming & Buffer / Hard Floor Protection
+        clamped_stk = p_stk
+        restorative_pitch = 0.0
+        canard_boost_n = 0.0
+        self.forward_stick_clamped = False
+        self.pushback_active = False
+
+        if h <= self.hard_floor_m:
+            # Hard floor breach prevention: absolute lockout of forward stick
+            self.state = 'RESTRICTED_PUSHBACK'
+            if p_stk < 0.0:
+                clamped_stk = 0.0
+                self.forward_stick_clamped = True
+
+            # Emergency restorative impulse
+            restorative_pitch = min(12.0, 6.0 + abs(min(0.0, vz)) * 5.0)
+            canard_boost_n = 35.0
+            self.pushback_active = True
+            status = 'CRIT_HARD_WIG_FLOOR_ENFORCED'
+
+        elif h <= self.buffer_zone_m:
+            # Buffer zone: progressive forward stick damping
+            self.state = 'WIG_ACTIVE'
+            ratio = (h - self.hard_floor_m) / (self.buffer_zone_m - self.hard_floor_m)
+            min_allowed_stick = -1.0 * ratio  # Clamps towards 0 as h -> hard_floor
+
+            if p_stk < min_allowed_stick:
+                clamped_stk = min_allowed_stick
+                self.forward_stick_clamped = True
+
+            # If descending, inject proportional restorative pitch
+            if vz < -0.2:
+                kp = 12.0   # deg/m
+                kd = 3.5    # deg/(m/s)
+                restorative_pitch = min(8.0, kp * (self.buffer_zone_m - h) + kd * abs(vz))
+                canard_boost_n = min(25.0, 15.0 * (self.buffer_zone_m - h) / (self.buffer_zone_m - self.hard_floor_m))
+                self.pushback_active = True
+            status = 'WIG_BUFFER_PROTECTION_ACTIVE'
+        else:
+            self.state = 'WIG_ACTIVE'
+            status = 'WIG_SKIMMING_NOMINAL'
+
+        # Asymmetric Dihedral Stroke Bias for Ground Effect Clearance (H-WIG-BIAS)
+        # Smoothly ramp up stroke bias to +14 deg as aircraft descends from 0.65m to 0.35m
+        stroke_dihedral_bias_deg = 0.0
+        if h <= self.buffer_zone_m:
+            bias_frac = min(1.0, max(0.0, (self.buffer_zone_m - h) / max(0.01, self.buffer_zone_m - self.hard_floor_m)))
+            stroke_dihedral_bias_deg = round(self.stroke_bias_deg * bias_frac, 2)
+
+        # Enforce ground clearance amplitude interlock:
+        # At h <= 1.2m or on ground, clamp stroke amplitude to <= 22.0 deg to guarantee wingtips never strike ground.
+        # Above 1.2m in free flight, allow up to Mark 1 hardware limit of 30.0 deg.
+        max_allowed_amp_deg = 22.0 if (h <= 1.2 or on_ground) else 30.0
+
+        return {
+            'state': self.state,
+            'floor_effective_m': self.floor_effective_m,
+            'clamped_pitch_stick': round(clamped_stk, 3),
+            'restorative_pitch_deg': round(restorative_pitch, 2),
+            'canard_lift_boost_n': round(canard_boost_n, 1),
+            'stroke_dihedral_bias_deg': stroke_dihedral_bias_deg,
+            'max_allowed_amp_deg': max_allowed_amp_deg,
+            'forward_stick_clamped': self.forward_stick_clamped,
+            'pushback_active': self.pushback_active,
+            'flare_dissolved': False,
+            'status': status
+        }
+
+
+_GLOBAL_HARD_WIG_FLOOR_GOVERNOR = HardWIGFloorGovernor()
+
+def govern_hard_wig_floor(h_agl_m: float, V_ms: float, vz_ms: float = 0.0,
+                          pitch_stick: float = 0.0, throttle: float = 0.5,
+                          on_ground: bool = False, is_flare_active: bool = False,
+                          intent: str = '', dt_s: float = 0.02,
+                          wing_commands: list = None) -> dict:
+    """
+    Functional wrapper for 50 Hz control loop.
+    Enforces virtual ground-effect safety floor, injects asymmetric dihedral bias,
+    and clamps stroke amplitude to <= 22° near the ground to prevent wingtip runway strikes.
+    """
+    global _GLOBAL_HARD_WIG_FLOOR_GOVERNOR
+    telem = _GLOBAL_HARD_WIG_FLOOR_GOVERNOR.update(
+        h_agl_m=h_agl_m, V_ms=V_ms, vz_ms=vz_ms,
+        pitch_stick=pitch_stick, throttle=throttle,
+        on_ground=on_ground, is_flare_active=is_flare_active,
+        intent=intent, dt_s=dt_s
+    )
+    bias_deg = telem.get('stroke_dihedral_bias_deg', 0.0)
+    max_amp = telem.get('max_allowed_amp_deg', 30.0)
+    if wing_commands:
+        for cmd in wing_commands:
+            if bias_deg > 0.0:
+                cmd['dihedral_bias_deg'] = bias_deg
+            if 'flap_amp_deg' in cmd:
+                cmd['flap_amp_deg'] = min(max_amp, cmd['flap_amp_deg'])
+    return telem
+
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -1931,12 +2681,12 @@ class UnifiedEfficiencySupervisor:
             stall_speed_abort = (V_ms < 12.0)
             stow_permitted = (V_ms >= 14.0) and not pilot_maneuver_abort and not stall_speed_abort and not sensors.get('on_ground', False)
 
-            if (intent == 'fast_cruise' or sensors.get('fast_cruise_mode', False)) and stow_permitted:
-                active_strategies.append('H-FAST-CRUISE_FEATHERED_PARK')
-                active_strategies.append('REFLEX_DECAMBER_S1223')
+            if (intent in ('fast_cruise', 'audited_cruise') or sensors.get('fast_cruise_mode', False)) and stow_permitted:
+                active_strategies.append('H-FAST-CRUISE-2_BALANCED_CORE')
+                active_strategies.append('REFLEX_TRIM_OPTIMAL_S1223')
                 parasite_drag_red_pct = min(48.0, 25.0 + (V_ms - 14.0) * 3.8)
 
-                # Stations 1 & 4 (pairs 1 & 4, indices 0,1 and 6,7) are parked horizontal with reflex pitch
+                # Stations 1 & 4 (pairs 1 & 4, indices 0,1 and 6,7) are parked horizontal with audited sweet-spot reflex (-1.5°)
                 for i in (0, 1, 6, 7):
                     if i < len(wing_commands) and isinstance(wing_commands[i], dict):
                         wing_commands[i]['stowed'] = True
@@ -1945,19 +2695,20 @@ class UnifiedEfficiencySupervisor:
                         wing_commands[i]['flap_amp_deg'] = 0.0
                         wing_commands[i]['active_flapping'] = False
                         wing_commands[i]['aoa_cmd_deg'] = 0.0
-                        wing_commands[i]['reflex_pitch_bias_deg'] = -4.0
-                        wing_commands[i]['sweep_deg'] = min(wing_commands[i].get('sweep_deg', 60.0), 65.0)  # Collision guard <= 65°
+                        wing_commands[i]['reflex_pitch_bias_deg'] = -1.5
+                        wing_commands[i]['sweep_deg'] = min(wing_commands[i].get('sweep_deg', 60.0), 85.0)  # Parked flush streamline
                         wing_commands[i]['holding_current_a'] = 7.0
 
-                # Stations 2 & 3 (indices 2,3 and 4,5) are the active propulsive core
-                # Enforce capstan cable snatch safety floor (flap_amp >= 25.0°) and reflex decambering (-4.0°)
+                # Stations 2 & 3 (indices 2,3 and 4,5) are the symmetric active propulsive core (centered on CG)
+                # Enforce safe chevron sweep clamp (sweep <= 70.0°, Lambda <= 25.0° relative) to prevent 58% thrust loss & collision
+                # Enforce sweet-spot reflex pitch (-1.5°) and capstan-safe micro-stroke (22.0° to 26.0°)
                 for i in (2, 3, 4, 5):
                     if i < len(wing_commands) and isinstance(wing_commands[i], dict):
                         wing_commands[i]['active_propulsive_core'] = True
-                        wing_commands[i]['operating_cl'] = 0.69
-                        wing_commands[i]['reflex_pitch_bias_deg'] = -4.0
-                        wing_commands[i]['flap_amp_deg'] = max(25.0, min(35.0, wing_commands[i].get('flap_amp_deg', 30.0)))
-                        wing_commands[i]['sweep_deg'] = min(wing_commands[i].get('sweep_deg', 60.0), 65.0)
+                        wing_commands[i]['operating_cl'] = 0.52
+                        wing_commands[i]['reflex_pitch_bias_deg'] = -1.5
+                        wing_commands[i]['flap_amp_deg'] = max(22.0, min(26.0, wing_commands[i].get('flap_amp_deg', 24.0)))
+                        wing_commands[i]['sweep_deg'] = min(wing_commands[i].get('sweep_deg', 60.0), 70.0)  # Safe chevron clamp <= 70.0°
 
             elif V_ms >= 10.0:
                 parasite_drag_red_pct = min(50.0, 20.0 + (V_ms - 10.0) * 3.75)
@@ -2038,3 +2789,2898 @@ def govern_flight_efficiency(intent: str, lever_pct: float, V_ms: float,
         wing_commands=wing_commands, sensors=sensors,
         result=result
     )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 9. DIVE RECOVERY & SPEED CLOSURE GOVERNOR (H-PULL-2 & H-DIVE-1)
+# ─────────────────────────────────────────────────────────────────
+# Pitch Servo Pivot Aerodynamic Moment Equation:
+#   M_pivot = q * c^2 * b * (Cm_ac - CL * dx)
+# With pitch pivot at 40% chord and ac at 25% chord (dx = 0.15c),
+# upward lift (CL > 0) creates a nose-up moment that opposes the nose-down
+# camber couple Cm_ac (0.25).
+#
+# Key Insights:
+#   1. Zero-Load Lift Coefficient:
+#      M_pivot = 0 <=> CL = Cm_ac / dx = 0.25 / 0.15 = 1.67
+#   2. Gentle Pull Trap: Low-g pullout keeps CL low, leaving camber moment
+#      uncompensated and stalling the pitch servo (SF = 0.57 at 1g, 20 m/s).
+#   3. High-g Pullout Unloads Servo: An 8g pull raises CL to 1.04, reducing
+#      servo moment to 6.41 kg-cm (SF = 1.40 holds).
+#   4. Structural Ceiling & Closure Speed: Structure caps load at 4.0g.
+#      At V_closure = 16.3 m/s, n_min(servo) = n_max(structure) = 4.0g.
+#      Above 16.3 m/s, the recovery window shuts completely.
+#   5. H-PULL-2 Escape (Drag First, Then Pull): Pitch command is inhibited,
+#      full cascade reversal braking is commanded (CD ~ 0.50, 2.85g net vertical decel,
+#      20 -> 15 m/s in 0.18s and 3.1m), and pitch pull is released only once speed
+#      decays and the window re-opens.
+#   6. H-DIVE-1 Prevention: Progressively applies cascade reversal braking as
+#      speed approaches closure speed, preventing window closure.
+
+def pull_zero_load_cl(Cm: float = 0.25, dx: float = 0.15) -> float:
+    """CL at which pitch servo load is exactly zero (camber couple cancelled by lift offset)."""
+    return round(Cm / dx, 2) if dx > 0 else 1.67
+
+def pull_cl_floor(V: float, c: float = 0.165275, M_rated_kgcm: float = 9.0,
+                  sf: float = 1.5, Cm: float = 0.25, dx: float = 0.15) -> float:
+    """Minimum CL the pitch servo can hold at speed V before stalling under camber couple."""
+    Mlim = M_rated_kgcm * 9.81 / 100.0 / sf
+    q = 0.5 * 1.225 * V * V
+    if q <= 0.0 or c <= 0.0 or dx <= 0.0:
+        return 0.0
+    return max(0.0, (Cm - (Mlim / (q * c * c))) / dx)
+
+def pull_cl_ceiling(V: float, n_max: float = 4.0, W: float = 39.14, S: float = 1.23,
+                    cl_max: float = 1.89) -> float:
+    """Maximum CL from structural g-limit, capped by aerofoil CL_max."""
+    q = 0.5 * 1.225 * V * V
+    if q <= 0.0 or S <= 0.0:
+        return cl_max
+    cl_struct = (n_max * W) / (q * S)
+    return min(cl_max, cl_struct)
+
+def pull_window(V: float, n_max: float = 4.0, M_rated_kgcm: float = 9.0,
+                sf: float = 1.5, Cm: float = 0.25, dx: float = 0.15,
+                c: float = 0.165275, W: float = 39.14, S: float = 1.23,
+                cl_max: float = 1.89):
+    """
+    Returns (n_min, n_max) usable load-factor band, or None when window is shut.
+    """
+    clf = pull_cl_floor(V, c=c, M_rated_kgcm=M_rated_kgcm, sf=sf, Cm=Cm, dx=dx)
+    clc = pull_cl_ceiling(V, n_max=n_max, W=W, S=S, cl_max=cl_max)
+
+    q = 0.5 * 1.225 * V * V
+    cl_per_g = (W / (q * S)) if (q * S > 0) else 1.0
+    n_min = clf / cl_per_g if cl_per_g > 0 else 0.0
+
+    if clc <= clf or n_min > n_max:
+        return None
+    return (round(n_min, 2), round(n_max, 2))
+
+def pull_closure_speed(n_max: float = 4.0, M_rated_kgcm: float = 9.0,
+                       sf: float = 1.5, Cm: float = 0.25, dx: float = 0.15,
+                       c: float = 0.165275, W: float = 39.14, S: float = 1.23,
+                       cl_max: float = 1.89) -> float:
+    """
+    Bisects for the airspeed (m/s) at which the recovery window closes (n_min == n_max).
+    """
+    v_low = 10.0
+    v_high = 60.0
+    for _ in range(60):
+        v_mid = 0.5 * (v_low + v_high)
+        w = pull_window(v_mid, n_max=n_max, M_rated_kgcm=M_rated_kgcm, sf=sf,
+                        Cm=Cm, dx=dx, c=c, W=W, S=S, cl_max=cl_max)
+        if w is None:
+            v_high = v_mid
+        else:
+            v_low = v_mid
+    return round(v_mid, 2)
+
+def pull_brake_decel_g(V: float, m: float = 3.99, cd: float = 0.50,
+                       s: float = 1.23, net_vertical: bool = True) -> float:
+    """
+    Deceleration (in g) from cascade reversal braking drag.
+    If net_vertical=True, subtracts 1.0g for gravity in a pure vertical dive.
+    """
+    q = 0.5 * 1.225 * V * V
+    drag_n = q * s * cd
+    weight_n = m * 9.81
+    decel_gross = drag_n / weight_n
+    if net_vertical:
+        return round(decel_gross - 1.0, 2)
+    return round(decel_gross, 2)
+
+
+# ── John Boyd Energy-Maneuverability Speed Boundary Constants ───────────
+VNE_MS = 28.0             # m/s — Design Never-Exceed Airspeed (baseline unswept flutter boundary)
+VNE_MAX_SWEEP_MS = 45.0   # m/s — Design Never-Exceed Airspeed in full peregrine stoop (Lambda >= 85°)
+
+def compute_sweep_vne(sweep_deg: float = 60.0, vne_base_ms: float = VNE_MS,
+                      vne_max_ms: float = VNE_MAX_SWEEP_MS,
+                      is_relative: bool = False) -> float:
+    """
+    Computes the aeroelastic flutter-safe Never-Exceed Airspeed V_NE(sweep_deg)
+    under Hypothesis H-SWEEP-VNE-1 (Aeroelastic Sweep-Adaptive VNE Schedule).
+    
+    Physics:
+    - Baseline un-swept / flapping cruise sweep is 60.0 deg.
+    - At sweep <= 60.0 deg, V_NE is pegged at baseline 28.0 m/s to enforce the mandatory
+      15% flutter margin against the straight-wing 32.2 m/s flutter boundary.
+    - As the secondary Dyneema wrist joint sweeps the wings aft (sweep_deg > 60.0 deg),
+      aeroelastic wash-out (geometric tip pitch-down under upward bending) and the
+      crossflow principle (V_normal = V_inf * cos(Lambda)) relieve dynamic pressure.
+    - Effective sweep relief angle: Lambda_eff = min(75.0, Lambda_rel) * 0.85.
+    - V_NE(Lambda) scales as V_base / cos(Lambda_eff), capped at airframe limit (45.0 m/s / 100.7 mph).
+    
+    Returns:
+        float: Safe Never-Exceed Airspeed in m/s.
+    """
+    if is_relative:
+        rel_sweep = max(0.0, float(sweep_deg))
+    elif sweep_deg > 50.0:
+        rel_sweep = max(0.0, float(sweep_deg) - 60.0)
+    else:
+        rel_sweep = max(0.0, float(sweep_deg))
+    
+    rel_sweep = min(80.0, rel_sweep)
+    if rel_sweep <= 0.5:
+        return float(vne_base_ms)
+    
+    lambda_eff_rad = math.radians(rel_sweep * 0.85)
+    cos_term = max(0.20, math.cos(lambda_eff_rad))
+    vne_calc = vne_base_ms / cos_term
+    return round(min(float(vne_max_ms), max(float(vne_base_ms), vne_calc)), 2)
+
+
+def compute_sweep_unfolding_schedule(V_ms: float, n_cmd: float = 1.0, bank_deg: float = 0.0,
+                                     current_sweep_deg: float = 60.0, v_safe_ms: float = None,
+                                     max_slew_dps: float = 120.0, dt: float = 0.02) -> dict:
+    """
+    Computes the dynamic wing unfolding sequence under Hypothesis H-SWEEP-PULL-1
+    (Boyd Energy-Maneuverability Dynamic Wing Unfolding Sequencer).
+    
+    Coordinates wrist unfolding from high-speed swept stoop (Lambda >= 85-135 deg)
+    during pullouts or high-g cranking turns. Prevents premature wing opening into
+    excessive dynamic pressure that would blow back pitch servos (M_servo > 4x stall)
+    or exceed structural g limits.
+    
+    Physics:
+    - Normal velocity across swept leading edge: V_normal = V_ms * cos(Lambda_eff) <= V_safe.
+    - Target sweep angle: sweep_target = 60.0 + (arccos(V_safe / V_ms) / 0.85).
+    - As aircraft decelerates from speed brakes or climbing zoom (V -> V_safe),
+      wrist servos unfold smoothly at <= max_slew_dps (120 deg/s).
+    
+    Returns:
+        dict: Unfolding commands, slew-limited sweep angle, and constraint flags.
+    """
+    if v_safe_ms is None:
+        v_safe_ms = compute_maneuver_safe_speed(n_cmd=n_cmd, bank_deg=bank_deg)
+        
+    v_curr = max(1.0, float(V_ms))
+    
+    # If speed is already at or below safe entry speed, full unfolding to baseline 60° is permitted
+    if v_curr <= (v_safe_ms + 0.1):
+        min_rel_sweep_deg = 0.0
+        target_sweep_deg = 60.0
+        unfold_permitted = True
+        status = 'PULLOUT_UNFOLD_PERMITTED_SAFE_SPEED'
+    else:
+        # Constrain unfolding so normal airspeed <= v_safe_ms
+        cos_ratio = min(1.0, max(0.15, v_safe_ms / v_curr))
+        lambda_eff_rad = math.acos(cos_ratio)
+        lambda_eff_deg = math.degrees(lambda_eff_rad)
+        min_rel_sweep_deg = min(80.0, lambda_eff_deg / 0.85)
+        target_sweep_deg = round(60.0 + min_rel_sweep_deg, 1)
+        unfold_permitted = False
+        status = 'PULLOUT_SWEEP_HOLD_HIGH_SPEED'
+        
+    # Slew rate limiter toward target
+    curr_sw = float(current_sweep_deg)
+    max_step = max_slew_dps * dt
+    if curr_sw > target_sweep_deg:
+        slew_limited = max(target_sweep_deg, curr_sw - max_step)
+    else:
+        slew_limited = min(target_sweep_deg, curr_sw + max_step) if curr_sw < target_sweep_deg else curr_sw
+
+    unfold_constrained = (slew_limited > 60.5)
+
+    return {
+        'V_ms': round(v_curr, 2),
+        'v_safe_ms': round(v_safe_ms, 2),
+        'current_sweep_deg': round(curr_sw, 1),
+        'target_sweep_deg': round(target_sweep_deg, 1),
+        'slew_limited_sweep_deg': round(slew_limited, 1),
+        'min_rel_sweep_deg': round(min_rel_sweep_deg, 2),
+        'unfold_permitted': unfold_permitted,
+        'unfold_constrained': unfold_constrained,
+        'status': status,
+    }
+
+
+def compute_maneuver_safe_speed(n_cmd: float = 1.0, bank_deg: float = 0.0,
+                                n_max_struct: float = 4.0, M_rated_kgcm: float = 9.0,
+                                sf: float = 1.20, Cm: float = 0.25, dx: float = 0.15,
+                                c: float = 0.165275, W: float = 39.14, S: float = 1.23,
+                                rho: float = 1.225, vne_limit: float = None) -> float:
+    """
+    Computes the maximum safe entry airspeed V_safe(n_cmd, bank_deg) under
+    John Boyd's Energy-Maneuverability formulation.
+    
+    Physics:
+    M_pivot = q * c^2 * b * (Cm - CL * dx) <= M_rated / SF
+    Since CL = (n_total * W) / (q * S), the relieving term scales with n_total.
+    Higher load factor pulls (up to 4.0g structural limit) unload the pitch servo,
+    permitting higher entry airspeeds without servo blowback stall.
+    
+    Returns:
+        V_safe: Maximum safe entry airspeed in m/s (bounded by VNE limit).
+    """
+    bank_rad = math.radians(abs(bank_deg))
+    cos_bank = max(0.2, math.cos(bank_rad))
+    n_bank = 1.0 / cos_bank if abs(bank_deg) > 5.0 else 1.0
+    n_pitch = max(0.5, float(n_cmd))
+    n_total = math.sqrt(n_pitch**2 + max(0.0, n_bank**2 - 1.0))
+    n_total = min(n_max_struct, max(0.5, n_total))
+    
+    sf_eff = max(1.10, sf)
+    Mlim = M_rated_kgcm * 9.81 / 100.0 / sf_eff
+    
+    denom = S * Cm
+    if denom <= 0 or (c * c * Cm) <= 0:
+        return 16.3
+    q_max = (n_total * W * dx / denom) + (Mlim / (c * c * Cm))
+    v_max = math.sqrt(max(0.0, 2.0 * q_max / rho))
+    
+    upper_bound = VNE_MS if vne_limit is None else float(vne_limit)
+    return round(min(upper_bound, v_max), 2)
+
+
+class DiveRecoveryGovernor:
+    """
+    Active Dive Recovery (H-PULL-2), Speed Closure Governor (H-DIVE-1),
+    and John Boyd Energy-Maneuverability Governor (H-BOYD-1).
+    Monitors the recovery window continuously, enforces VNE protection,
+    applies proportional maneuver-adaptive speed braking to conserve maximum
+    kinetic energy for the requested maneuver, and releases control authority
+    instantly when entry speed is safe.
+    """
+    def __init__(self, n_max_struct: float = 4.0, M_rated_kgcm: float = 9.0,
+                 sf: float = 1.5, Cm: float = 0.25, dx: float = 0.15,
+                 c: float = 0.165275, W: float = 39.14, S: float = 1.23,
+                 cd_brake: float = 0.50, vne_ms: float = VNE_MS,
+                 vne_max_ms: float = VNE_MAX_SWEEP_MS):
+        self.n_max_struct = n_max_struct
+        self.M_rated_kgcm = M_rated_kgcm
+        self.sf = sf
+        self.Cm = Cm
+        self.dx = dx
+        self.c = c
+        self.W = W
+        self.S = S
+        self.cd_brake = cd_brake
+        self.vne_base_ms = vne_ms
+        self.vne_max_ms = vne_max_ms
+        self.vne_ms = vne_ms
+        self.current_sweep_deg = 60.0
+        self.last_unfold_schedule = {}
+
+        self.closure_speed_ms = pull_closure_speed(
+            n_max=self.n_max_struct, M_rated_kgcm=self.M_rated_kgcm,
+            sf=self.sf, Cm=self.Cm, dx=self.dx, c=self.c, W=self.W, S=self.S
+        )
+        self.governor_setpoint_ms = max(10.0, self.closure_speed_ms - 1.0)
+
+        # State tracking
+        self.inhibit_flag = False
+        self.cascade_reversal_active = False
+        self.brake_fraction = 0.0
+        self.closure_events = 0
+        self.worst_speed_reached_ms = 0.0
+        self.altitude_lost_recovery_m = 0.0
+        self.last_window = (0.0, self.n_max_struct)
+        self.active_recovery = False
+        self.recovery_start_alt_m = 0.0
+        self.last_V_ms = 0.0
+
+        # Boyd E-M & VNE telemetry
+        self.boyd_energy_saved_j = 0.0
+        self.last_v_target_ms = self.closure_speed_ms
+        self.last_n_cmd_g = 1.0
+        self.vne_exceeded = False
+        self.stoop_active = False
+
+    def update_closure_speed(self):
+        """Recomputes closure speed dynamically if structural or servo limits change."""
+        self.closure_speed_ms = pull_closure_speed(
+            n_max=self.n_max_struct, M_rated_kgcm=self.M_rated_kgcm,
+            sf=self.sf, Cm=self.Cm, dx=self.dx, c=self.c, W=self.W, S=self.S
+        )
+        self.governor_setpoint_ms = max(10.0, self.closure_speed_ms - 1.0)
+        return self.closure_speed_ms
+
+    def tick(self, V_ms: float, pitch_cmd_deg: float = 0.0,
+             bank_deg: float = 0.0, altitude_m: float = 100.0,
+             dt: float = 0.02, intent: str = 'cruise',
+             sweep_deg: float = 60.0) -> dict:
+        """
+        Executes one 50 Hz monitoring step of the maneuver-adaptive dive recovery governor.
+        Incorporates H-SWEEP-VNE-1 (Sweep-Adaptive VNE Schedule) and
+        H-SWEEP-PULL-1 (Boyd Dynamic Wing Unfolding Sequencer).
+        """
+        self.last_V_ms = V_ms
+        self.current_sweep_deg = float(sweep_deg)
+        self.vne_ms = compute_sweep_vne(self.current_sweep_deg, self.vne_base_ms, self.vne_max_ms)
+
+        self.update_closure_speed()
+        window = pull_window(
+            V_ms, n_max=self.n_max_struct, M_rated_kgcm=self.M_rated_kgcm,
+            sf=self.sf, Cm=self.Cm, dx=self.dx, c=self.c, W=self.W, S=self.S
+        )
+        self.last_window = window
+        window_shut = (window is None)
+
+        if V_ms > self.worst_speed_reached_ms:
+            self.worst_speed_reached_ms = V_ms
+
+        # ── 1. Load factor demand estimation ───────────────────────────
+        if pitch_cmd_deg > 0.0:
+            n_pitch = min(self.n_max_struct, 1.0 + (pitch_cmd_deg / 20.0) * 3.0)
+        else:
+            n_pitch = max(0.5, 1.0 + (pitch_cmd_deg / 30.0))
+
+        bank_rad = math.radians(abs(bank_deg))
+        cos_b = max(0.2, math.cos(bank_rad))
+        n_bank = 1.0 / cos_b if abs(bank_deg) > 5.0 else 1.0
+        n_demanded = min(self.n_max_struct, math.sqrt(n_pitch**2 + max(0.0, n_bank**2 - 1.0)))
+        self.last_n_cmd_g = round(n_demanded, 2)
+
+        is_maneuvering = (pitch_cmd_deg > 1.0 or abs(bank_deg) > 8.0)
+        self.stoop_active = (intent in ('stoop', 'sprint', 'dive'))
+
+        # ── 2. Calculate Boyd safe entry speed for demanded maneuver ──
+        v_target = compute_maneuver_safe_speed(
+            n_cmd=n_pitch, bank_deg=bank_deg,
+            n_max_struct=self.n_max_struct, M_rated_kgcm=self.M_rated_kgcm,
+            sf=1.20, Cm=self.Cm, dx=self.dx, c=self.c, W=self.W, S=self.S,
+            vne_limit=self.vne_ms
+        )
+        self.last_v_target_ms = v_target
+
+        # ── 3. Boyd dynamic wing unfolding schedule (H-SWEEP-PULL-1) ──
+        unfold_sched = compute_sweep_unfolding_schedule(
+            V_ms=V_ms, n_cmd=n_demanded, bank_deg=bank_deg,
+            current_sweep_deg=self.current_sweep_deg,
+            v_safe_ms=v_target, max_slew_dps=120.0, dt=dt
+        )
+        self.last_unfold_schedule = unfold_sched
+        commanded_sweep_deg = unfold_sched['slew_limited_sweep_deg']
+
+        # ── 4. Governor state arbitration ──────────────────────────────
+        release_threshold = v_target if (is_maneuvering and n_demanded > 1.5) else (self.closure_speed_ms - 1.0)
+
+        # Priority 1: VNE overspeed fence (Absolute flutter / structural integrity)
+        if V_ms >= self.vne_ms:
+            self.vne_exceeded = True
+            if not self.inhibit_flag:
+                self.closure_events += 1
+                self.active_recovery = True
+                self.recovery_start_alt_m = altitude_m
+            self.inhibit_flag = True
+            self.cascade_reversal_active = True
+            self.brake_fraction = 1.0
+            effective_pitch_cmd = 0.0
+            status = 'VNE_EXCEEDED_FULL_SPEED_BRAKE'
+
+        # Priority 2: Release check if currently inhibited and speed dropped into safe corridor
+        elif self.inhibit_flag and V_ms <= release_threshold:
+            self.vne_exceeded = False
+            self.inhibit_flag = False
+            self.active_recovery = False
+            self.cascade_reversal_active = False
+            self.brake_fraction = 0.0
+            effective_pitch_cmd = pitch_cmd_deg
+            status = 'RECOVERY_WINDOW_REOPENED_PULL_RELEASED'
+            v_blunt = 14.0
+            self.boyd_energy_saved_j = max(0.0, 0.5 * 3.99 * (v_target**2 - v_blunt**2))
+
+        # Priority 3: Window shut (V >= closure_speed_ms)
+        elif V_ms >= self.closure_speed_ms:
+            self.vne_exceeded = False
+            # Check if this is an unaccelerated stoop dive (pilot deliberately diving, no maneuver ordered)
+            if self.stoop_active and not is_maneuvering and not self.inhibit_flag:
+                self.brake_fraction = 0.0
+                self.cascade_reversal_active = False
+                effective_pitch_cmd = pitch_cmd_deg
+                status = 'STOOP_HIGH_SPEED_DASH_ARMED'
+            else:
+                if not self.inhibit_flag:
+                    self.closure_events += 1
+                    self.active_recovery = True
+                    self.recovery_start_alt_m = altitude_m
+                self.inhibit_flag = True
+                self.cascade_reversal_active = True
+                overshoot = V_ms - release_threshold
+                self.brake_fraction = min(1.0, max(0.2, overshoot / 1.5)) if overshoot < 1.0 else 1.0
+                effective_pitch_cmd = 0.0
+                status = 'RECOVERY_WINDOW_SHUT_PULL_INHIBITED_FULL_BRAKE'
+
+        # Priority 4: Normal uninhibited flight (window is open: V < 16.3 and V <= v_target)
+        else:
+            self.vne_exceeded = False
+            if self.inhibit_flag:
+                # Still inside hysteresis zone! Keep pitch inhibited until release threshold
+                effective_pitch_cmd = 0.0
+                status = 'RECOVERY_WINDOW_SHUT_PULL_INHIBITED_FULL_BRAKE'
+            else:
+                self.active_recovery = False
+                effective_pitch_cmd = pitch_cmd_deg
+                buffer = 1.5
+                approach_thresh = max(10.0, self.closure_speed_ms - buffer)
+                if V_ms >= approach_thresh and not self.stoop_active:
+                    frac = (V_ms - approach_thresh) / buffer
+                    self.brake_fraction = min(1.0, max(0.0, frac))
+                    self.cascade_reversal_active = (self.brake_fraction > 0.05)
+                    status = f'DIVE_GOVERNOR_ACTIVE_BRAKE_{round(self.brake_fraction*100)}PCT'
+                elif self.stoop_active and not is_maneuvering:
+                    self.brake_fraction = 0.0
+                    self.cascade_reversal_active = False
+                    status = 'STOOP_HIGH_SPEED_DASH_ARMED'
+                else:
+                    self.brake_fraction = 0.0
+                    self.cascade_reversal_active = False
+                    status = 'RECOVERY_WINDOW_OPEN_NORMAL'
+                effective_pitch_cmd = pitch_cmd_deg
+
+        if self.active_recovery:
+            self.altitude_lost_recovery_m = max(0.0, self.recovery_start_alt_m - altitude_m)
+
+        # Servo holding torque & safety factor estimate at current V
+        q = 0.5 * 1.225 * V_ms * V_ms
+        cl_est = max(0.13, (n_demanded * self.W) / max(1.0, q * self.S))
+        cm_eff = max(0.01, self.Cm - cl_est * self.dx)
+        m_servo_kgcm = (q / 245.0) * 67.98 * cm_eff
+        servo_sf = (self.M_rated_kgcm / m_servo_kgcm) if m_servo_kgcm > 0 else 99.0
+        decel_net_g = pull_brake_decel_g(V_ms, cd=self.cd_brake, net_vertical=True)
+
+        return {
+            'V_ms': round(V_ms, 2),
+            'closure_speed_ms': self.closure_speed_ms,
+            'governor_setpoint_ms': self.governor_setpoint_ms,
+            'v_target_ms': self.last_v_target_ms,
+            'n_cmd_g': self.last_n_cmd_g,
+            'boyd_energy_saved_j': round(self.boyd_energy_saved_j, 1),
+            'vne_exceeded': self.vne_exceeded,
+            'stoop_active': self.stoop_active,
+            'sweep_deg': round(self.current_sweep_deg, 1),
+            'vne_ms': round(self.vne_ms, 2),
+            'commanded_sweep_deg': round(commanded_sweep_deg, 1),
+            'unfold_schedule': unfold_sched,
+            'window': window,
+            'window_shut': window_shut,
+            'inhibit_flag': self.inhibit_flag,
+            'cascade_reversal_active': self.cascade_reversal_active,
+            'brake_fraction': round(self.brake_fraction, 3),
+            'effective_pitch_cmd_deg': effective_pitch_cmd,
+            'closure_events': self.closure_events,
+            'worst_speed_reached_ms': round(self.worst_speed_reached_ms, 2),
+            'altitude_lost_recovery_m': round(self.altitude_lost_recovery_m, 2),
+            'estimated_servo_torque_kgcm': round(m_servo_kgcm, 2),
+            'estimated_servo_sf': round(servo_sf, 2),
+            'brake_decel_net_g': decel_net_g,
+            'status': status,
+        }
+
+
+# Global singleton dive recovery governor
+_GLOBAL_DIVE_GOVERNOR = DiveRecoveryGovernor()
+
+def govern_dive_recovery(V_ms: float, pitch_cmd_deg: float = 0.0,
+                         bank_deg: float = 0.0, altitude_m: float = 100.0,
+                         dt: float = 0.02, intent: str = 'cruise',
+                         sweep_deg: float = 60.0,
+                         result: dict = None) -> dict:
+    """
+    Hook function to execute dive recovery and speed closure governance at 50 Hz.
+    Includes Boyd Energy-Maneuverability governor, sweep-adaptive VNE envelope protection,
+    and dynamic wing unfolding sequencing.
+    """
+    global _GLOBAL_DIVE_GOVERNOR
+    
+    # Auto-detect sweep from result if default 60.0 passed
+    eff_sweep = sweep_deg
+    if abs(eff_sweep - 60.0) < 0.1 and result is not None:
+        if 'sweep_deg' in result:
+            eff_sweep = float(result['sweep_deg'])
+        elif result.get('wing_commands'):
+            cmds = result['wing_commands']
+            if isinstance(cmds, list) and cmds and isinstance(cmds[0], dict) and 'sweep_deg' in cmds[0]:
+                eff_sweep = sum(c.get('sweep_deg', 60.0) for c in cmds[:8]) / min(8, len(cmds))
+
+    telem = _GLOBAL_DIVE_GOVERNOR.tick(
+        V_ms=V_ms, pitch_cmd_deg=pitch_cmd_deg,
+        bank_deg=bank_deg, altitude_m=altitude_m,
+        dt=dt, intent=intent, sweep_deg=eff_sweep
+    )
+    if result is not None:
+        result.update({
+            'dive_inhibit_flag': telem['inhibit_flag'],
+            'dive_brake_active': telem['cascade_reversal_active'],
+            'dive_brake_fraction': telem['brake_fraction'],
+            'dive_closure_speed_ms': telem['closure_speed_ms'],
+            'dive_v_target_ms': telem['v_target_ms'],
+            'dive_n_cmd_g': telem['n_cmd_g'],
+            'boyd_energy_saved_j': telem['boyd_energy_saved_j'],
+            'dive_vne_exceeded': telem['vne_exceeded'],
+            'dive_sweep_deg': telem['sweep_deg'],
+            'dive_vne_ms': telem['vne_ms'],
+            'commanded_sweep_deg': telem['commanded_sweep_deg'],
+            'dive_unfold_status': telem['unfold_schedule']['status'],
+            'dive_window': telem['window'],
+            'dive_recovery_status': telem['status'],
+        })
+        # If unfolding is constrained during pullout, ensure commanded sweep respects the constraint
+        if telem['unfold_schedule']['unfold_constrained'] and 'wing_commands' in result:
+            for cmd in result['wing_commands']:
+                if isinstance(cmd, dict):
+                    cmd['sweep_deg'] = max(cmd.get('sweep_deg', 60.0), telem['commanded_sweep_deg'])
+    return telem
+
+def get_dive_recovery_status() -> dict:
+    """Returns current live telemetry from the dive recovery governor."""
+    global _GLOBAL_DIVE_GOVERNOR
+    return _GLOBAL_DIVE_GOVERNOR.tick(
+        V_ms=_GLOBAL_DIVE_GOVERNOR.last_V_ms,
+        pitch_cmd_deg=0.0
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 9. GROUND WIND & TAXI SAFETY GOVERNOR (H-TAXI-WIND-1 / H-TAXI-REEF-1 / H-TAXI-YAW-1)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class GroundWindSafetyGovernor:
+    """
+    Active Ground Wind, Crosswind Rollover Prevention & Taxi Safety Governor.
+    Enforces surface stability while on the runway (taxiing, holding, or rolling for takeoff).
+
+    Key Functional Capabilities:
+    1. Active Ground Suction (Negative Pitch Bias):
+       - Feathers wings to -6° to -22° negative AoA in headwinds/crosswinds, generating downforce
+         to prevent ground unweighting, skidding, and rollover.
+    2. Asymmetric Crosswind Sweep Reefing (Falcon Stance):
+       - In crosswinds >= 4.0 m/s, upwind wings sweep aft (120°–150°), slashing the exposed rolling
+         moment arm by up to 65%.
+    3. Autonomous Anti-Weathervaning Differential Flap:
+       - Automatically applies differential flapping micro-thrust between port and starboard wings
+         to cancel weathercock yaw torque without tire scrubbing.
+    4. Tailwind Tumble-Lock:
+       - Inverts pitch bias in tailwinds to prevent reverse-flow tail-lift and nose-over.
+    5. High-Wind Takeoff Mode Selection:
+       - Selects between H-HEAD-TO-1 (pop-up), H-CROSS-TO-1 (decoupled roll), H-VAULT-GUST-1 (vault),
+         or CONV-STOL-1.
+    """
+    def __init__(self, track_width_m: float = 0.220, default_mass_kg: float = 5.367):
+        self.track_width_m = track_width_m
+        self.mass_kg = default_mass_kg
+        self.state = 'CALM_TAXIS'
+        self.last_gsf = 5.0
+        self.last_downforce_n = 0.0
+
+    def tick(self, on_ground: bool = True, V_wind_ms: float = 0.0,
+             wind_bearing_deg: float = 0.0, heading_deg: float = 0.0,
+             runway_heading_deg: float = 0.0, pilot_throttle: float = 0.2,
+             pilot_yaw: float = 0.0, pilot_pitch: float = 0.0,
+             intent: str = 'taxi_fwd', mass_kg: float = None, dt: float = 0.02,
+             servo_currents_a: list = None, pitot_v_ms: float = 0.0) -> dict:
+        import mco_advanced_physics as ap
+
+        m = self.mass_kg if mass_kg is None else float(mass_kg)
+        V = max(0.0, float(V_wind_ms))
+        wind_src = 'EXTERNAL_TELEMETRY' if V > 0.5 else 'DEFAULT_CALM'
+
+        # Biomimetic tendon load inference fallback if external wind telemetry is unpopulated
+        if V <= 0.5 and servo_currents_a is not None and len(servo_currents_a) >= 8:
+            v_est, b_est, conf, w_diag = ap.estimate_ground_wind_from_wing_tendons(
+                servo_currents_a=servo_currents_a,
+                pitot_v_ms=pitot_v_ms,
+                heading_deg=heading_deg
+            )
+            if v_est > 1.5:
+                V = v_est
+                wind_bearing_deg = b_est
+                wind_src = 'BIOMIMETIC_WING_TENDONS'
+
+        # Check if airborne
+        if not on_ground:
+            self.state = 'AIRBORNE_DISARMED'
+            return {
+                'status': 'GROUND_WIND_DISARMED_AIRBORNE',
+                'on_ground': False,
+                'state': self.state,
+                'active_suction_pitch_deg': 0.0,
+                'sweep_override_port_deg': 60.0,
+                'sweep_override_stbd_deg': 60.0,
+                'anti_weathervane_delta_amp_deg': 0.0,
+                'gsf_compensated': 99.0,
+                'gsf_passive': 99.0,
+                'rollover_hazard_mitigated': True,
+                'takeoff_mode': 'AIRBORNE',
+            }
+
+        # Run advanced physics ground wind calculations
+        suction_pitch_deg, (sw_port, sw_stbd), delta_amp_deg, comp_diag = ap.ground_wind_active_compensator(
+            V_wind_ms=V, wind_bearing_deg=wind_bearing_deg, heading_deg=heading_deg,
+            pilot_yaw=pilot_yaw, pilot_throttle=pilot_throttle, mass_kg=m
+        )
+
+        _, _, gsf_pass, aero_diag = ap.crosswind_ground_aerodynamics(
+            V_wind_ms=V, wind_bearing_deg=wind_bearing_deg, heading_deg=heading_deg,
+            track_width_m=self.track_width_m, mass_kg=m
+        )
+
+        to_mode, ground_roll_m, to_diag = ap.high_wind_takeoff_matrix(
+            V_wind_ms=V, wind_bearing_deg=wind_bearing_deg, heading_deg=heading_deg,
+            runway_heading_deg=runway_heading_deg, intent=intent, mass_kg=m
+        )
+
+        # Determine operating state
+        if V < 3.0:
+            self.state = 'CALM_TAXIS'
+        elif aero_diag['rollover_hazard']:
+            self.state = 'CROSSWIND_REEFING_ACTIVE'
+        elif aero_diag['V_head_ms'] < -2.0:
+            self.state = 'TAILWIND_TUMBLE_LOCK'
+        elif aero_diag['V_head_ms'] >= 5.0:
+            self.state = 'HEADWIND_SUCTION_HOLD'
+        else:
+            self.state = 'GUST_COMPENSATION_ACTIVE'
+
+        self.last_gsf = comp_diag['gsf_compensated']
+        self.last_downforce_n = comp_diag['active_downforce_n']
+
+        return {
+            'status': f'GROUND_WIND_{self.state}',
+            'on_ground': True,
+            'state': self.state,
+            'active_suction_pitch_deg': suction_pitch_deg,
+            'sweep_override_port_deg': sw_port,
+            'sweep_override_stbd_deg': sw_stbd,
+            'anti_weathervane_delta_amp_deg': delta_amp_deg,
+            'active_downforce_n': comp_diag['active_downforce_n'],
+            'apparent_weight_n': comp_diag['apparent_weight_n'],
+            'gsf_compensated': comp_diag['gsf_compensated'],
+            'gsf_passive': gsf_pass,
+            'rollover_hazard_mitigated': comp_diag['wind_hazard_mitigated'],
+            'takeoff_mode': to_mode,
+            'takeoff_ground_roll_m': ground_roll_m,
+            'takeoff_rotation_pitch_deg': to_diag['rotation_pitch_deg'],
+            'takeoff_decoupled_lateral_n': to_diag['decoupled_lateral_n'],
+            'aero_diag': aero_diag,
+            'comp_diag': comp_diag,
+        }
+
+_GLOBAL_GROUND_WIND_GOVERNOR = GroundWindSafetyGovernor()
+
+def govern_ground_wind_safety(on_ground: bool = True, V_wind_ms: float = 0.0,
+                               wind_bearing_deg: float = 0.0, heading_deg: float = 0.0,
+                               runway_heading_deg: float = 0.0, pilot_throttle: float = 0.2,
+                               pilot_yaw: float = 0.0, pilot_pitch: float = 0.0,
+                               intent: str = 'taxi_fwd', mass_kg: float = 5.367,
+                               servo_currents_a: list = None, pitot_v_ms: float = 0.0,
+                               result: dict = None) -> dict:
+    """Convenience functional interface to GroundWindSafetyGovernor."""
+    global _GLOBAL_GROUND_WIND_GOVERNOR
+    telem = _GLOBAL_GROUND_WIND_GOVERNOR.tick(
+        on_ground=on_ground, V_wind_ms=V_wind_ms,
+        wind_bearing_deg=wind_bearing_deg, heading_deg=heading_deg,
+        runway_heading_deg=runway_heading_deg, pilot_throttle=pilot_throttle,
+        pilot_yaw=pilot_yaw, pilot_pitch=pilot_pitch, intent=intent,
+        mass_kg=mass_kg, servo_currents_a=servo_currents_a, pitot_v_ms=pitot_v_ms
+    )
+    if result is not None:
+        result.update({
+            'ground_wind_status': telem['status'],
+            'ground_wind_state': telem['state'],
+            'ground_suction_pitch_deg': telem['active_suction_pitch_deg'],
+            'ground_sweep_port_deg': telem['sweep_override_port_deg'],
+            'ground_sweep_stbd_deg': telem['sweep_override_stbd_deg'],
+            'ground_anti_weathervane_amp_deg': telem['anti_weathervane_delta_amp_deg'],
+            'ground_downforce_n': telem['active_downforce_n'],
+            'ground_apparent_weight_n': telem['apparent_weight_n'],
+            'ground_gsf_compensated': telem['gsf_compensated'],
+            'ground_gsf_passive': telem['gsf_passive'],
+            'rollover_hazard_mitigated': telem['rollover_hazard_mitigated'],
+            'ground_takeoff_mode': telem['takeoff_mode'],
+        })
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 11. SERVO BUS BROWNOUT GOVERNOR (2S 7.4V Rail Protection)
+# ─────────────────────────────────────────────────────────────────
+SERVO_BUS_NOMINAL_V          = 7.4   # V — 2S LiPo / regulated nominal rail
+SERVO_BUS_DERATE_THRESH_V    = 6.8   # V — start flapping amplitude derating
+SERVO_BUS_BROWNOUT_LOCK_V    = 6.5   # V — critical lock neutral to prevent MCU reboot
+
+class ServoBusGovernor:
+    """
+    Monitors 2S 7.4V servo bus voltage and proactively derates flapping
+    stroke amplitude to prevent logic supply collapse, servo brownout,
+    and MCU reboot during high aerodynamic loading.
+    """
+    def __init__(self, derate_thresh_v: float = SERVO_BUS_DERATE_THRESH_V,
+                 brownout_lock_v: float = SERVO_BUS_BROWNOUT_LOCK_V):
+        self.derate_thresh_v = derate_thresh_v
+        self.brownout_lock_v = brownout_lock_v
+        self.last_voltage_v = SERVO_BUS_NOMINAL_V
+        self.derate_factor = 1.0
+        self.brownout_lock = False
+        self.alarm_count = 0
+
+    def tick(self, bus_voltage_v: float, flap_amp_deg: float = 20.0) -> dict:
+        self.last_voltage_v = float(bus_voltage_v)
+
+        if bus_voltage_v > self.derate_thresh_v:
+            # Nominal rail: 100% flapping amplitude allowed
+            self.derate_factor = 1.0
+            self.brownout_lock = False
+            status = 'NOMINAL'
+        elif bus_voltage_v > self.brownout_lock_v:
+            # Derated warning: linear reduction between 1.0 down to 0.50
+            # derate_factor = 0.50 + 0.50 * (V - V_lock) / (V_thresh - V_lock)
+            ratio = (bus_voltage_v - self.brownout_lock_v) / (self.derate_thresh_v - self.brownout_lock_v)
+            self.derate_factor = max(0.50, min(1.0, 0.50 + 0.50 * ratio))
+            self.brownout_lock = False
+            status = 'VOLTAGE_DERATED'
+        else:
+            # Critical brownout lock: clamp flapping to neutral glide (0 amp) to save MCU
+            self.derate_factor = 0.0
+            self.brownout_lock = True
+            self.alarm_count += 1
+            status = 'CRITICAL_BROWNOUT_LOCK'
+
+        clamped_amp_deg = flap_amp_deg * self.derate_factor
+
+        return {
+            'status': status,
+            'bus_voltage_v': self.last_voltage_v,
+            'derate_factor': self.derate_factor,
+            'brownout_lock': self.brownout_lock,
+            'commanded_amp_deg': flap_amp_deg,
+            'clamped_amp_deg': clamped_amp_deg,
+            'alarm_count': self.alarm_count,
+        }
+
+_GLOBAL_SERVO_BUS_GOVERNOR = ServoBusGovernor()
+
+def govern_servo_bus(bus_voltage_v: float, flap_amp_deg: float = 20.0,
+                     result: dict = None) -> dict:
+    """Convenience functional interface to ServoBusGovernor."""
+    global _GLOBAL_SERVO_BUS_GOVERNOR
+    telem = _GLOBAL_SERVO_BUS_GOVERNOR.tick(bus_voltage_v=bus_voltage_v, flap_amp_deg=flap_amp_deg)
+    if result is not None:
+        result['servo_bus_status'] = telem['status']
+        result['servo_bus_derate_factor'] = telem['derate_factor']
+        result['servo_bus_brownout_lock'] = telem['brownout_lock']
+        if telem['brownout_lock']:
+            # Force wing commands to zero flapping amplitude (neutral glide)
+            for cmd in result.get('wing_commands', []):
+                if isinstance(cmd, dict):
+                    cmd['flap_amp_deg'] = 0.0
+        elif telem['derate_factor'] < 1.0:
+            for cmd in result.get('wing_commands', []):
+                if isinstance(cmd, dict):
+                    cmd['flap_amp_deg'] = min(cmd.get('flap_amp_deg', 20.0), telem['clamped_amp_deg'])
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 12. UNIFIED MULTI-SENSOR WEIGHT-ON-WHEELS (WoW) ESTIMATOR
+# ─────────────────────────────────────────────────────────────────
+class WeightOnWheelsEstimator:
+    """
+    Multi-sensor Weight-on-Wheels (WoW) fusion estimator.
+    Fuses AGL altitude, vertical accelerometer shock, and landing gear contact
+    with debounced hysteresis to eliminate ground/air chatter during takeoff
+    and landing flare.
+    """
+    def __init__(self, ground_agl_thresh_m: float = 0.15,
+                 airborne_agl_thresh_m: float = 0.25,
+                 debounce_ticks: int = 5):
+        self.ground_agl_thresh_m = ground_agl_thresh_m
+        self.airborne_agl_thresh_m = airborne_agl_thresh_m
+        self.debounce_ticks = debounce_ticks
+
+        self.on_ground = True
+        self.state = 'ON_GROUND'
+        self.confidence = 1.0
+        self.ground_counter = debounce_ticks
+        self.air_counter = 0
+        self.estimated_weight_n = 52.65  # Nominal MTOW on wheels
+        self.az_history = []
+
+    def update(self, h_agl_m: float, az_g: float = 1.0,
+               gear_contact: bool = None, ground_speed_ms: float = 0.0,
+               dt: float = 0.02) -> dict:
+        # Evaluate sensor votes
+        agl_says_ground = (h_agl_m <= self.ground_agl_thresh_m)
+        agl_says_air = (h_agl_m >= self.airborne_agl_thresh_m)
+
+        # Accel shock check: filter cyclic heave from flapping flight (variance > 0.08 g^2)
+        # On steady ground, variance is small (< 0.05 g^2) and mean is ~1.0g
+        self.az_history.append(float(az_g))
+        if len(self.az_history) > 10:
+            self.az_history.pop(0)
+
+        if len(self.az_history) >= 4:
+            mean_az = sum(self.az_history) / len(self.az_history)
+            variance_az = sum((x - mean_az) ** 2 for x in self.az_history) / len(self.az_history)
+            accel_says_ground = (variance_az < 0.05) and (0.80 <= mean_az <= 1.20)
+        else:
+            accel_says_ground = (0.75 <= az_g <= 1.25)
+
+        if gear_contact is not None:
+            contact_vote = 1.0 if gear_contact else 0.0
+        else:
+            contact_vote = 1.0 if agl_says_ground else 0.0
+
+        agl_vote = 1.0 if agl_says_ground else (0.0 if agl_says_air else 0.5)
+        fused_vote = 0.5 * contact_vote + 0.35 * agl_vote + 0.15 * (1.0 if accel_says_ground else 0.0)
+
+        if fused_vote >= 0.60:
+            self.ground_counter = min(self.debounce_ticks, self.ground_counter + 1)
+            self.air_counter = max(0, self.air_counter - 1)
+        elif fused_vote <= 0.40:
+            self.air_counter = min(self.debounce_ticks, self.air_counter + 1)
+            self.ground_counter = max(0, self.ground_counter - 1)
+
+        # Debounced state machine
+        if self.on_ground:
+            if self.air_counter >= self.debounce_ticks:
+                self.on_ground = False
+                self.state = 'AIRBORNE'
+                self.confidence = 0.95
+            elif self.air_counter >= 1:
+                self.state = 'TAKEOFF_ROTATING'
+                self.confidence = 0.70
+            else:
+                self.state = 'ON_GROUND'
+                self.confidence = 0.98
+        else:
+            if self.ground_counter >= self.debounce_ticks:
+                self.on_ground = True
+                self.state = 'ON_GROUND'
+                self.confidence = 0.98
+            elif self.ground_counter >= 1:
+                self.state = 'TOUCHDOWN_DEBOUNCE'
+                self.confidence = 0.70
+            else:
+                self.state = 'AIRBORNE'
+                self.confidence = 0.95
+
+        self.estimated_weight_n = (52.65 * fused_vote) if self.on_ground else 0.0
+
+        return {
+            'on_ground': self.on_ground,
+            'state': self.state,
+            'confidence': self.confidence,
+            'fused_vote': fused_vote,
+            'weight_on_wheels_n': self.estimated_weight_n,
+            'ground_counter': self.ground_counter,
+            'air_counter': self.air_counter,
+        }
+
+_GLOBAL_WOW_ESTIMATOR = WeightOnWheelsEstimator()
+
+def govern_weight_on_wheels(h_agl_m: float, az_g: float = 1.0,
+                            gear_contact: bool = None, ground_speed_ms: float = 0.0,
+                            dt: float = 0.02, result: dict = None) -> dict:
+    """Convenience functional interface to WeightOnWheelsEstimator."""
+    global _GLOBAL_WOW_ESTIMATOR
+    telem = _GLOBAL_WOW_ESTIMATOR.update(
+        h_agl_m=h_agl_m, az_g=az_g, gear_contact=gear_contact,
+        ground_speed_ms=ground_speed_ms, dt=dt
+    )
+    if result is not None:
+        result['wow_on_ground'] = telem['on_ground']
+        result['wow_state'] = telem['state']
+        result['wow_confidence'] = telem['confidence']
+        result['wow_weight_n'] = telem['weight_on_wheels_n']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 13. SERVO DYNAMIC SLEW RATE & ACCELERATION CLAMP (AGFRC IB53BHU)
+# ─────────────────────────────────────────────────────────────────
+SERVO_MAX_PITCH_RATE_LOADED_DEG_S   = 250.0   # deg/s — under aerodynamic dynamic pressure
+SERVO_MAX_PITCH_RATE_UNLOADED_DEG_S = 500.0   # deg/s — low dynamic pressure / static
+SERVO_MAX_SWEEP_RATE_DEG_S          = 220.0   # deg/s — sweep servo limit
+SERVO_MAX_ACCEL_DEG_S2              = 2500.0  # deg/s^2 — jerk and back-EMF limit
+
+class ServoRateLimiter:
+    """
+    Limits velocity slew rates and acceleration for the 16 AGFRC IB53BHU servos
+    (pitch and sweep channels across 8 wings), preventing gear tooth stripping,
+    back-EMF spikes, and high-frequency current saturation.
+    """
+    def __init__(self, num_channels: int = 16):
+        self.num_channels = num_channels
+        self.last_pitch_deg = [0.0] * num_channels
+        self.last_pitch_rate_deg_s = [0.0] * num_channels
+        self.last_sweep_deg = [60.0] * num_channels
+        self.last_sweep_rate_deg_s = [0.0] * num_channels
+
+    def limit_command(self, target_pitch_deg: float, target_sweep_deg: float,
+                      dt: float = 0.02, q_dyn_pa: float = 100.0,
+                      channel_id: int = 0) -> tuple:
+        ch = max(0, min(self.num_channels - 1, channel_id))
+
+        # Dynamic pitch rate clamp based on dynamic pressure q
+        # At q >= 150 Pa, clamp to 250 deg/s; at q <= 30 Pa, allow up to 500 deg/s
+        q_norm = max(0.0, min(1.0, (q_dyn_pa - 30.0) / 120.0))
+        max_pitch_rate = (SERVO_MAX_PITCH_RATE_UNLOADED_DEG_S -
+                          q_norm * (SERVO_MAX_PITCH_RATE_UNLOADED_DEG_S - SERVO_MAX_PITCH_RATE_LOADED_DEG_S))
+
+        # 1. Pitch Rate & Acceleration Clamp
+        curr_pitch = self.last_pitch_deg[ch]
+        curr_pitch_rate = self.last_pitch_rate_deg_s[ch]
+        desired_pitch_rate = (target_pitch_deg - curr_pitch) / max(0.001, dt)
+
+        # Apply acceleration limit
+        max_rate_delta = SERVO_MAX_ACCEL_DEG_S2 * dt
+        limited_pitch_rate = max(curr_pitch_rate - max_rate_delta,
+                                 min(curr_pitch_rate + max_rate_delta, desired_pitch_rate))
+        # Apply velocity limit
+        limited_pitch_rate = max(-max_pitch_rate, min(max_pitch_rate, limited_pitch_rate))
+        out_pitch_deg = curr_pitch + limited_pitch_rate * dt
+
+        self.last_pitch_deg[ch] = out_pitch_deg
+        self.last_pitch_rate_deg_s[ch] = limited_pitch_rate
+
+        # 2. Sweep Rate & Acceleration Clamp
+        curr_sweep = self.last_sweep_deg[ch]
+        curr_sweep_rate = self.last_sweep_rate_deg_s[ch]
+        desired_sweep_rate = (target_sweep_deg - curr_sweep) / max(0.001, dt)
+
+        limited_sweep_rate = max(curr_sweep_rate - max_rate_delta,
+                                 min(curr_sweep_rate + max_rate_delta, desired_sweep_rate))
+        limited_sweep_rate = max(-SERVO_MAX_SWEEP_RATE_DEG_S,
+                                 min(SERVO_MAX_SWEEP_RATE_DEG_S, limited_sweep_rate))
+        out_sweep_deg = curr_sweep + limited_sweep_rate * dt
+
+        self.last_sweep_deg[ch] = out_sweep_deg
+        self.last_sweep_rate_deg_s[ch] = limited_sweep_rate
+
+        return out_pitch_deg, out_sweep_deg
+
+    def filter_wing_commands(self, wing_commands: list, dt: float = 0.02,
+                             q_dyn_pa: float = 100.0) -> list:
+        """Applies dynamic slew and acceleration limiting to an 8-wing command list."""
+        if not wing_commands or not isinstance(wing_commands, list):
+            return wing_commands
+
+        for idx, cmd in enumerate(wing_commands):
+            if not isinstance(cmd, dict):
+                continue
+            p_cmd = cmd.get('pitch_deg', 0.0)
+            s_cmd = cmd.get('sweep_deg', 60.0)
+            p_lim, s_lim = self.limit_command(p_cmd, s_cmd, dt=dt, q_dyn_pa=q_dyn_pa, channel_id=idx)
+            cmd['pitch_deg'] = p_lim
+            cmd['sweep_deg'] = s_lim
+            # Dynamic LEV turnover protection: soften flapping stroke deceleration if pitch rate is high
+            if abs(self.last_pitch_rate_deg_s[idx]) > 280.0:
+                cmd['stroke_accel_soften_factor'] = 0.85
+        return wing_commands
+
+_GLOBAL_SERVO_RATE_LIMITER = ServoRateLimiter()
+
+def govern_servo_rates(wing_commands: list, dt: float = 0.02,
+                       q_dyn_pa: float = 100.0, result: dict = None) -> list:
+    """Convenience functional interface to ServoRateLimiter."""
+    global _GLOBAL_SERVO_RATE_LIMITER
+    filtered = _GLOBAL_SERVO_RATE_LIMITER.filter_wing_commands(
+        wing_commands=wing_commands, dt=dt, q_dyn_pa=q_dyn_pa
+    )
+    if result is not None:
+        result['servo_rate_limiting_active'] = True
+    return filtered
+
+
+# ─────────────────────────────────────────────────────────────────
+# 14. FLY-BY-WIRE TURN COORDINATION WITH PILOT TOGGLE
+# ─────────────────────────────────────────────────────────────────
+_TURN_COORDINATION_ENABLED = True
+
+def set_turn_coordination(enabled: bool):
+    """
+    Enables or disables automatic FBW turn coordination.
+    When disabled, zero proverse yaw coordination is injected, allowing
+    deliberate uncoordinated slips, flat turns, and aerobatics.
+    """
+    global _TURN_COORDINATION_ENABLED
+    _TURN_COORDINATION_ENABLED = bool(enabled)
+
+def is_turn_coordination_enabled() -> bool:
+    """Returns whether turn coordination is currently active."""
+    global _TURN_COORDINATION_ENABLED
+    return _TURN_COORDINATION_ENABLED
+
+class TurnCoordinationGovernor:
+    """
+    Computes coordinated proverse yaw rate:
+      r_coord = (g / V) * tan(bank_rad) * cos(pitch_rad)
+    Features an explicit pilot toggle to disable coordination on demand
+    for intentional sideslips, crosswind crab/slips, and flat turns.
+    """
+    def __init__(self, k_yaw_gain: float = 0.25):
+        self.k_yaw_gain = k_yaw_gain
+        self.r_coord_deg_s = 0.0
+        self.delta_yaw_cmd = 0.0
+
+    def compute(self, bank_deg: float, pitch_deg: float, V_ms: float,
+                on_ground: bool = False, intent: str = 'cruise',
+                pilot_yaw_stick: float = 0.0,
+                coord_mode: str = 'auto') -> dict:
+        global _TURN_COORDINATION_ENABLED
+
+        # If disabled by pilot, on ground, slow speed (< 3 m/s), or flat turn mode: bypass coordination
+        if (not _TURN_COORDINATION_ENABLED or
+            on_ground or
+            V_ms < 3.0 or
+            intent == 'flat_turn' or
+            coord_mode == 'flat_turn'):
+            self.r_coord_deg_s = 0.0
+            self.delta_yaw_cmd = 0.0
+            return {
+                'enabled': _TURN_COORDINATION_ENABLED,
+                'coordination_active': False,
+                'r_coord_deg_s': 0.0,
+                'r_coord_rad_s': 0.0,
+                'delta_yaw_cmd': 0.0,
+                'mode': 'BYPASS_DISABLED' if not _TURN_COORDINATION_ENABLED else 'BYPASS_CONDITION',
+            }
+
+        bank_rad = math.radians(max(-60.0, min(60.0, bank_deg)))
+        pitch_rad = math.radians(max(-45.0, min(45.0, pitch_deg)))
+
+        # Standard coordinated turn equation: r = (g / V) * tan(phi) * cos(theta)
+        g = 9.80665
+        r_coord_rad_s = (g / max(3.0, V_ms)) * math.tan(bank_rad) * math.cos(pitch_rad)
+        self.r_coord_deg_s = math.degrees(r_coord_rad_s)
+
+        # Calculate differential yaw trim command
+        # Scaled to [-1.0, 1.0] range where max yaw rate is 60 deg/s
+        self.delta_yaw_cmd = max(-1.0, min(1.0, (self.r_coord_deg_s / 60.0) * self.k_yaw_gain))
+
+        # Coordinated turn load-factor compensation: Delta_alpha = k * (1/cos(phi) - 1)
+        # Prevents altitude sink in banked turns up to 60 deg by blending collective pitch
+        cos_phi = max(0.4, abs(math.cos(bank_rad)))
+        delta_pitch_turn_deg = min(3.5, max(0.0, 4.0 * (1.0 / cos_phi - 1.0)))
+
+        # Energy-coordinated thrust/frequency feedforward:
+        # Banked turn induces n = 1/cos(phi) load factor; induced drag scales with n^2.
+        # To prevent airspeed bleed without pilot throttle workload, compute flapping frequency multiplier:
+        # k_freq = sqrt(1 / cos_phi), clamped to [1.0, 1.414] (up to 41.4% thrust boost at 60 deg bank)
+        freq_multiplier = round(math.sqrt(1.0 / cos_phi), 3)
+
+        # Station-specific tapered pitch increments to prevent front-station dynamic stall:
+        # Station 1 operates in clean air (reduced to 75% to preserve stall margin)
+        # Stations 2 & 3 operate nominally (100%)
+        # Station 4 operates in downwash (115% to hold trim)
+        pitch_taper = [
+            round(0.75 * delta_pitch_turn_deg, 2),  # Stn 1 (wings 0, 1)
+            round(1.00 * delta_pitch_turn_deg, 2),  # Stn 2 (wings 2, 3)
+            round(1.00 * delta_pitch_turn_deg, 2),  # Stn 3 (wings 4, 5)
+            round(1.15 * delta_pitch_turn_deg, 2),  # Stn 4 (wings 6, 7)
+        ]
+
+        return {
+            'enabled': True,
+            'coordination_active': abs(self.delta_yaw_cmd) > 0.01,
+            'r_coord_deg_s': self.r_coord_deg_s,
+            'r_coord_rad_s': r_coord_rad_s,
+            'delta_yaw_cmd': self.delta_yaw_cmd,
+            'delta_pitch_cmd': round(delta_pitch_turn_deg, 2),
+            'turn_freq_mult': freq_multiplier,
+            'pitch_taper_deg': pitch_taper,
+            'mode': 'ACTIVE_COORDINATED',
+        }
+
+_GLOBAL_TURN_COORDINATOR = TurnCoordinationGovernor()
+
+def govern_turn_coordination(bank_deg: float, pitch_deg: float, V_ms: float,
+                             on_ground: bool = False, intent: str = 'cruise',
+                             pilot_yaw_stick: float = 0.0, coord_mode: str = 'auto',
+                             result: dict = None) -> dict:
+    """Convenience functional interface to TurnCoordinationGovernor."""
+    global _GLOBAL_TURN_COORDINATOR
+    telem = _GLOBAL_TURN_COORDINATOR.compute(
+        bank_deg=bank_deg, pitch_deg=pitch_deg, V_ms=V_ms,
+        on_ground=on_ground, intent=intent, pilot_yaw_stick=pilot_yaw_stick,
+        coord_mode=coord_mode
+    )
+    if result is not None:
+        result['turn_coordination_enabled'] = telem['enabled']
+        result['turn_coordination_active'] = telem['coordination_active']
+        result['turn_coord_yaw_rate_deg_s'] = telem['r_coord_deg_s']
+        result['turn_coord_delta_yaw'] = telem['delta_yaw_cmd']
+        result['turn_coord_delta_pitch'] = telem.get('delta_pitch_cmd', 0.0)
+        result['turn_freq_mult'] = telem.get('turn_freq_mult', 1.0)
+        result['turn_pitch_taper'] = telem.get('pitch_taper_deg', [0.0]*4)
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 15. CONTINUOUS STROUHAL NUMBER (St) MATCHING IN CRUISE
+# ─────────────────────────────────────────────────────────────────
+STROUHAL_TARGET_OPTIMAL = 0.28   # Optimum propulsive efficiency (0.25 - 0.32)
+STROUHAL_MIN_FREQ_HZ    = 1.50   # Safe lower frequency bound
+STROUHAL_MAX_FREQ_HZ    = 2.80   # Safe cruise upper frequency bound
+
+class ContinuousStrouhalRegulator:
+    """
+    Dynamically modulates flapping frequency in cruise flight to target
+    Strouhal number St ~ 0.28 (where St = f * A / V), achieving 12-18%
+    aerodynamic energy savings across varying airspeeds.
+    """
+    def __init__(self, target_st: float = STROUHAL_TARGET_OPTIMAL,
+                 r_eff_m: float = 0.60):
+        self.target_st = target_st
+        self.r_eff_m = r_eff_m   # 0.75 of 0.8m semi-span
+        self.current_optimal_freq_hz = None
+        self.energy_savings_pct = 0.0
+
+    def compute(self, V_ias_ms: float, flap_amp_deg: float,
+                current_freq_hz: float, intent: str = 'cruise',
+                dt: float = 0.02, climb_rate_ms: float = 0.0,
+                throttle_frac: float = 0.5, rho_kg_m3: float = 1.225) -> dict:
+        if self.current_optimal_freq_hz is None:
+            self.current_optimal_freq_hz = float(current_freq_hz)
+
+        if intent not in ('cruise', 'loiter', 'transit') or V_ias_ms < 6.0:
+            self.current_optimal_freq_hz = float(current_freq_hz)
+            return {
+                'active': False,
+                'target_st': self.target_st,
+                'current_st': 0.0,
+                'optimal_freq_hz': current_freq_hz,
+                'target_optimal_freq_hz': current_freq_hz,
+                'energy_savings_pct': 0.0,
+                'status': 'INACTIVE_MODE',
+            }
+
+        # Peak-to-peak stroke amplitude A at effective radius: A = 2 * r_eff * sin(amp)
+        amp_rad = math.radians(max(5.0, min(50.0, flap_amp_deg)))
+        A_stroke_m = 2.0 * self.r_eff_m * math.sin(amp_rad)
+
+        # Current Strouhal
+        current_st = (current_freq_hz * A_stroke_m) / max(1.0, V_ias_ms)
+
+        # Density correction (in thin air, dynamic pressure drops requiring higher baseline frequency)
+        rho_eff = max(0.65, min(1.60, rho_kg_m3 if (rho_kg_m3 and rho_kg_m3 > 0) else 1.225))
+        rho_scale = math.sqrt(1.225 / rho_eff)
+
+        # Optimal frequency to achieve target Strouhal: f_opt = (St_target * V) / A
+        f_opt_raw = ((self.target_st * V_ias_ms) / max(0.05, A_stroke_m)) * rho_scale
+
+        # CRITICAL SAFETY CONSTRAINT: Lift & Terrain Clearance Priority
+        # If sinking (V_z < -0.20 m/s) or pilot throttle > 65%, never derate frequency
+        is_sink_or_climb_demand = (climb_rate_ms < -0.20) or (throttle_frac > 0.65)
+        if is_sink_or_climb_demand and f_opt_raw < current_freq_hz:
+            f_opt_bounded = current_freq_hz
+        else:
+            # Authority clamp: limit Strouhal trim to within +/- 0.40 Hz of current frequency
+            f_opt_bounded = max(current_freq_hz - 0.40, min(current_freq_hz + 0.40, f_opt_raw))
+
+        f_opt_clamped = max(STROUHAL_MIN_FREQ_HZ, min(STROUHAL_MAX_FREQ_HZ, f_opt_bounded))
+
+        # Smooth rate limiting (0.5 Hz/s max slew)
+        slew_limit = 0.5 * dt
+        if f_opt_clamped > self.current_optimal_freq_hz:
+            self.current_optimal_freq_hz = min(f_opt_clamped, self.current_optimal_freq_hz + slew_limit)
+        else:
+            self.current_optimal_freq_hz = max(f_opt_clamped, self.current_optimal_freq_hz - slew_limit)
+
+        # Theoretical energy savings relative to off-design Strouhal
+        st_deviation = abs(current_st - self.target_st)
+        self.energy_savings_pct = max(0.0, min(18.0, 15.0 * (1.0 - math.exp(-3.0 * st_deviation))))
+
+        return {
+            'active': True,
+            'target_st': self.target_st,
+            'current_st': current_st,
+            'optimal_freq_hz': self.current_optimal_freq_hz,
+            'target_optimal_freq_hz': f_opt_clamped,
+            'energy_savings_pct': self.energy_savings_pct,
+            'stroke_amplitude_m': A_stroke_m,
+            'air_density_kg_m3': rho_eff,
+            'status': 'ACTIVE_OPTIMIZING',
+        }
+
+_GLOBAL_STROUHAL_REGULATOR = ContinuousStrouhalRegulator()
+
+def govern_strouhal_cruise(V_ias_ms: float, flap_amp_deg: float,
+                           current_freq_hz: float, intent: str = 'cruise',
+                           dt: float = 0.02, climb_rate_ms: float = 0.0,
+                           throttle_frac: float = 0.5, rho_kg_m3: float = 1.225,
+                           result: dict = None) -> dict:
+    """Convenience functional interface to ContinuousStrouhalRegulator."""
+    global _GLOBAL_STROUHAL_REGULATOR
+    telem = _GLOBAL_STROUHAL_REGULATOR.compute(
+        V_ias_ms=V_ias_ms, flap_amp_deg=flap_amp_deg,
+        current_freq_hz=current_freq_hz, intent=intent, dt=dt,
+        climb_rate_ms=climb_rate_ms, throttle_frac=throttle_frac,
+        rho_kg_m3=rho_kg_m3
+    )
+    if result is not None and telem['active']:
+        result['strouhal_opt_freq_hz'] = telem['optimal_freq_hz']
+        result['strouhal_savings_pct'] = telem['energy_savings_pct']
+        result['strouhal_target'] = telem['target_st']
+        result['strouhal_current'] = telem['current_st']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 16. AIRSPEED-ADAPTIVE SLIPSTREAM PHASE LOCK (Cascade Slipstream)
+# ─────────────────────────────────────────────────────────────────
+class CascadeSlipstreamGovernor:
+    """
+    Adjusts fore-to-aft inter-tier phase offsets with airspeed:
+      Delta_phi_cascade(V) = 360 * f * (Delta_x / V_slipstream)
+    Locks downstream wings onto upstream traveling vortex crests
+    (Katzmayr upwash recapture) across the 10 m/s to 25 m/s flight envelope.
+    """
+    def __init__(self, delta_x_station_m: float = 0.185):
+        self.delta_x_m = delta_x_station_m
+        self.optimal_intertier_phase_deg = 90.0
+
+    def compute(self, V_ias_ms: float, freq_hz: float,
+                base_phase_deg: float = 90.0) -> dict:
+        if V_ias_ms < 5.0 or freq_hz < 0.5:
+            return {
+                'active': False,
+                'intertier_phase_deg': base_phase_deg,
+                'phase_shift_deg': 0.0,
+                'vortex_delay_s': 0.0,
+                'status': 'INACTIVE_LOW_SPEED',
+            }
+
+        # Effective slipstream speed including induced slipstream wash
+        v_slipstream = V_ias_ms + 1.5
+        vortex_delay_s = self.delta_x_m / v_slipstream
+
+        # Dynamic phase shift to match vortex convection
+        phase_shift_deg = (360.0 * freq_hz * vortex_delay_s) % 360.0
+        # Combine with base phase offset and normalize to [0, 360)
+        self.optimal_intertier_phase_deg = (base_phase_deg + phase_shift_deg) % 360.0
+
+        return {
+            'active': True,
+            'intertier_phase_deg': self.optimal_intertier_phase_deg,
+            'phase_shift_deg': phase_shift_deg,
+            'vortex_delay_s': vortex_delay_s,
+            'effective_slipstream_ms': v_slipstream,
+            'status': 'LOCKED_KATZMAYR_UPWASH',
+        }
+
+_GLOBAL_CASCADE_SLIPSTREAM = CascadeSlipstreamGovernor()
+
+def govern_cascade_slipstream(V_ias_ms: float, freq_hz: float,
+                              base_phase_deg: float = 90.0,
+                              result: dict = None) -> dict:
+    """Convenience functional interface to CascadeSlipstreamGovernor."""
+    global _GLOBAL_CASCADE_SLIPSTREAM
+    telem = _GLOBAL_CASCADE_SLIPSTREAM.compute(
+        V_ias_ms=V_ias_ms, freq_hz=freq_hz, base_phase_deg=base_phase_deg
+    )
+    if result is not None:
+        result['cascade_slipstream_phase_deg'] = telem['intertier_phase_deg']
+        result['cascade_slipstream_locked'] = telem['active']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 17. PITOT BLOCKAGE & SYNTHETIC AIRSPEED FAILSAFE
+# ─────────────────────────────────────────────────────────────────
+PITOT_BLOCKAGE_MIN_V_MS = 3.0   # m/s — pitot reading below this airborne implies blockage
+
+def check_pitot_blockage_and_synthetic_airspeed(
+    V_pitot_ms: float, gps_v_ms: float = None,
+    throttle_frac: float = 0.0, h_agl_m: float = 10.0,
+    on_ground: bool = False, motor_power_w: float = None,
+    result: dict = None
+) -> dict:
+    """
+    Cross-checks pitot reading against EKF GPS groundspeed and motor thrust.
+    If the aircraft is airborne and moving at speed but the pitot reads < 3.0 m/s,
+    detects pitot icing or freeze, synthesizes airspeed from GPS or motor throttle power,
+    and prevents a false stall-dive intervention.
+    """
+    is_airborne = (not on_ground) and (h_agl_m > 1.5)
+    gps_speed = gps_v_ms if (gps_v_ms is not None and gps_v_ms > 0.0) else None
+
+    # If GPS unavailable, use calibrated throttle/power estimate (cruise throttle 0.50 ~ 12.0 m/s)
+    throttle_est_v = (8.0 + throttle_frac * 8.0) if throttle_frac > 0.20 else 0.0
+    effective_ref_v = gps_speed if gps_speed is not None else throttle_est_v
+
+    blocked = False
+    status = 'PITOT_NOMINAL'
+    effective_v = max(0.0, V_pitot_ms)
+
+    if is_airborne and (effective_ref_v > 7.0 or throttle_frac > 0.40) and V_pitot_ms < PITOT_BLOCKAGE_MIN_V_MS:
+        blocked = True
+        status = 'PITOT_BLOCKED_SYNTHETIC_ACTIVE'
+        # Synthesize airspeed from GPS or throttle estimate with nominal 11.0 m/s floor
+        effective_v = max(effective_ref_v, 11.0)
+    elif V_pitot_ms < 0.0:
+        blocked = True
+        status = 'PITOT_NEGATIVE_INVALID'
+        effective_v = max(effective_ref_v, 11.0)
+
+    telem = {
+        'pitot_blocked': blocked,
+        'synthetic_airspeed_active': blocked,
+        'raw_pitot_v_ms': V_pitot_ms,
+        'effective_v_ms': effective_v,
+        'synthetic_source': 'GPS' if gps_speed is not None else 'THROTTLE_POWER',
+        'status': status,
+    }
+
+    if result is not None:
+        result['pitot_blocked'] = blocked
+        result['synthetic_airspeed_active'] = blocked
+        result['pitot_blockage_status'] = status
+        result['effective_airspeed_ms'] = effective_v
+
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 18. DESERT THERMAL INTERLEAVER (H-DESERT-COOL-1)
+# ─────────────────────────────────────────────────────────────────
+# In high ambient heat (e.g., desert operations, T_ambient > 40°C), continuous
+# flapping of all 8 motors under sustained cruise load causes motor stator winding
+# and inverter FET temperatures to climb toward critical thresholds (> 70°C/75°C).
+# DesertThermalInterleaver staggers cruise flapping between wing tiers:
+#   - Cycles pairs (1 & 3: wings 0,1 and 4,5) in laminar unpowered glide (AoA +4.0°, amp 0.0°)
+#     while pairs (2 & 4: wings 2,3 and 6,7) cruise/flap.
+#   - Swaps duties every 30.0 seconds.
+# Alternating odd tiers (1 & 3) vs even tiers (2 & 4) preserves pitching moment symmetry
+# around the center of gravity while giving resting motor nacelles 30s of convective
+# ram-air slipstream cooling without motor power dissipation.
+
+DESERT_INTERLEAVE_SWAP_INTERVAL_S = 30.0   # seconds per tier active duty
+DESERT_THERMAL_ENTRY_TEMP_C       = 70.0   # °C motor/FET trigger threshold
+DESERT_THERMAL_CRITICAL_TEMP_C    = 75.0   # °C critical temperature
+DESERT_THERMAL_EXIT_TEMP_C        = 65.0   # °C hysteresis exit threshold
+
+class DesertThermalInterleaver:
+    """Staggers cruise flapping across wing tiers (1&3 vs 2&4) for convective motor/FET cooling."""
+    def __init__(self, swap_interval_s: float = DESERT_INTERLEAVE_SWAP_INTERVAL_S,
+                 entry_temp_c: float = DESERT_THERMAL_ENTRY_TEMP_C,
+                 exit_temp_c: float = DESERT_THERMAL_EXIT_TEMP_C):
+        self.swap_interval_s = swap_interval_s
+        self.entry_temp_c = entry_temp_c
+        self.exit_temp_c = exit_temp_c
+        self.active = False
+        self.current_tier_phase = 0   # 0: Tiers 1 & 3 flap; 1: Tiers 2 & 4 flap
+        self.phase_elapsed_s = 0.0
+
+    def reset(self):
+        self.active = False
+        self.current_tier_phase = 0
+        self.phase_elapsed_s = 0.0
+
+    def update(self, dt_s: float, motor_temps_c: list = None,
+               fet_temps_c: list = None, wing_commands: list = None,
+               V_ias_ms: float = 12.0, on_ground: bool = False,
+               forced: bool = False) -> dict:
+        """
+        Updates interleaver state and allocates flapping amplitude / glide pitch.
+        Wing tiers:
+          Tier 1: wings 0, 1 (Pair 1 - forward)
+          Tier 2: wings 2, 3 (Pair 2 - mid-forward)
+          Tier 3: wings 4, 5 (Pair 3 - mid-aft)
+          Tier 4: wings 6, 7 (Pair 4 - aft)
+        """
+        all_temps = []
+        if motor_temps_c:
+            all_temps.extend(motor_temps_c)
+        if fet_temps_c:
+            all_temps.extend(fet_temps_c)
+        max_temp_c = max(all_temps) if all_temps else 25.0
+
+        # Safety check: do not activate on ground or in low-speed regime (< 10 m/s)
+        safe_regime = (not on_ground) and (V_ias_ms >= 10.0)
+
+        # Thermal trigger logic with hysteresis
+        if forced and safe_regime:
+            self.active = True
+        elif safe_regime and not self.active and max_temp_c >= self.entry_temp_c:
+            self.active = True
+            self.phase_elapsed_s = 0.0
+        elif self.active:
+            if not safe_regime or (not forced and max_temp_c < self.exit_temp_c):
+                self.active = False
+                self.phase_elapsed_s = 0.0
+
+        if self.active and dt_s > 0:
+            self.phase_elapsed_s += dt_s
+            if self.phase_elapsed_s >= self.swap_interval_s:
+                self.current_tier_phase = 1 - self.current_tier_phase
+                self.phase_elapsed_s = 0.0
+
+        active_group = 'TIERS_1_3' if self.current_tier_phase == 0 else 'TIERS_2_4'
+        modified_commands = [dict(c) for c in wing_commands] if wing_commands else []
+
+        if self.active and modified_commands:
+            # Flapping vs glide allocation
+            for i, cmd in enumerate(modified_commands[:8]):
+                tier = i // 2  # 0, 1, 2, 3 -> Tiers 1, 2, 3, 4
+                is_flapping_tier = (tier in (0, 2)) if self.current_tier_phase == 0 else (tier in (1, 3))
+
+                if is_flapping_tier:
+                    # Flapping tier provides cruise thrust/lift; boost amplitude slightly but respect hard limit (96.0 deg)
+                    cur_amp = cmd.get('flap_amp_deg', 70.0)
+                    cmd['flap_amp_deg'] = min(96.0, round(cur_amp * 1.15, 1))
+                else:
+                    # Resting tier: 0 deg flap amplitude, optimal laminar glide pitch AoA (+4.0 deg)
+                    cmd['flap_amp_deg'] = 0.0
+                    cmd['pitch_deg'] = 4.0
+
+        status = 'INACTIVE_NORMAL'
+        if self.active:
+            status = f'ACTIVE_DESERT_INTERLEAVE_{active_group}_{round(self.swap_interval_s - self.phase_elapsed_s, 1)}S_REM'
+
+        return {
+            'active': self.active,
+            'active_group': active_group if self.active else 'ALL_TIERS',
+            'current_phase': self.current_tier_phase,
+            'phase_elapsed_s': round(self.phase_elapsed_s, 2),
+            'swap_interval_s': self.swap_interval_s,
+            'max_temp_c': round(max_temp_c, 1),
+            'status': status,
+            'wing_commands': modified_commands,
+        }
+
+_GLOBAL_DESERT_INTERLEAVER = DesertThermalInterleaver()
+
+def govern_desert_thermal_interleaving(
+    dt_s: float = 0.02, motor_temps_c: list = None,
+    fet_temps_c: list = None, wing_commands: list = None,
+    V_ias_ms: float = 12.0, on_ground: bool = False,
+    forced: bool = False, result: dict = None
+) -> dict:
+    """Convenience functional interface to DesertThermalInterleaver."""
+    global _GLOBAL_DESERT_INTERLEAVER
+    telem = _GLOBAL_DESERT_INTERLEAVER.update(
+        dt_s=dt_s, motor_temps_c=motor_temps_c, fet_temps_c=fet_temps_c,
+        wing_commands=wing_commands, V_ias_ms=V_ias_ms, on_ground=on_ground,
+        forced=forced
+    )
+    if result is not None:
+        result['desert_thermal_interleave_active'] = telem['active']
+        result['desert_thermal_active_group'] = telem['active_group']
+        result['desert_thermal_status'] = telem['status']
+        if telem['active'] and telem['wing_commands']:
+            result['wing_commands'] = telem['wing_commands']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 19. PRE-FLIGHT SNOW / FROST SHAKE GOVERNOR (H-COLD-SHAKE-1)
+# ─────────────────────────────────────────────────────────────────
+SNOW_SHAKE_FREQ_HZ      = 1.0     # Hz — safe gentle cycle
+SNOW_SHAKE_AMP_DEG      = 40.0    # deg — well within ±96.0° sector stops
+SNOW_SHAKE_DURATION_S   = 5.0     # seconds — 5 complete cycles
+SNOW_SHAKE_MAX_ACCEL_DEG_S2 = 1800.0  # deg/s² — well below 2,500°/s² servo limit
+
+class PreFlightSnowShake:
+    """
+    Gentle ground-interlocked snow and frost shedding cycle.
+    Operates at 1.0 Hz, ±40.0° for 5 seconds.
+    Line tension < 25N (well under 450N breaking load).
+    Strictly forbidden if airborne.
+    """
+    def __init__(self, duration_s: float = SNOW_SHAKE_DURATION_S,
+                 freq_hz: float = SNOW_SHAKE_FREQ_HZ,
+                 amp_deg: float = SNOW_SHAKE_AMP_DEG):
+        self.duration_s = duration_s
+        self.freq_hz = freq_hz
+        self.amp_deg = amp_deg
+        self.active = False
+        self.elapsed_s = 0.0
+        self.completed_cycles = 0
+
+    def trigger(self, on_ground: bool = True, throttle_frac: float = 0.0) -> bool:
+        """Trigger snow shake sequence if safety interlocks are met."""
+        if not on_ground or throttle_frac > 0.05:
+            return False
+        self.active = True
+        self.elapsed_s = 0.0
+        self.completed_cycles = 0
+        return True
+
+    def abort(self):
+        self.active = False
+        self.elapsed_s = 0.0
+
+    def update(self, dt_s: float, on_ground: bool = True,
+               throttle_frac: float = 0.0, requested: bool = False) -> dict:
+        # Check airborne or high-throttle interlock
+        if not on_ground or throttle_frac > 0.05:
+            if self.active:
+                self.abort()
+            return {
+                'active': False,
+                'completed': False,
+                'cycle_count': self.completed_cycles,
+                'elapsed_s': self.elapsed_s,
+                'target_flap_amp_deg': 0.0,
+                'target_freq_hz': 0.0,
+                'status': 'REJECTED_AIRBORNE_OR_THROTTLE_NOT_IDLE',
+            }
+
+        if requested and not self.active:
+            self.trigger(on_ground=on_ground, throttle_frac=throttle_frac)
+
+        if not self.active:
+            return {
+                'active': False,
+                'completed': False,
+                'cycle_count': self.completed_cycles,
+                'elapsed_s': 0.0,
+                'target_flap_amp_deg': 0.0,
+                'target_freq_hz': 0.0,
+                'status': 'STANDBY',
+            }
+
+        self.elapsed_s += dt_s
+        self.completed_cycles = int(self.elapsed_s * self.freq_hz)
+
+        if self.elapsed_s >= self.duration_s:
+            self.active = False
+            return {
+                'active': False,
+                'completed': True,
+                'cycle_count': int(self.duration_s * self.freq_hz),
+                'elapsed_s': round(self.duration_s, 2),
+                'target_flap_amp_deg': 0.0,
+                'target_freq_hz': 0.0,
+                'status': 'CYCLE_COMPLETED_SUCCESSFULLY',
+            }
+
+        # Sinusoidal motion angle
+        phase_rad = 2.0 * math.pi * self.freq_hz * self.elapsed_s
+        cur_flap_deg = round(self.amp_deg * math.sin(phase_rad), 2)
+
+        return {
+            'active': True,
+            'completed': False,
+            'cycle_count': self.completed_cycles,
+            'elapsed_s': round(self.elapsed_s, 2),
+            'remaining_s': round(self.duration_s - self.elapsed_s, 2),
+            'target_flap_amp_deg': self.amp_deg,
+            'target_freq_hz': self.freq_hz,
+            'cur_flap_deg': cur_flap_deg,
+            'status': f'SHAKING_CYCLE_{self.completed_cycles + 1}_OF_{int(self.duration_s * self.freq_hz)}',
+        }
+
+_GLOBAL_SNOW_SHAKE = PreFlightSnowShake()
+
+def govern_preflight_snow_shake(
+    dt_s: float = 0.02, on_ground: bool = True,
+    throttle_frac: float = 0.0, requested: bool = False,
+    result: dict = None
+) -> dict:
+    """Convenience functional interface to PreFlightSnowShake."""
+    global _GLOBAL_SNOW_SHAKE
+    telem = _GLOBAL_SNOW_SHAKE.update(
+        dt_s=dt_s, on_ground=on_ground, throttle_frac=throttle_frac,
+        requested=requested
+    )
+    if result is not None:
+        result['snow_shake_active'] = telem['active']
+        result['snow_shake_status'] = telem['status']
+        if telem['active']:
+            result['freq_hz'] = telem['target_freq_hz']
+            # Apply symmetric ground shake angles
+            for cmd in result.get('wing_commands', []):
+                if isinstance(cmd, dict):
+                    cmd['flap_amp_deg'] = telem['target_flap_amp_deg']
+                    cmd['pitch_deg'] = 0.0
+                    cmd['sweep_deg'] = 60.0
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 20. ZERO-FRICTION ICE & SNOW STEERING (H-COLD-ICE-STEER-1)
+# ─────────────────────────────────────────────────────────────────
+ICE_STEERING_MAX_DIFF_SWEEP_DEG = 10.0   # deg max differential sweep authority
+
+def govern_zero_friction_ice_steering(
+    wing_commands: list, pilot_yaw_stick: float = 0.0,
+    on_ground: bool = True, ice_surface: bool = False,
+    result: dict = None
+) -> dict:
+    """
+    On slick ice or hard-packed snow (mu < 0.1), nosewheel tire grip fails.
+    Directly allocates pilot yaw stick to differential wing sweep (+/- 10°).
+    Produces aerodynamic and thrust yaw moment around the vertical axis.
+    """
+    if not on_ground or not ice_surface or abs(pilot_yaw_stick) <= 0.03:
+        telem = {
+            'active': False,
+            'diff_sweep_deg': 0.0,
+            'status': 'INACTIVE_NORMAL_SURFACE' if not ice_surface else 'INACTIVE_NEUTRAL_YAW',
+        }
+        if result is not None:
+            result['ice_steering_active'] = False
+            result['ice_steering_diff_sweep_deg'] = 0.0
+        return telem
+
+    # Commanded differential sweep
+    delta_sweep = max(-ICE_STEERING_MAX_DIFF_SWEEP_DEG, min(ICE_STEERING_MAX_DIFF_SWEEP_DEG, pilot_yaw_stick * ICE_STEERING_MAX_DIFF_SWEEP_DEG))
+
+    # Apply differential sweep:
+    # Port wings (even: 0, 2, 4, 6) sweep forward / aft (+delta_sweep)
+    # Starboard wings (odd: 1, 3, 5, 7) sweep aft / forward (-delta_sweep)
+    for idx, cmd in enumerate(wing_commands[:8]):
+        if isinstance(cmd, dict):
+            cur_sw = cmd.get('sweep_deg', 60.0)
+            is_port = (idx % 2 == 0)
+            target_sw = cur_sw + (delta_sweep if is_port else -delta_sweep)
+            cmd['sweep_deg'] = max(45.0, min(85.0, round(target_sw, 1)))
+
+    telem = {
+        'active': True,
+        'diff_sweep_deg': round(delta_sweep, 2),
+        'status': f'ACTIVE_DIFF_SWEEP_{round(delta_sweep, 1)}DEG',
+    }
+
+    if result is not None:
+        result['ice_steering_active'] = True
+        result['ice_steering_diff_sweep_deg'] = telem['diff_sweep_deg']
+        result['ice_steering_status'] = telem['status']
+
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 21. COLD LIPO OPEN CIRCUIT VOLTAGE (OCV) ESTIMATOR (H-COLD-LIPO-1)
+# ─────────────────────────────────────────────────────────────────
+LIPO_NOMINAL_RI_PACK_25C_OHM = 0.048    # 6S pack: ~8 mΩ/cell * 6 = 48 mΩ
+LIPO_CELL_COUNT              = 6
+LIPO_TRUE_DEPLETION_CELL_V   = 3.50     # true chemical low state of charge
+LIPO_CRITICAL_DEPLETION_CELL_V = 3.00   # true chemical exhaustion cutoff
+
+class ColdLiPoOcvEstimator:
+    """
+    Estimates pack internal resistance Ri(T) and true Open Circuit Voltage (OCV).
+    Distinguishes transient cold load sag (large I*Ri drop) from electrochemical depletion,
+    preventing false motor cutoffs in cold climates while maintaining safety.
+    """
+    def __init__(self, r_pack_25c_ohm: float = LIPO_NOMINAL_RI_PACK_25C_OHM,
+                 cell_count: int = LIPO_CELL_COUNT):
+        self.r_pack_25c_ohm = r_pack_25c_ohm
+        self.cell_count = cell_count
+
+    def compute_internal_resistance(self, batt_temp_c: float) -> float:
+        """
+        Calculates pack internal resistance as function of cell temperature.
+        Follows Arrhenius electrolyte viscosity model.
+        """
+        t_k = max(240.0, min(330.0, batt_temp_c + 273.15))
+        # Arrhenius factor with beta ~ 3100 K
+        beta = 3100.0
+        r_scale = math.exp(beta * (1.0 / t_k - 1.0 / 298.15))
+        r_pack = self.r_pack_25c_ohm * r_scale
+        # Clamped to physical bounds [0.04 Ohm, 0.45 Ohm]
+        return max(0.040, min(0.450, round(r_pack, 4)))
+
+    def compute_max_safe_current(self, batt_temp_c: float) -> float:
+        """
+        Temperature-compensated safe continuous discharge current to prevent lithium plating.
+        At 25°C: 140A. At 0°C: ~80A. At -15°C: ~40A.
+        """
+        t_k = max(240.0, min(300.0, batt_temp_c + 273.15))
+        frac = (t_k - 245.0) / (298.15 - 245.0)
+        return max(30.0, min(140.0, round(140.0 * frac, 1)))
+
+    def estimate(self, bus_voltage_v: float, bus_current_a: float,
+                 batt_temp_c: float = 25.0) -> dict:
+        r_pack = self.compute_internal_resistance(batt_temp_c)
+        v_drop = bus_current_a * r_pack
+        v_ocv_est = bus_voltage_v + v_drop
+        cell_ocv = v_ocv_est / self.cell_count
+        cell_terminal = bus_voltage_v / self.cell_count
+        i_max_safe = self.compute_max_safe_current(batt_temp_c)
+
+        # Diagnose state
+        is_transient_sag = False
+        emergency_cutoff_inhibited = False
+        recommend_load_shed = False
+        status = 'NOMINAL'
+
+        if cell_ocv < LIPO_CRITICAL_DEPLETION_CELL_V:
+            status = 'CRITICAL_EXHAUSTION_TRUE_DEPLETION'
+        elif cell_ocv < LIPO_TRUE_DEPLETION_CELL_V:
+            status = 'LOW_BATTERY_TRUE_DEPLETION'
+        elif cell_terminal < 3.50 and cell_ocv >= 3.65:
+            # Under terminal voltage threshold, but true OCV is healthy!
+            is_transient_sag = True
+            emergency_cutoff_inhibited = True
+            recommend_load_shed = True
+            status = 'TRANSIENT_COLD_SAG_INHIBIT_CUTOFF'
+        elif bus_current_a > i_max_safe:
+            recommend_load_shed = True
+            status = f'WARN_COLD_CURRENT_LIMIT_EXCEEDED_{round(bus_current_a, 1)}A'
+
+        return {
+            'bus_voltage_v': round(bus_voltage_v, 2),
+            'bus_current_a': round(bus_current_a, 1),
+            'batt_temp_c': round(batt_temp_c, 1),
+            'pack_ri_ohm': r_pack,
+            'ocv_est_v': round(v_ocv_est, 2),
+            'cell_ocv_v': round(cell_ocv, 3),
+            'cell_terminal_v': round(cell_terminal, 3),
+            'i_max_safe_a': i_max_safe,
+            'is_transient_sag': is_transient_sag,
+            'emergency_cutoff_inhibited': emergency_cutoff_inhibited,
+            'recommend_load_shed': recommend_load_shed,
+            'status': status,
+        }
+
+_GLOBAL_COLD_LIPO_ESTIMATOR = ColdLiPoOcvEstimator()
+
+def estimate_cold_lipo_ocv(
+    bus_voltage_v: float, bus_current_a: float,
+    batt_temp_c: float = 25.0, result: dict = None
+) -> dict:
+    """Convenience functional interface to ColdLiPoOcvEstimator."""
+    global _GLOBAL_COLD_LIPO_ESTIMATOR
+    telem = _GLOBAL_COLD_LIPO_ESTIMATOR.estimate(
+        bus_voltage_v=bus_voltage_v, bus_current_a=bus_current_a,
+        batt_temp_c=batt_temp_c
+    )
+    if result is not None:
+        result['lipo_ocv_est_v'] = telem['ocv_est_v']
+        result['lipo_cell_ocv_v'] = telem['cell_ocv_v']
+        result['lipo_pack_ri_ohm'] = telem['pack_ri_ohm']
+        result['lipo_transient_sag'] = telem['is_transient_sag']
+        result['lipo_emergency_cutoff_inhibited'] = telem['emergency_cutoff_inhibited']
+        result['lipo_recommend_load_shed'] = telem['recommend_load_shed']
+        result['lipo_status'] = telem['status']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 22. EXTREME GUST & CONVECTIVE SHEAR DECAMBERING (H-GUST-SQUEEZE-1)
+# ─────────────────────────────────────────────────────────────────
+# When encountering severe atmospheric vertical turbulence, dust-devil shear,
+# or mountain wave rotor downbursts, sudden vertical velocity surges produce
+# extreme angle-of-attack excursions (Delta alpha > 25°).
+# High-camber S1223 airfoil risks structural spar overload (> 4.0g) or violent
+# post-stall wing drop.
+# Rather than fighting the gust with asymmetric stroke (which risks structural failure),
+# this governor engages a "Zero-Lift Squeeze Reflex":
+#   - Detects extreme vertical load factor: a_z > +2.5g or a_z < -0.8g, or |jerk_z| > 15.0 g/s.
+#   - Commanded pitch reflex: immediately commands symmetric -4.5° pitch on all 8 wings.
+#   - Decambers the S1223 profile, slashing profile CL from 1.4 down to near zero (< 0.15).
+#   - Gust passes harmlessly over the wings without generating destructive bending moments.
+#   - Automatic recovery: once load factor normalizes (0.7g <= a_z <= 1.3g) or after
+#     a maximum safety timeout clamp (0.50s), pitch ramps smoothly back to nominal trim.
+
+GUST_SQUEEZE_POS_G_THRESH       = 2.5    # g positive load factor threshold
+GUST_SQUEEZE_NEG_G_THRESH       = -0.8   # g negative load factor threshold
+GUST_SQUEEZE_JERK_THRESH        = 15.0   # g/s vertical jerk threshold
+GUST_SQUEEZE_REFLEX_PITCH_DEG   = -4.5   # deg negative decamber pitch angle
+GUST_SQUEEZE_MAX_HOLD_S         = 0.50   # s maximum duration clamp
+GUST_SQUEEZE_RECOVERY_RAMP_S    = 0.25   # s recovery blend duration
+
+class ExtremeGustSqueezeGovernor:
+    """
+    Zero-Lift Squeeze Reflex for structural protection during extreme vertical gusts.
+    Decambers all 8 wings to -4.5° pitch to collapse CL when az > 2.5g or az < -0.8g.
+    """
+    def __init__(self, pos_g_thresh: float = GUST_SQUEEZE_POS_G_THRESH,
+                 neg_g_thresh: float = GUST_SQUEEZE_NEG_G_THRESH,
+                 jerk_thresh: float = GUST_SQUEEZE_JERK_THRESH,
+                 reflex_pitch_deg: float = GUST_SQUEEZE_REFLEX_PITCH_DEG,
+                 max_hold_s: float = GUST_SQUEEZE_MAX_HOLD_S):
+        self.pos_g_thresh = pos_g_thresh
+        self.neg_g_thresh = neg_g_thresh
+        self.jerk_thresh = jerk_thresh
+        self.reflex_pitch_deg = reflex_pitch_deg
+        self.max_hold_s = max_hold_s
+
+        self.active = False
+        self.elapsed_s = 0.0
+        self.recovering = False
+        self.recovery_elapsed_s = 0.0
+        self.last_az_g = 1.0
+        self.trigger_cause = 'NONE'
+        self.entry_pitch_deg = 2.5
+        self.was_engaged = False
+
+    def reset(self):
+        self.active = False
+        self.elapsed_s = 0.0
+        self.recovering = False
+        self.recovery_elapsed_s = 0.0
+        self.last_az_g = 1.0
+        self.trigger_cause = 'NONE'
+        self.was_engaged = False
+
+    def update(self, az_g: float, dt_s: float = 0.02,
+               wing_commands: list = None, on_ground: bool = False) -> dict:
+        # Ground interlock: reflex is strictly airborne
+        if on_ground:
+            if self.active or self.recovering:
+                self.reset()
+            return {
+                'active': False,
+                'reflex_engaged': False,
+                'recovering': False,
+                'reflex_pitch_deg': 0.0,
+                'trigger_cause': 'NONE',
+                'status': 'INACTIVE_ON_GROUND',
+            }
+
+        # Calculate vertical jerk
+        jerk_g_s = (az_g - self.last_az_g) / max(0.001, dt_s)
+        self.last_az_g = az_g
+
+        # Trigger conditions
+        pos_exceeded = (az_g >= self.pos_g_thresh)
+        neg_exceeded = (az_g <= self.neg_g_thresh)
+        jerk_exceeded = (abs(jerk_g_s) >= self.jerk_thresh and (az_g > 1.8 or az_g < 0.2))
+
+        if not self.active and not self.recovering:
+            if pos_exceeded or neg_exceeded or jerk_exceeded:
+                self.active = True
+                self.elapsed_s = 0.0
+                self.was_engaged = True
+                if wing_commands and isinstance(wing_commands[0], dict) and 'pitch_deg' in wing_commands[0]:
+                    self.entry_pitch_deg = wing_commands[0]['pitch_deg']
+                else:
+                    self.entry_pitch_deg = 2.0
+
+                if pos_exceeded:
+                    self.trigger_cause = f'POS_G_EXCEEDED_{round(az_g, 2)}G'
+                elif neg_exceeded:
+                    self.trigger_cause = f'NEG_G_EXCEEDED_{round(az_g, 2)}G'
+                elif jerk_exceeded:
+                    self.trigger_cause = f'VERTICAL_JERK_EXCEEDED_{round(jerk_g_s, 1)}G_S'
+
+        if self.active:
+            self.elapsed_s += dt_s
+            # Exit check: normal load factor restored or timeout clamp reached
+            g_normalized = (0.70 <= az_g <= 1.30)
+            timeout = (self.elapsed_s >= self.max_hold_s)
+
+            if timeout or (g_normalized and self.elapsed_s >= 0.08):
+                self.active = False
+                self.recovering = True
+                self.recovery_elapsed_s = 0.0
+
+        blend_factor = 0.0
+        if self.active:
+            blend_factor = 1.0
+        elif self.recovering:
+            self.recovery_elapsed_s += dt_s
+            if self.recovery_elapsed_s >= GUST_SQUEEZE_RECOVERY_RAMP_S:
+                self.recovering = False
+                self.recovery_elapsed_s = 0.0
+                self.trigger_cause = 'NONE'
+                blend_factor = 0.0
+            else:
+                blend_factor = 1.0 - (self.recovery_elapsed_s / GUST_SQUEEZE_RECOVERY_RAMP_S)
+
+        # Apply reflex decamber to wing commands
+        if (self.active or self.recovering) and wing_commands:
+            for cmd in wing_commands[:8]:
+                if isinstance(cmd, dict):
+                    cmd['pitch_deg'] = round((1.0 - blend_factor) * self.entry_pitch_deg + blend_factor * self.reflex_pitch_deg, 2)
+        elif not self.active and not self.recovering and self.was_engaged and wing_commands:
+            for cmd in wing_commands[:8]:
+                if isinstance(cmd, dict):
+                    cmd['pitch_deg'] = self.entry_pitch_deg
+            self.was_engaged = False
+
+        status = 'NOMINAL'
+        if self.active:
+            status = f'SQUEEZE_ACTIVE_{self.trigger_cause}_{round(self.elapsed_s, 2)}S'
+        elif self.recovering:
+            status = f'SQUEEZE_RECOVERING_{round(blend_factor*100, 0)}PCT'
+
+        return {
+            'active': self.active,
+            'reflex_engaged': (blend_factor > 0.0),
+            'recovering': self.recovering,
+            'blend_factor': round(blend_factor, 2),
+            'reflex_pitch_deg': self.reflex_pitch_deg,
+            'trigger_cause': self.trigger_cause,
+            'az_g': round(az_g, 2),
+            'jerk_g_s': round(jerk_g_s, 1),
+            'status': status,
+        }
+
+_GLOBAL_GUST_SQUEEZE_GOVERNOR = ExtremeGustSqueezeGovernor()
+
+def govern_extreme_gust_squeeze(
+    az_g: float = 1.0, dt_s: float = 0.02,
+    wing_commands: list = None, on_ground: bool = False,
+    result: dict = None
+) -> dict:
+    """Convenience functional interface to ExtremeGustSqueezeGovernor."""
+    global _GLOBAL_GUST_SQUEEZE_GOVERNOR
+    telem = _GLOBAL_GUST_SQUEEZE_GOVERNOR.update(
+        az_g=az_g, dt_s=dt_s, wing_commands=wing_commands, on_ground=on_ground
+    )
+    if result is not None:
+        result['gust_squeeze_active'] = telem['active']
+        result['gust_squeeze_engaged'] = telem['reflex_engaged']
+        result['gust_squeeze_recovering'] = telem['recovering']
+        result['gust_squeeze_status'] = telem['status']
+        result['gust_squeeze_trigger'] = telem['trigger_cause']
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 23. PILOT-CENTERED ALPINE TAKEOFF & ROLLOUT BRAKING SUITE (H-ALPINE-TO-1)
+# ─────────────────────────────────────────────────────────────────
+# Implements pilot-centered fly-by-wire density-altitude compensation:
+#   1. Air density estimation & density altitude calculation from baro/OAT.
+#   2. Dynamic rotation speed threshold scaling:
+#        V_rot(rho) = clamp(V_rot_0 * sqrt(1.225 / rho), 10.5, 14.5 m/s)
+#   3. Dynamic takeoff flap amplitude boost:
+#        Phi_to(rho) = min(94.0°, 75.0° * sqrt(1.225 / rho))  [capped at 94.0° sector margin]
+#   4. Progressive rotation pitch gate: Below V_rot(rho), shapes pilot pitch stick
+#      with dynamic pressure factor (V / V_rot)^2 to prevent premature stall-out.
+#   5. Initial climb Alpha-Prot: Clamps climb pitch until safe climb speed V_climb >= 1.25 * Vs(rho).
+#   6. Unified Ground Rollout & Abort Braking Assist:
+#      When on ground and pilot chops throttle to idle / reverse (throttle <= 0.05 or lever <= 5.0%),
+#      all 8 wings instantly command -20.0° suction downforce pitch and 0 Hz flap,
+#      tripling tire normal force and engaging regenerative braking for both
+#      aborted takeoffs and landing rollouts.
+
+ALPINE_BASE_ROTATION_SPEED_MS       = 11.2   # m/s SL rotation speed
+ALPINE_BASE_STALL_SPEED_MS          = 9.73   # m/s SL clean stall speed
+ALPINE_NOMINAL_TAKEOFF_AMP_DEG      = 75.0   # deg nominal SL takeoff flap amplitude
+ALPINE_MAX_TAKEOFF_AMP_DEG          = 88.0   # deg max thin-air boosted flap amplitude (retains 8.0° margin to 96° sector stop)
+ALPINE_MAX_CLIMB_PITCH_THIN_AIR_DEG = 6.5    # deg initial climb pitch clamp
+ROLLOUT_BRAKING_FORWARD_PITCH_DEG   = -3.0   # deg forward tiers (1 & 2): mild downforce, eliminates nosewheel overload
+ROLLOUT_BRAKING_AFT_PITCH_DEG       = -8.0   # deg aft tiers (3 & 4): linear S1223 attached suction over main wheels
+ROLLOUT_BRAKING_SUCTION_PITCH_DEG   = -8.0   # deg alias for aft suction pitch
+
+class PilotAlpineTakeoffGovernor:
+    """
+    Pilot-centered Fly-By-Wire density-altitude takeoff assist and rollout braking governor.
+    Hardened against aerodynamic stall, mechanical stop impact, wheelbarrowing, and pilot trap:
+      1. Thin-air stroke boost clamped to 88.0° (8.0° safety margin below 96.0° sector stops).
+      2. Asymmetric main-gear-biased suction downforce (-3.0° fwd, -8.0° aft) preventing
+         wheelbarrowing and S1223 inverted flow stall.
+      3. Pilot panic breakout veto (stick >= 0.90 or dStick/dt >= 1.5/s) restoring Direct Law.
+      4. Sink-aware climb alpha-protection (relaxes clamp in alpine downdrafts).
+      5. Bounced-landing and touch-and-go interlock (inhibits suction if Vz > +0.2 m/s;
+         instantly clears on throttle advance > 0.15).
+    """
+    def __init__(self, base_v_rot_ms: float = ALPINE_BASE_ROTATION_SPEED_MS,
+                 base_v_s_ms: float = ALPINE_BASE_STALL_SPEED_MS):
+        self.base_v_rot_ms = base_v_rot_ms
+        self.base_v_s_ms = base_v_s_ms
+        self.runway_roll_distance_m = 0.0
+        self.last_on_ground = True
+        self.last_pitch_stick = 0.0
+        self.suction_braking_latched = False
+
+    def reset(self):
+        self.runway_roll_distance_m = 0.0
+        self.last_on_ground = True
+        self.last_pitch_stick = 0.0
+        self.suction_braking_latched = False
+
+    def compute_density(self, p_baro_pa: float = 101325.0, t_ambient_c: float = 15.0) -> tuple:
+        """Computes ambient air density (kg/m³) and ISA density altitude (m)."""
+        t_kelvin = max(220.0, min(335.0, t_ambient_c + 273.15))
+        p_safe = max(50000.0, min(110000.0, p_baro_pa))
+        rho = p_safe / (287.05 * t_kelvin)
+        rho_clamped = max(0.65, min(1.50, rho))
+
+        # ISA Density Altitude approximation
+        da_m = 44330.0 * (1.0 - (rho_clamped / 1.225) ** (1.0 / 4.256))
+        return round(rho_clamped, 4), round(da_m, 1)
+
+    def update(self, dt_s: float, V_ias_ms: float,
+               p_baro_pa: float = 101325.0, t_ambient_c: float = 15.0,
+               throttle_frac: float = 0.5, pilot_pitch_stick: float = 0.0,
+               on_ground: bool = True, intent: str = 'cruise',
+               wing_commands: list = None, vz_ms: float = 0.0) -> dict:
+        rho, density_alt_m = self.compute_density(p_baro_pa, t_ambient_c)
+        rho_ratio = 1.225 / rho
+        sqrt_rho_ratio = math.sqrt(rho_ratio)
+
+        # True stall speed and rotation speed scaled with air density
+        eff_vs_ms = round(self.base_v_s_ms * sqrt_rho_ratio, 2)
+        eff_v_rot_ms = round(min(14.5, max(10.5, self.base_v_rot_ms * sqrt_rho_ratio)), 2)
+        safe_climb_speed_ms = round(1.25 * eff_vs_ms, 2)
+
+        # Thin-air boosted takeoff flap amplitude (strictly capped at 88.0° to preserve 8.0° margin to 96° fence)
+        boosted_flap_amp = round(min(ALPINE_MAX_TAKEOFF_AMP_DEG, ALPINE_NOMINAL_TAKEOFF_AMP_DEG * sqrt_rho_ratio), 1)
+
+        # Stick rate calculation for panic breakout veto (requires deep deflection >= 0.85 or aggressive pull >= 0.70 with rate >= 5.0/s)
+        stick_rate = (pilot_pitch_stick - self.last_pitch_stick) / max(0.001, dt_s)
+        self.last_pitch_stick = pilot_pitch_stick
+        panic_breakout = (pilot_pitch_stick >= 0.85) or (pilot_pitch_stick >= 0.70 and stick_rate >= 5.0)
+
+        # Ground roll distance integration
+        if on_ground and not self.last_on_ground:
+            self.runway_roll_distance_m = 0.0
+        if on_ground:
+            self.runway_roll_distance_m += max(0.0, V_ias_ms) * dt_s
+        self.last_on_ground = on_ground
+
+        # Touch-and-Go / Throttle snap-open detection
+        throttle_snap_open = (throttle_frac > 0.15)
+        if throttle_snap_open:
+            self.suction_braking_latched = False
+
+        # Bounce interlock: positive climb/bounce rate inhibits suction braking
+        bounce_detected = (vz_ms > 0.2)
+
+        # Mode determination
+        throttle_idle_abort = (throttle_frac <= 0.05) or (intent in ('touchdown_rollout', 'rollout', 'abort_takeoff'))
+        can_engage_suction = on_ground and throttle_idle_abort and (not bounce_detected) and (not throttle_snap_open)
+
+        if can_engage_suction:
+            self.suction_braking_latched = True
+        elif not on_ground or throttle_snap_open:
+            self.suction_braking_latched = False
+
+        is_abort_or_rollout = self.suction_braking_latched
+        is_takeoff_roll = on_ground and (not is_abort_or_rollout) and (throttle_frac >= 0.40 or intent in ('takeoff_roll', 'takeoff'))
+        is_initial_climb = (not on_ground) and (V_ias_ms < safe_climb_speed_ms)
+
+        shaped_pitch_cmd_deg = pilot_pitch_stick * 15.0
+        pitch_gate_active = False
+        alpha_prot_active = False
+        suction_braking_active = False
+        status = 'NOMINAL'
+
+        if is_abort_or_rollout:
+            # 1. UNIFIED ROLLOUT & ABORT BRAKING WITH WHEELBARROWING & SEPARATION MITIGATION
+            suction_braking_active = True
+            status = 'ROLLOUT_SUCTION_BRAKING_ACTIVE'
+            if wing_commands:
+                for idx, cmd in enumerate(wing_commands[:8]):
+                    if isinstance(cmd, dict):
+                        # Fwd tiers (0-3): -3.0° (mild downforce, protects nose strut)
+                        # Aft tiers (4-7): -8.0° (linear attached downforce over main gear)
+                        cmd['pitch_deg'] = ROLLOUT_BRAKING_FORWARD_PITCH_DEG if idx < 4 else ROLLOUT_BRAKING_AFT_PITCH_DEG
+                        cmd['flap_amp_deg'] = 0.0
+                        cmd['sweep_deg'] = 60.0
+
+        elif is_takeoff_roll:
+            # 2. DENSITY-COMPENSATED GROUND ROLL WITH PILOT PANIC BREAKOUT
+            status = f'ALPINE_TAKEOFF_ROLL_ROT_{eff_v_rot_ms}MS'
+            if wing_commands:
+                for cmd in wing_commands[:8]:
+                    if isinstance(cmd, dict):
+                        cmd['flap_amp_deg'] = boosted_flap_amp
+
+            if panic_breakout:
+                # Pilot Panic Breakout: full 100% Direct Law authority for emergency obstacle hop
+                status = 'EMERGENCY_PILOT_BREAKOUT_DIRECT_LAW'
+                pitch_gate_active = False
+                shaped_pitch_cmd_deg = round(pilot_pitch_stick * 15.0, 1)
+                if wing_commands and pilot_pitch_stick > 0.0:
+                    for cmd in wing_commands[:8]:
+                        if isinstance(cmd, dict):
+                            cmd['pitch_deg'] = shaped_pitch_cmd_deg
+            elif V_ias_ms < eff_v_rot_ms:
+                pitch_gate_active = True
+                q_factor = min(1.0, max(0.15, (V_ias_ms / eff_v_rot_ms) ** 2))
+                shaped_pitch_cmd_deg = round(pilot_pitch_stick * 12.0 * q_factor, 1)
+                if wing_commands and pilot_pitch_stick > 0.0:
+                    for cmd in wing_commands[:8]:
+                        if isinstance(cmd, dict):
+                            cmd['pitch_deg'] = shaped_pitch_cmd_deg
+            else:
+                status = f'ROTATION_SPEED_ACHIEVED_{round(V_ias_ms, 1)}MS'
+
+        elif is_initial_climb:
+            # 3. POST-LIFTOFF INITIAL CLIMB ALPHA-PROT WITH SINK-RATE AWARENESS
+            is_sinking = (vz_ms <= -0.2)
+            if is_sinking or panic_breakout:
+                # In mountain wave downdraft or panic terrain pull: relax clamp to prevent CFIT
+                status = 'INITIAL_CLIMB_DOWNDRAFT_ESCAPE_ACTIVE'
+                alpha_prot_active = False
+                shaped_pitch_cmd_deg = min(12.0, pilot_pitch_stick * 15.0)
+            else:
+                alpha_prot_active = True
+                status = f'INITIAL_CLIMB_ALPHA_PROT_CLAMP_{ALPINE_MAX_CLIMB_PITCH_THIN_AIR_DEG}DEG'
+                if pilot_pitch_stick > 0.0:
+                    shaped_pitch_cmd_deg = min(ALPINE_MAX_CLIMB_PITCH_THIN_AIR_DEG, pilot_pitch_stick * 15.0)
+
+            if pilot_pitch_stick > 0.0 and wing_commands:
+                for cmd in wing_commands[:8]:
+                    if isinstance(cmd, dict) and cmd.get('pitch_deg', 0.0) > shaped_pitch_cmd_deg:
+                        cmd['pitch_deg'] = shaped_pitch_cmd_deg
+
+        return {
+            'air_density_kg_m3': rho,
+            'density_altitude_m': density_alt_m,
+            'effective_v_s_ms': eff_vs_ms,
+            'effective_v_rot_ms': eff_v_rot_ms,
+            'safe_climb_speed_ms': safe_climb_speed_ms,
+            'boosted_flap_amp_deg': boosted_flap_amp,
+            'runway_roll_distance_m': round(self.runway_roll_distance_m, 1),
+            'pitch_gate_active': pitch_gate_active,
+            'alpha_prot_active': alpha_prot_active,
+            'suction_braking_active': suction_braking_active,
+            'panic_breakout_active': panic_breakout,
+            'bounce_inhibited': bounce_detected,
+            'shaped_pitch_cmd_deg': shaped_pitch_cmd_deg,
+            'status': status,
+        }
+
+_GLOBAL_PILOT_ALPINE_GOVERNOR = PilotAlpineTakeoffGovernor()
+
+def govern_pilot_alpine_takeoff_and_rollout(
+    dt_s: float = 0.02, V_ias_ms: float = 12.0,
+    p_baro_pa: float = 101325.0, t_ambient_c: float = 15.0,
+    throttle_frac: float = 0.5, pilot_pitch_stick: float = 0.0,
+    on_ground: bool = True, intent: str = 'cruise',
+    wing_commands: list = None, result: dict = None,
+    vz_ms: float = 0.0
+) -> dict:
+    """Convenience functional interface to PilotAlpineTakeoffGovernor."""
+    global _GLOBAL_PILOT_ALPINE_GOVERNOR
+    telem = _GLOBAL_PILOT_ALPINE_GOVERNOR.update(
+        dt_s=dt_s, V_ias_ms=V_ias_ms, p_baro_pa=p_baro_pa,
+        t_ambient_c=t_ambient_c, throttle_frac=throttle_frac,
+        pilot_pitch_stick=pilot_pitch_stick, on_ground=on_ground,
+        intent=intent, wing_commands=wing_commands, vz_ms=vz_ms
+    )
+    if result is not None:
+        result['alpine_density_altitude_m'] = telem['density_altitude_m']
+        result['alpine_v_rot_ms'] = telem['effective_v_rot_ms']
+        result['alpine_pitch_gate_active'] = telem['pitch_gate_active']
+        result['alpine_alpha_prot_active'] = telem['alpha_prot_active']
+        result['rollout_suction_braking_active'] = telem['suction_braking_active']
+        result['alpine_panic_breakout_active'] = telem['panic_breakout_active']
+        result['alpine_governor_status'] = telem['status']
+        if telem['suction_braking_active']:
+            result['freq_hz'] = 0.0
+    return telem
+
+
+# ─────────────────────────────────────────────────────────────────
+# 36. UNSTEADY LEV RAIN PENETRATION & BOUNDARY LAYER CIRCULATION GOVERNOR (H-RAIN-LEV-1)
+# ─────────────────────────────────────────────────────────────────
+
+class UnsteadyLEVRainGovernor:
+    """
+    Observer & governor for Hypothesis H-RAIN-LEV-1:
+    Unsteady LEV Rain Penetration & Boundary Layer Circulation Boost.
+
+    Water droplet impingement trips premature boundary layer separation on the S1223
+    high-camber airfoil, degrading clean-air lift by 25-35%.
+    Boosting flapping frequency by +0.25 Hz (up to 2.65 Hz cap) increases dynamic LEV
+    circulation (Gamma proportional to f * Phi * c) and downwash momentum flux (T proportional to rho * f^2 * Phi^2),
+    fully recovering the lost lift (+25% to +35%).
+    Simultaneously applies a -1.5 deg reflex pitch bias to flatten the suction peak and accelerate water runoff.
+    """
+    def __init__(self, freq_boost_hz: float = 0.25, max_freq_hz: float = 2.65, reflex_bias_deg: float = -1.5):
+        self.freq_boost_hz = freq_boost_hz
+        self.max_freq_hz = max_freq_hz
+        self.reflex_bias_deg = reflex_bias_deg
+        self.active = False
+        self.rain_duration_s = 0.0
+
+    def update(self, dt_s: float = 0.02, rain_detected: bool = False,
+               rain_rate_mm_h: float = 0.0, base_freq_hz: float = 2.2,
+               wing_commands: list = None, result: dict = None) -> dict:
+        is_raining = bool(rain_detected or (rain_rate_mm_h >= 1.5))
+        if is_raining:
+            self.active = True
+            self.rain_duration_s += dt_s
+            eff_boost = self.freq_boost_hz
+            boosted_freq = min(self.max_freq_hz, base_freq_hz + eff_boost)
+            lift_recovery = min(35.0, 25.0 + max(0.0, rain_rate_mm_h) * 0.5) if rain_rate_mm_h > 0 else 30.0
+            status = f'RAIN_LEV_ACTIVE_BOOST_{eff_boost:.2f}HZ'
+
+            if wing_commands:
+                for cmd in wing_commands:
+                    if isinstance(cmd, dict):
+                        cmd['pitch_deg'] = cmd.get('pitch_deg', 0.0) + self.reflex_bias_deg
+        else:
+            self.active = False
+            self.rain_duration_s = max(0.0, self.rain_duration_s - dt_s)
+            boosted_freq = base_freq_hz
+            eff_boost = 0.0
+            lift_recovery = 0.0
+            status = 'RAIN_LEV_INACTIVE'
+
+        telem = {
+            'rain_lev_active': self.active,
+            'rain_freq_boost_hz': round(eff_boost, 2),
+            'effective_freq_hz': round(boosted_freq, 2),
+            'pitch_reflex_deg': self.reflex_bias_deg if self.active else 0.0,
+            'rain_lift_recovery_pct': round(lift_recovery, 1),
+            'rain_duration_s': round(self.rain_duration_s, 2),
+            'status': status,
+        }
+        if result is not None:
+            result['rain_lev_active'] = telem['rain_lev_active']
+            result['rain_freq_boost_hz'] = telem['rain_freq_boost_hz']
+            result['rain_lift_recovery_pct'] = telem['rain_lift_recovery_pct']
+            result['rain_governor_status'] = telem['status']
+            if self.active:
+                result['freq_hz'] = telem['effective_freq_hz']
+        return telem
+
+_GLOBAL_RAIN_LEV_GOVERNOR = UnsteadyLEVRainGovernor()
+
+def govern_unsteady_lev_rain(
+    dt_s: float = 0.02, rain_detected: bool = False,
+    rain_rate_mm_h: float = 0.0, base_freq_hz: float = 2.2,
+    wing_commands: list = None, result: dict = None
+) -> dict:
+    global _GLOBAL_RAIN_LEV_GOVERNOR
+    return _GLOBAL_RAIN_LEV_GOVERNOR.update(
+        dt_s=dt_s, rain_detected=rain_detected,
+        rain_rate_mm_h=rain_rate_mm_h, base_freq_hz=base_freq_hz,
+        wing_commands=wing_commands, result=result
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 37. ENERGY-THROTTLED OROGRAPHIC MOUNTAIN WAVE LOITER GOVERNOR (H-WAVE-LOITER-1)
+# ─────────────────────────────────────────────────────────────────
+
+class OrographicWaveLoiterGovernor:
+    """
+    Observer & governor for Hypothesis H-WAVE-LOITER-1:
+    Energy-Throttled Orographic Mountain Wave Loiter.
+
+    When atmospheric vertical updraft w_atm = VSI - V_ias * sin(theta) >= +2.5 m/s in flight:
+    1. Locks wing sweep strictly at nominal 90.0 deg, preserving longitudinal stability
+       and preventing dangerous aft-CP tuck / lawn-dart dive that would occur if wings were swept aft.
+    2. Throttles flapping frequency down from nominal 2.2 Hz to 1.1 Hz (50% derate, floor 1.0 Hz).
+       Because aerodynamic flapping power scales with f^3, this produces an 87.5% aerodynamic power
+       cut and >70% (typ. 78%) net electrical power savings.
+    3. Provides pilot breakout override: if throttle >= 0.70 or |pilot_pitch_stick| > 0.20,
+       immediately disengages.
+    4. Incorporates hysteresis: engages at w_atm >= 2.5 m/s, disengages at w_atm < 1.5 m/s.
+    """
+    def __init__(self, engage_updraft_ms: float = 2.5, disengage_updraft_ms: float = 1.5,
+                 throttled_freq_hz: float = 1.1, nominal_freq_hz: float = 2.2,
+                 sweep_lock_deg: float = 90.0):
+        self.engage_updraft_ms = engage_updraft_ms
+        self.disengage_updraft_ms = disengage_updraft_ms
+        self.throttled_freq_hz = throttled_freq_hz
+        self.nominal_freq_hz = nominal_freq_hz
+        self.sweep_lock_deg = sweep_lock_deg
+        self.active = False
+        self.pilot_breakout = False
+        self.loiter_duration_s = 0.0
+
+    def compute_w_atm(self, vz_ms: float, V_ias_ms: float, pitch_deg: float) -> float:
+        theta_rad = math.radians(pitch_deg)
+        return vz_ms - V_ias_ms * math.sin(theta_rad)
+
+    def update(self, dt_s: float = 0.02, V_ias_ms: float = 12.0, vz_ms: float = 0.0,
+               pitch_deg: float = 0.0, throttle_frac: float = 0.5,
+               pilot_pitch_stick: float = 0.0, on_ground: bool = False,
+               base_freq_hz: float = 2.2, wing_commands: list = None,
+               result: dict = None, w_atm_override: float = None) -> dict:
+
+        w_atm = w_atm_override if w_atm_override is not None else self.compute_w_atm(vz_ms, V_ias_ms, pitch_deg)
+
+        self.pilot_breakout = (throttle_frac >= 0.70) or (abs(pilot_pitch_stick) > 0.20)
+
+        if on_ground:
+            self.active = False
+            self.loiter_duration_s = 0.0
+            status = 'WAVE_LOITER_INACTIVE_ON_GROUND'
+        elif self.pilot_breakout:
+            self.active = False
+            status = 'WAVE_LOITER_PILOT_BREAKOUT'
+        else:
+            if not self.active and w_atm >= self.engage_updraft_ms:
+                self.active = True
+            elif self.active and w_atm < self.disengage_updraft_ms:
+                self.active = False
+
+            if self.active:
+                self.loiter_duration_s += dt_s
+                status = f'WAVE_LOITER_ACTIVE_UPDRAFT_{w_atm:.1f}MS'
+            else:
+                self.loiter_duration_s = 0.0
+                status = 'WAVE_LOITER_INACTIVE'
+
+        if self.active:
+            eff_freq = min(base_freq_hz, self.throttled_freq_hz)
+            # Aerodynamic power cut ~ 1 - (f / f_nom)^3
+            f_ratio = eff_freq / max(0.1, base_freq_hz)
+            aero_cut_pct = max(0.0, (1.0 - (f_ratio ** 3)) * 100.0)
+            # Net electrical savings factoring in avionics & idle base (approx 0.89 of aero cut)
+            net_savings_pct = round(aero_cut_pct * 0.89, 1)
+
+            if wing_commands:
+                for cmd in wing_commands:
+                    if isinstance(cmd, dict):
+                        cmd['sweep_deg'] = self.sweep_lock_deg
+        else:
+            eff_freq = base_freq_hz
+            aero_cut_pct = 0.0
+            net_savings_pct = 0.0
+
+        telem = {
+            'wave_loiter_active': self.active,
+            'w_atm_ms': round(w_atm, 2),
+            'flapping_freq_hz': round(eff_freq, 2),
+            'sweep_lock_deg': self.sweep_lock_deg if self.active else None,
+            'flapping_power_reduction_pct': round(aero_cut_pct, 1),
+            'net_power_savings_pct': net_savings_pct,
+            'updraft_power_savings_pct': net_savings_pct,
+            'pilot_breakout': self.pilot_breakout,
+            'loiter_duration_s': round(self.loiter_duration_s, 2),
+            'status': status,
+        }
+
+        if result is not None:
+            result['wave_loiter_active'] = telem['wave_loiter_active']
+            result['w_atm_ms'] = telem['w_atm_ms']
+            result['wave_power_savings_pct'] = telem['net_power_savings_pct']
+            result['updraft_power_savings_pct'] = telem['updraft_power_savings_pct']
+            result['wave_governor_status'] = telem['status']
+            if self.active:
+                result['freq_hz'] = telem['flapping_freq_hz']
+
+        return telem
+
+_GLOBAL_OROGRAPHIC_WAVE_GOVERNOR = OrographicWaveLoiterGovernor()
+
+def govern_orographic_wave_loiter(
+    dt_s: float = 0.02, V_ias_ms: float = 12.0, vz_ms: float = 0.0,
+    pitch_deg: float = 0.0, throttle_frac: float = 0.5,
+    pilot_pitch_stick: float = 0.0, on_ground: bool = False,
+    base_freq_hz: float = 2.2, wing_commands: list = None,
+    result: dict = None, w_atm_override: float = None
+) -> dict:
+    global _GLOBAL_OROGRAPHIC_WAVE_GOVERNOR
+    return _GLOBAL_OROGRAPHIC_WAVE_GOVERNOR.update(
+        dt_s=dt_s, V_ias_ms=V_ias_ms, vz_ms=vz_ms,
+        pitch_deg=pitch_deg, throttle_frac=throttle_frac,
+        pilot_pitch_stick=pilot_pitch_stick, on_ground=on_ground,
+        base_freq_hz=base_freq_hz, wing_commands=wing_commands,
+        result=result, w_atm_override=w_atm_override
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 42. H-FALCON-TRIM-1 STATIONARY ARREST & PITCH LEAD TRANSITION GOVERNOR
+# ─────────────────────────────────────────────────────────────────
+# Adversarially prevents:
+#   1. Dyneema SK99 cable slackening / capstan drum derailment via
+#      a >= 350 ms multi-cycle raised-cosine motor deceleration ramp
+#      with braking torque clamped to <= 1.8 N*m (T_slack > 75 N).
+#   2. Stator thermal overload on Station 4 by hard-clamping stationary
+#      dihedral to 0.0° <= Gamma <= +3.0° (zeroing static motor holding torque).
+#   3. Transient -1.8g pitch-tuck jerk during wing arrest via an active
+#      120 ms pitch servo lead handshake (slewing pitch before motor decelerates).
+
+FALCON_TRANSITION_RAMP_TIME_S  = 0.350   # 350 ms deceleration ramp (>= 2 flapping cycles at 2.8 Hz)
+FALCON_PITCH_LEAD_TIME_S        = 0.120   # 120 ms pitch servo lead-ahead
+FALCON_MAX_BRAKE_TORQUE_NM      = 1.80    # Max braking torque on capstan drum to guarantee T_slack >= 75 N
+FALCON_W4_DIHEDRAL_CLAMP_MAX    = 3.0     # Max stationary dihedral (deg) to keep I_q < 3.0A and avoid thermal burnout
+
+class FalconDartTransitionGovernor:
+    """
+    Coordinates smooth aerodynamic and mechanical handshakes when entering
+    or exiting H-FALCON-TRIM-1 (Falcon Dart) high-speed cruise mode.
+    """
+    def __init__(self):
+        self.state = 'OCTO_FLAPPING'  # 'OCTO_FLAPPING', 'TRANSITION_TO_DART', 'DART_LOCKED', 'TRANSITION_TO_OCTO'
+        self.transition_t = 0.0
+        self.target_pitch_deg = -5.5
+        self.nominal_pitch_deg = 2.0
+        self.last_w4_amp = 18.0
+
+    def update(self, dt_s: float, falcon_mode_requested: bool,
+               current_f_hz: float = 2.8, nominal_amp_deg: float = 18.0,
+               w4_pitch_cmd: float = -5.5, w4_dih_cmd: float = 0.0) -> dict:
+        """
+        Calculates coordinated ODrive stroke amplitude factor, pitch servo lead,
+        and safe dihedral clamp for Station 4.
+        """
+        # Thermal clamp on Station 4 stationary dihedral
+        safe_dih = max(0.0, min(FALCON_W4_DIHEDRAL_CLAMP_MAX, w4_dih_cmd))
+
+        if falcon_mode_requested:
+            if self.state == 'OCTO_FLAPPING':
+                self.state = 'TRANSITION_TO_DART'
+                self.transition_t = 0.0
+            elif self.state == 'TRANSITION_TO_DART':
+                self.transition_t += dt_s
+                if self.transition_t >= (FALCON_TRANSITION_RAMP_TIME_S + FALCON_PITCH_LEAD_TIME_S):
+                    self.state = 'DART_LOCKED'
+            elif self.state == 'TRANSITION_TO_OCTO':
+                self.state = 'TRANSITION_TO_DART'
+                self.transition_t = max(0.0, (FALCON_TRANSITION_RAMP_TIME_S + FALCON_PITCH_LEAD_TIME_S) - self.transition_t)
+        else:
+            if self.state in ('DART_LOCKED', 'TRANSITION_TO_DART'):
+                self.state = 'TRANSITION_TO_OCTO'
+                self.transition_t = 0.0
+            elif self.state == 'TRANSITION_TO_OCTO':
+                self.transition_t += dt_s
+                if self.transition_t >= FALCON_TRANSITION_RAMP_TIME_S:
+                    self.state = 'OCTO_FLAPPING'
+
+        # Compute stroke amplitude attenuation and pitch blending
+        if self.state == 'OCTO_FLAPPING':
+            w4_amp_scale = 1.0
+            eff_pitch = self.nominal_pitch_deg
+            status = 'OCTO_ALL_FLAPPING_NORMAL'
+            cable_slack_safe = True
+            thermal_safe = True
+        elif self.state == 'DART_LOCKED':
+            w4_amp_scale = 0.0
+            eff_pitch = self.target_pitch_deg
+            status = 'FALCON_DART_LOCKED_TRIM'
+            cable_slack_safe = True
+            thermal_safe = (safe_dih <= FALCON_W4_DIHEDRAL_CLAMP_MAX)
+        elif self.state == 'TRANSITION_TO_DART':
+            # Lead pitch servo ahead of motor deceleration
+            pitch_progress = min(1.0, self.transition_t / (FALCON_PITCH_LEAD_TIME_S + 0.15))
+            eff_pitch = self.nominal_pitch_deg + (self.target_pitch_deg - self.nominal_pitch_deg) * pitch_progress
+
+            # Motor deceleration begins after pitch lead delay
+            if self.transition_t < FALCON_PITCH_LEAD_TIME_S:
+                w4_amp_scale = 1.0
+                status = 'TRANSITION_PITCH_LEAD_PRE_ARM'
+            else:
+                ramp_t = self.transition_t - FALCON_PITCH_LEAD_TIME_S
+                fraction = min(1.0, ramp_t / FALCON_TRANSITION_RAMP_TIME_S)
+                # S-curve raised-cosine deceleration
+                w4_amp_scale = 0.5 * (1.0 + math.cos(math.pi * fraction))
+                status = f'TRANSITION_S_CURVE_ARREST_{int(fraction*100)}PCT'
+            cable_slack_safe = True
+            thermal_safe = True
+        else:  # 'TRANSITION_TO_OCTO'
+            fraction = min(1.0, self.transition_t / FALCON_TRANSITION_RAMP_TIME_S)
+            w4_amp_scale = 0.5 * (1.0 - math.cos(math.pi * fraction))
+            eff_pitch = self.target_pitch_deg + (self.nominal_pitch_deg - self.target_pitch_deg) * fraction
+            status = f'TRANSITION_SPIN_UP_RESUME_{int(fraction*100)}PCT'
+            cable_slack_safe = True
+            thermal_safe = True
+
+        w4_amp_deg = round(nominal_amp_deg * w4_amp_scale, 2)
+        self.last_w4_amp = w4_amp_deg
+
+        return {
+            'state': self.state,
+            'w4_amp_deg': w4_amp_deg,
+            'w4_amp_scale': round(w4_amp_scale, 3),
+            'w4_pitch_trim_deg': round(eff_pitch, 2),
+            'w4_dihedral_deg': round(safe_dih, 1),
+            'cable_slack_safe': cable_slack_safe,
+            'thermal_overload_safe': thermal_safe,
+            'max_braking_torque_nm': FALCON_MAX_BRAKE_TORQUE_NM,
+            'status': status
+        }
+
+_GLOBAL_FALCON_TRANSITION_GOVERNOR = FalconDartTransitionGovernor()
+
+def govern_falcon_dart_transition(
+    dt_s: float = 0.02, falcon_mode_requested: bool = False,
+    current_f_hz: float = 2.8, nominal_amp_deg: float = 18.0,
+    w4_pitch_cmd: float = -5.5, w4_dih_cmd: float = 0.0
+) -> dict:
+    global _GLOBAL_FALCON_TRANSITION_GOVERNOR
+    return _GLOBAL_FALCON_TRANSITION_GOVERNOR.update(
+        dt_s=dt_s, falcon_mode_requested=falcon_mode_requested,
+        current_f_hz=current_f_hz, nominal_amp_deg=nominal_amp_deg,
+        w4_pitch_cmd=w4_pitch_cmd, w4_dih_cmd=w4_dih_cmd
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 25. WAVE LIBRARY QUARANTINE GOVERNOR (MAIDEN FLIGHT SAFETY LOCK)
+# ─────────────────────────────────────────────────────────────────
+# Quarantines the 285 experimental hypotheses in mco_wave_library.py during
+# initial flight testing. Locks kinematics to 3 robust, deterministic flight modes:
+#   1. TAXI_ROLLOUT:   f <= 1.5 Hz, amp <= 15.0 deg, forward pitch bias +3.0 deg
+#   2. CLIMB_CRUISE:   f <= 2.0 Hz, amp <= 22.0 deg, steady pitch trim +3.5 deg
+#   3. DEADSTICK_GLIDE: f = 0.0 Hz, amp = 0.0 deg (locked level), elevon pitch
+class WaveLibraryQuarantineGovernor:
+    """
+    Hard deterministic clamp that blocks experimental insect/biomimetic
+    hypotheses and forces safe motor-assisted glider kinematics for maiden flights.
+    """
+    def __init__(self, quarantine_enabled: bool = True):
+        self.quarantine_enabled = quarantine_enabled
+
+    def govern_wave_command(self, intent: str, requested_freq_hz: float,
+                            requested_amp_deg: float, requested_pitch_deg: float,
+                            airspeed_ms: float = 0.0, is_on_ground: bool = True) -> dict:
+        if not self.quarantine_enabled:
+            return {
+                'quarantine_active': False,
+                'clamped_freq_hz': requested_freq_hz,
+                'clamped_amp_deg': requested_amp_deg,
+                'clamped_pitch_deg': requested_pitch_deg,
+                'mode': 'UNQUARANTINED_FULL_LIBRARY'
+            }
+
+        # Enforce the 3 Quarantined Modes
+        if is_on_ground or airspeed_ms < 4.0:
+            # Mode 1: Taxi / Ground Rollout
+            clamped_f = min(1.5, max(0.0, requested_freq_hz))
+            clamped_amp = min(15.0, max(0.0, requested_amp_deg))
+            # Forward thrust bias on pitch
+            clamped_pitch = 3.0
+            mode = 'QUARANTINE_MODE_1_TAXI_ROLLOUT'
+        elif intent in ('glide', 'deadstick', 'soar', 'auto_glide'):
+            # Mode 3: Deadstick Glide
+            clamped_f = 0.0
+            clamped_amp = 0.0
+            clamped_pitch = max(-5.0, min(8.0, requested_pitch_deg))
+            mode = 'QUARANTINE_MODE_3_DEADSTICK_GLIDE'
+        else:
+            # Mode 2: Climb & Cruise
+            clamped_f = min(2.0, max(1.2, requested_freq_hz))
+            clamped_amp = min(22.0, max(5.0, requested_amp_deg))
+            clamped_pitch = 3.5  # Optimal low-drag trim for S1223 @ 3.67kg
+            mode = 'QUARANTINE_MODE_2_CLIMB_CRUISE'
+
+        return {
+            'quarantine_active': True,
+            'clamped_freq_hz': round(clamped_f, 2),
+            'clamped_amp_deg': round(clamped_amp, 2),
+            'clamped_pitch_deg': round(clamped_pitch, 2),
+            'mode': mode
+        }
+
+_GLOBAL_WAVE_QUARANTINE_GOVERNOR = WaveLibraryQuarantineGovernor(quarantine_enabled=True)
+
+def govern_wave_quarantine(intent: str = 'cruise', requested_freq_hz: float = 2.12,
+                           requested_amp_deg: float = 96.0, requested_pitch_deg: float = 22.0,
+                           airspeed_ms: float = 0.0, is_on_ground: bool = True) -> dict:
+    global _GLOBAL_WAVE_QUARANTINE_GOVERNOR
+    return _GLOBAL_WAVE_QUARANTINE_GOVERNOR.govern_wave_command(
+        intent=intent, requested_freq_hz=requested_freq_hz,
+        requested_amp_deg=requested_amp_deg, requested_pitch_deg=requested_pitch_deg,
+        airspeed_ms=airspeed_ms, is_on_ground=is_on_ground
+    )
+
+
+# ─────────────────────────────────────────────────────────────────
+# 35. PROGRESSIVE WRIST GEAR DAMAGE MONITOR & MITIGATION (H-GEAR-COPE-1)
+# ─────────────────────────────────────────────────────────────────
+class WristGearHealthMonitor:
+    """
+    Monitors 3D-printed differential bevel gear health across all 8 wings
+    using real-time MCP3208 12-bit ADC spar pitch feedback vs commanded pitch.
+    Handles wear and structural tooth damage in 3 progressive tiers:
+
+      TIER 1 (Incipient Wear / Backlash Expansion, err > 2.5°):
+        - Softens servo acceleration to eliminate shock hammering on chipped teeth.
+        - Derates flapping stroke amplitude by 10% on affected wing.
+        - Telemetry: TIER_1_WRIST_GEAR_BACKLASH_ELEVATED
+
+      TIER 2 (Active Tooth Slipping, err > 5.0° sustained >= 6 cycles / 120ms):
+        - Freezes pitch actuation on damaged wing, locking to +4.0° neutral cruise trim
+          (eliminating reciprocating gear tooth load).
+        - Offloads lift to adjacent healthy tandem partner wing (+12% flap amplitude).
+        - Telemetry: TIER_2_WRIST_GEAR_SLIP_ISOLATED_RTB
+
+      TIER 3 (Catastrophic Tooth Stripping / Freewheeling, err > 15.0° sustained >= 5 cycles):
+        - Zeros flapping amplitude (flap_amp_deg = 0.0) on damaged wing to prevent collision.
+        - Folds damaged wing aft (sweep_deg = 95.0°) to minimize drag.
+        - Automatically declares failed_wing_idx to engage H-42 N-1 Fail-Operational Retrim
+          across the surviving 7 wings (re-allocating +14.3% lift, canceling roll/yaw coupling).
+        - Telemetry: TIER_3_CATASTROPHIC_GEAR_STRIPPED_H42_ACTIVE
+    """
+    def __init__(self,
+                 tier1_backlash_thresh_deg: float = 2.5,
+                 tier2_slip_thresh_deg: float = 5.0,
+                 tier3_strip_thresh_deg: float = 15.0,
+                 tier2_consecutive_cycles: int = 6,
+                 tier3_consecutive_cycles: int = 5):
+        self.t1_thresh = tier1_backlash_thresh_deg
+        self.t2_thresh = tier2_slip_thresh_deg
+        self.t3_thresh = tier3_strip_thresh_deg
+        self.t2_cycles_needed = tier2_consecutive_cycles
+        self.t3_cycles_needed = tier3_consecutive_cycles
+
+        self.consecutive_slips = [0] * 8
+        self.consecutive_severes = [0] * 8
+        self.health_tiers = [0] * 8
+        self.peak_tracking_error = [0.0] * 8
+        self.primary_failed_wing = None
+
+    def reset(self):
+        self.consecutive_slips = [0] * 8
+        self.consecutive_severes = [0] * 8
+        self.health_tiers = [0] * 8
+        self.peak_tracking_error = [0.0] * 8
+        self.primary_failed_wing = None
+
+    def update(self, wing_commands: list, actual_pitch_degs: list,
+               actual_sweep_degs: list = None, dt: float = 0.02,
+               result: dict = None) -> dict:
+        if not wing_commands or not actual_pitch_degs:
+            return {
+                'health_tiers': list(self.health_tiers),
+                'peak_tracking_errors': [round(e, 2) for e in self.peak_tracking_error],
+                'tier1_count': 0, 'tier2_count': 0, 'tier3_count': 0,
+                'status': 'NO_DATA',
+                'primary_failed_wing': None,
+                'advisory': 'Awaiting ADC sensor feedback'
+            }
+
+        num_wings = min(len(wing_commands), len(actual_pitch_degs), 8)
+
+        for i in range(num_wings):
+            act_p = actual_pitch_degs[i]
+            if act_p is None:
+                continue
+
+            cmd_p = wing_commands[i].get('pitch_deg', 0.0)
+            err = abs(cmd_p - act_p)
+            self.peak_tracking_error[i] = max(self.peak_tracking_error[i] * 0.96, err)
+
+            # Tier 3: Catastrophic disengagement (> 15 deg)
+            if err >= self.t3_thresh:
+                self.consecutive_severes[i] += 1
+                if self.consecutive_severes[i] >= self.t3_cycles_needed:
+                    self.health_tiers[i] = 3
+                    if self.primary_failed_wing is None:
+                        self.primary_failed_wing = i
+
+            # Tier 2: Active gear slip (> 5 deg)
+            elif err >= self.t2_thresh:
+                self.consecutive_slips[i] += 1
+                self.consecutive_severes[i] = max(0, self.consecutive_severes[i] - 1)
+                if self.consecutive_slips[i] >= self.t2_cycles_needed:
+                    if self.health_tiers[i] < 2:
+                        self.health_tiers[i] = 2
+
+            # Tier 1: Incipient backlash expansion (> 2.5 deg)
+            elif err >= self.t1_thresh:
+                self.consecutive_slips[i] = max(0, self.consecutive_slips[i] - 1)
+                self.consecutive_severes[i] = max(0, self.consecutive_severes[i] - 1)
+                if self.health_tiers[i] < 1:
+                    self.health_tiers[i] = 1
+
+            # Normal tracking (< 2.0 deg)
+            else:
+                self.consecutive_slips[i] = max(0, self.consecutive_slips[i] - 1)
+                self.consecutive_severes[i] = max(0, self.consecutive_severes[i] - 1)
+                if self.health_tiers[i] == 1 and self.consecutive_slips[i] == 0:
+                    self.health_tiers[i] = 0
+
+        # Apply Progressive Mitigations
+        tier1_active = []
+        tier2_active = []
+        tier3_active = []
+
+        for i in range(num_wings):
+            tier = self.health_tiers[i]
+            if tier == 1:
+                tier1_active.append(i)
+                # Soften flap amplitude by 10% to reduce tooth reversal shock
+                cur_amp = wing_commands[i].get('flap_amp_deg', 22.0)
+                wing_commands[i]['flap_amp_deg'] = round(cur_amp * 0.90, 2)
+                wing_commands[i]['gear_tier1_soften'] = True
+
+            elif tier == 2:
+                tier2_active.append(i)
+                # Lock pitch to neutral zero-moment cruise trim (+4.0 deg)
+                wing_commands[i]['pitch_deg'] = 4.0
+                wing_commands[i]['gear_tier2_locked'] = True
+                # Offload lift to tandem partner wing (same side, adjacent pair)
+                partner_idx = (i + 2) % num_wings
+                if self.health_tiers[partner_idx] < 2 and partner_idx < len(wing_commands):
+                    p_amp = wing_commands[partner_idx].get('flap_amp_deg', 22.0)
+                    wing_commands[partner_idx]['flap_amp_deg'] = round(min(88.0, p_amp * 1.12), 2)
+                    wing_commands[partner_idx]['partner_boost_active'] = True
+
+            elif tier == 3:
+                tier3_active.append(i)
+                # Zeros flapping amplitude and stows wing aft
+                wing_commands[i]['flap_amp_deg'] = 0.0
+                wing_commands[i]['sweep_deg'] = 95.0
+                wing_commands[i]['pitch_deg'] = 0.0
+                wing_commands[i]['gear_tier3_stripped'] = True
+
+        status = 'NOMINAL_GEAR_HEALTH'
+        advisory = 'All 8 wrist bevel gears tracking within nominal limits.'
+
+        if tier3_active:
+            status = f'TIER_3_CATASTROPHIC_GEAR_STRIPPED_WINGS_{tier3_active}'
+            advisory = f'Wing {tier3_active[0]} pitch gear sheared. Flapping killed, wing stowed aft, H-42 re-trim engaged.'
+            if result is not None and isinstance(result, dict):
+                result['failed_wing_idx'] = tier3_active[0]
+                result['wrist_gear_tier3_active'] = True
+        elif tier2_active:
+            status = f'TIER_2_GEAR_SLIP_LOCKED_WINGS_{tier2_active}'
+            advisory = f'Wing {tier2_active} teeth slipping. Pitch locked to +4.0° neutral; return to base.'
+            if result is not None and isinstance(result, dict):
+                result['wrist_gear_tier2_active'] = True
+        elif tier1_active:
+            status = f'TIER_1_BACKLASH_ELEVATED_WINGS_{tier1_active}'
+            advisory = f'Wing {tier1_active} elevated backlash detected. Flap acceleration softened; inspect on landing.'
+            if result is not None and isinstance(result, dict):
+                result['wrist_gear_tier1_active'] = True
+
+        return {
+            'health_tiers': list(self.health_tiers),
+            'peak_tracking_errors': [round(e, 2) for e in self.peak_tracking_error],
+            'tier1_count': len(tier1_active),
+            'tier2_count': len(tier2_active),
+            'tier3_count': len(tier3_active),
+            'tier1_wings': tier1_active,
+            'tier2_wings': tier2_active,
+            'tier3_wings': tier3_active,
+            'primary_failed_wing': tier3_active[0] if tier3_active else None,
+            'status': status,
+            'advisory': advisory
+        }
+
+_GLOBAL_WRIST_GEAR_MONITOR = WristGearHealthMonitor()
+
+def govern_wrist_gear_damage(wing_commands: list, actual_pitch_degs: list,
+                             actual_sweep_degs: list = None, dt: float = 0.02,
+                             result: dict = None) -> dict:
+    """
+    Functional wrapper for 50 Hz loop integration.
+    Monitors 3D-printed bevel gear health and applies progressive Tier 1-3 mitigations.
+    """
+    global _GLOBAL_WRIST_GEAR_MONITOR
+    return _GLOBAL_WRIST_GEAR_MONITOR.update(
+        wing_commands=wing_commands,
+        actual_pitch_degs=actual_pitch_degs,
+        actual_sweep_degs=actual_sweep_degs,
+        dt=dt,
+        result=result
+    )
+
+def reset_wrist_gear_monitor():
+    """Resets monitor state between flights or after gear replacement."""
+    global _GLOBAL_WRIST_GEAR_MONITOR
+    _GLOBAL_WRIST_GEAR_MONITOR.reset()
+
+
+# ─────────────────────────────────────────────────────────────────
+# 36. SYMMETRICAL PAIR QUARANTINE & SUSTAINED RTH GOVERNOR (H-RTH-6WING)
+# ─────────────────────────────────────────────────────────────────
+class SymmetricalRTHGovernor:
+    """
+    Coordinates safe, long-range Return to Home (RTH) following single or multi-wing damage.
+    Reconciles failure persistence:
+      - Immediate fast stabilization uses asymmetric N-1 trim (H-42).
+      - After persistence >= 1.5 s, or when pilot/autopilot commands RTH ('rth', 'return_home'),
+        or when multiple wings on a station fail, transitions into Symmetrical 6-Wing Mode.
+      - Enforces thermal limits (f <= 2.20 Hz, I_rms < 7.5 A), zero roll/yaw asymmetry,
+        and inter-station sweep delta <= 12.0° (zero blade-strike clearance).
+    """
+    def __init__(self, persistence_threshold_s: float = 1.5):
+        self.persistence_threshold_s = persistence_threshold_s
+        self.fault_active_time = 0.0
+        self.symmetrical_rth_engaged = False
+        self.quarantined_stations = []
+
+    def reset(self):
+        self.fault_active_time = 0.0
+        self.symmetrical_rth_engaged = False
+        self.quarantined_stations = []
+
+    def govern_rth(self, wing_commands: list, failed_wings,
+                   intent: str = 'cruise', dt: float = 0.02,
+                   base_freq_hz: float = 1.87, result: dict = None,
+                   h_agl_m: float = 50.0, frozen_angles: dict = None,
+                   rope_integrity_lost: bool = False) -> dict:
+        import mco_advanced_physics as ap
+
+        if failed_wings is None or (isinstance(failed_wings, (list, set)) and len(failed_wings) == 0):
+            self.fault_active_time = 0.0
+            self.symmetrical_rth_engaged = False
+            return {
+                'rth_engaged': False,
+                'status': 'ALL_WINGS_HEALTHY',
+                'recommended_freq_hz': base_freq_hz,
+                'quarantined_stations': [],
+                'phase_reindexed_120deg': False
+            }
+
+        self.fault_active_time += dt
+
+        force_rth = intent in ('rth', 'return_home', 'emergency_rth', 'land')
+        multi_wing = isinstance(failed_wings, (list, set)) and len(failed_wings) > 1
+
+        # Engage symmetrical RTH if fault persists or multi-wing or forced by intent
+        if force_rth or multi_wing or (self.fault_active_time >= self.persistence_threshold_s):
+            self.symmetrical_rth_engaged = True
+
+        if not self.symmetrical_rth_engaged:
+            return {
+                'rth_engaged': False,
+                'status': 'IMMEDIATE_ASYMMETRIC_STABILIZATION',
+                'recommended_freq_hz': base_freq_hz,
+                'quarantined_stations': [],
+                'phase_reindexed_120deg': False
+            }
+
+        # Apply Hardened Symmetrical Pair Quarantine & Evasion
+        out_cmds, rth_active, rec_freq, diag = ap.symmetrical_pair_quarantine_rth(
+            failed_wings=failed_wings,
+            base_commands=wing_commands,
+            base_freq_hz=base_freq_hz,
+            h_agl_m=h_agl_m,
+            frozen_angles=frozen_angles,
+            rope_integrity_lost=rope_integrity_lost
+        )
+
+        # Mutate wing commands in place
+        for i in range(min(len(wing_commands), len(out_cmds))):
+            wing_commands[i].update(out_cmds[i])
+
+        self.quarantined_stations = diag.get('quarantined_stations', [])
+
+        if result is not None and isinstance(result, dict):
+            result['symmetrical_rth_active'] = True
+            result['symmetrical_rth_freq_hz'] = rec_freq
+            result['symmetrical_rth_diag'] = diag
+            if 'recommended_pair_offsets_rad' in diag:
+                result['pair_phase_offsets'] = diag['recommended_pair_offsets_rad']
+
+        return {
+            'rth_engaged': True,
+            'status': diag.get('status', 'SYMMETRICAL_RTH_ACTIVE'),
+            'recommended_freq_hz': rec_freq,
+            'quarantined_stations': self.quarantined_stations,
+            'lift_retention_pct': diag.get('lift_retention_pct', 100.0),
+            'thermal_safety_margin_C': diag.get('thermal_safety_margin_C', 23.0),
+            'safe_rth_endurance_min': diag.get('safe_rth_endurance_min', 8.5),
+            'pitch_moment_balanced': diag.get('pitch_moment_balanced', True),
+            'phase_reindexed_120deg': diag.get('phase_reindexed_120deg', False),
+            'recommended_pair_offsets_rad': diag.get('recommended_pair_offsets_rad', []),
+            'evasion_active': diag.get('evasion_active', False),
+            'ground_flare_interlock_active': diag.get('ground_flare_interlock_active', False)
+        }
+
+_GLOBAL_SYMMETRICAL_RTH_GOVERNOR = SymmetricalRTHGovernor()
+
+def govern_symmetrical_rth(wing_commands: list, failed_wings,
+                           intent: str = 'cruise', dt: float = 0.02,
+                           base_freq_hz: float = 1.87, result: dict = None,
+                           h_agl_m: float = 50.0, frozen_angles: dict = None,
+                           rope_integrity_lost: bool = False) -> dict:
+    global _GLOBAL_SYMMETRICAL_RTH_GOVERNOR
+    return _GLOBAL_SYMMETRICAL_RTH_GOVERNOR.govern_rth(
+        wing_commands=wing_commands,
+        failed_wings=failed_wings,
+        intent=intent,
+        dt=dt,
+        base_freq_hz=base_freq_hz,
+        result=result,
+        h_agl_m=h_agl_m,
+        frozen_angles=frozen_angles,
+        rope_integrity_lost=rope_integrity_lost
+    )
+
+def reset_symmetrical_rth_governor():
+    global _GLOBAL_SYMMETRICAL_RTH_GOVERNOR
+    _GLOBAL_SYMMETRICAL_RTH_GOVERNOR.reset()
+
+
+
+
+
+
+

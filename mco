@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# MCO-1D Unified Engineering Workflow CLI Wrapper
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -x "$SCRIPT_DIR/ornithopter-cad/.venv-agentcad/bin/python" ]; then
+  exec "$SCRIPT_DIR/ornithopter-cad/.venv-agentcad/bin/python" "$SCRIPT_DIR/scripts/mco_cli.py" "$@"
+else
+  exec python3 "$SCRIPT_DIR/scripts/mco_cli.py" "$@"
+fi

@@ -20,8 +20,20 @@ Comprehensive index of all assets in the MCO-1D repository grouped into 10 funct
 | [MCO-1D_Mark1_Flight_Test_Protocol.md](docs/mark1/MCO-1D_Mark1_Flight_Test_Protocol.md) | **[ACTIVE]** | 4-Phase progressive test clearance: TC-01 (Ground bench static thrust), TC-02 (Tethered lift hunt), TC-03 (Truck advance-ratio sweep), TC-04 (First free flight STOL). |
 | [MCO-1D_Mark1_Software_Reference.md](docs/mark1/MCO-1D_Mark1_Software_Reference.md) | **[ACTIVE]** | Real-time software architecture: 50 Hz executive loop breakdown, Boyd $P_s$ PI controller, 232 biomimetic hypotheses (70 advanced suites), software-only reversal recoil engine, CAN-FD frame dictionary, and 368 ground station command catalogue. |
 | [MCO-1D_Mark1_Adversarial_Audit_Report.md](docs/mark1/MCO-1D_Mark1_Adversarial_Audit_Report.md) | **[ACTIVE]** | Comprehensive adversarial engineering audit: aerodynamic lift deficit, torque limits at 3.5 Hz, CAD spar bore correction, runtime crash remediations, and safety matrix. |
-| [view_bom.sh](view_bom.sh) | **[ACTIVE]** | Root executable convenience script: updates pricing from verified vendors, regenerates BOM Markdown, and displays formatted terminal report. |
-| [mco_bom_tool.py](scripts/mco_bom_tool.py) | **[ACTIVE]** | Standalone zero-dependency Python tool driving the live BOM pricing and MTOW calculation engine. |
+| [MCO-1.5D_SD7062_Specification.md](docs/mark1/MCO-1.5D_SD7062_Specification.md) | **[ACTIVE]** | Authoritative MCO-1.5D SD7062 Design Option: 102.5g per-wing panel mass budget, 2.0mm robust oval lightening ribs, 61.6% sprint drag reduction, 4.306 kg AUW. |
+| [MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf](docs/mark1/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf) | **[ACTIVE]** | Publication-grade 2-page hierarchical installation manual (Tier 1 Bevel Wrist -> Tier 2 Stagecoach Flapping Shoulder -> Tier 3 Fuselage Collar). |
+| [MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf](docs/mark1/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf) | **[ACTIVE]** | V10 Powertrain Stand, Dual-Shear Top Brace, GoolRC 5010 motor, and ODrive Micro installation manual. |
+| [MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf](docs/mark1/MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf) | **[ACTIVE]** | V10 7-spoke Stagecoach sector drum and 2-DOF bevel differential wrist assembly guide. |
+| [MCO-1D_Electronics_and_Systems_Guide.pdf](docs/mark1/MCO-1D_Electronics_and_Systems_Guide.pdf) | **[ACTIVE]** | Avionics, CAN-FD bus topology, dual-zone 7.4V servo rail, and sensor integration manual. |
+| [MCO-1D_Low_Speed_CFD_Wave_Library_Audit.md](docs/mark1/MCO-1D_Low_Speed_CFD_Wave_Library_Audit.md) | **[ACTIVE]** | Low-speed ($0\text{--}8\text{ m/s}$) unsteady CFD and wave kinematics audit across S1223 & SD7062 cascades. |
+| [MCO-1D_Maneuverability_CFD_Adversarial_Audit.md](docs/mark1/MCO-1D_Maneuverability_CFD_Adversarial_Audit.md) | **[ACTIVE]** | PPL/CPL, BFM dogfighting, and Aresti aerobatic CFD envelope audit. |
+| [MCO-1D_Fasteners_and_Inserts_Mass_Budget.md](docs/mark1/MCO-1D_Fasteners_and_Inserts_Mass_Budget.md) | **[ACTIVE]** | Complete fastener, bearing, dead-axle, and heat-set insert mass ledger. |
+| [AGENTS.md](AGENTS.md) | **[ACTIVE]** | Repository organization contract, Python runtime policy, `./mco` workflow rules, and PrusaSlicer MCP validation gate. |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | **[ACTIVE]** | Developer contribution guide, Git workflows, pre-push verification gates, and `./mco` CLI standards. |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | **[ACTIVE]** | GitHub Actions CI workflow running Doctor, 1,020 unit tests, 50 Hz SITL, TC-01 bench qualification, and BOM verification. |
+| [mco](mco) / [Makefile](Makefile) / [mco_cli.py](scripts/mco_cli.py) | **[ACTIVE]** | Unified engineering workflow CLI (`./mco test`, `sim`, `cad`, `slice`, `bom`, `docs`, `doctor`). |
+| [prusaslicer_mcp_server.py](scripts/mcp/prusaslicer_mcp_server.py) | **[ACTIVE]** | Native Python `FastMCP` server driving PrusaSlicer 2.9.6 CLI & GUI on macOS. |
+| [view_bom.sh](view_bom.sh) / [mco_bom_tool.py](scripts/mco_bom_tool.py) | **[ACTIVE]** | Zero-dependency live BOM pricing and MTOW calculation engine. |
 
 ---
 
@@ -30,13 +42,13 @@ Comprehensive index of all assets in the MCO-1D repository grouped into 10 funct
 | File | Status | Description |
 | :--- | :---: | :--- |
 | [mco_main.py](firmware/mco_main.py) | **[ACTIVE]** | Main 50 Hz flight computer executive loop, sensor polling, command dispatch, failsafe handling. |
-| [mco_wave_library.py](firmware/mco_wave_library.py) | **[ACTIVE]** | Authoritative 90k+ line metachronal kinematics library containing all 232 biomimetic hypotheses (H-01 to H-108, H-88A dynamic vectoring, H-88B sweep bias trim, etc.), 5-modality Adaptive Learning Classifier (ALC), and ALSS adaptive state engine. |
-| [mco_flight_governor.py](firmware/mco_flight_governor.py) | **[ACTIVE]** | Flight governor & pilot intent arbitration: software-only reversal recoil engine (`compute_soft_recoil_trajectory`), aerodynamic spring pitch advance (`compute_aero_spring_pitch_advance`), and salvaged hypothesis governor (H-91, H-101, H-108). |
-| [mco_advanced_physics.py](firmware/mco_advanced_physics.py) | **[ACTIVE]** | Advanced aerodynamic physics suite containing 70 advanced hypotheses (H-37..H-108, H-LSB-1, H-DSH-1, H-AC-SHIFT-1, H-SHED-1, H-VEX-1, H-88A, H-88B), ALC evolutionary genome optimization, and bounded parameter safety clamps. |
+| [mco_wave_library.py](firmware/mco_wave_library.py) | **[ACTIVE]** | Authoritative 90k+ line metachronal kinematics library containing all 285 biomimetic hypotheses (H-01 to H-108, H-88A dynamic vectoring, H-88B sweep bias trim, aerobatic/wind suites), 5-modality Adaptive Learning Classifier (ALC), and ALSS adaptive state engine. |
+| [mco_flight_governor.py](firmware/mco_flight_governor.py) | **[ACTIVE]** | Flight governor & pilot intent arbitration: software-only reversal recoil engine (`compute_soft_recoil_trajectory`), `HardWIGFloorGovernor`, `SymmetricLoadFactorGovernor`, and `GroundWindSafetyGovernor`. |
+| [mco_advanced_physics.py](firmware/mco_advanced_physics.py) | **[ACTIVE]** | Advanced aerodynamic physics suite containing 70+ advanced hypotheses, ALC evolutionary genome optimization, and bounded parameter safety clamps. |
 | [mco_intent_control.py](firmware/mco_intent_control.py) | **[ACTIVE]** | Three-layer intent arbitration stack, unified lever parsing (100% Sprint to 0% Airbrake), Boyd energy-maneuvering controller. |
-| [mco_wave_library_clean.py](firmware/mco_wave_library_clean.py) | **[ACTIVE]** | Reference clean baseline of wave kinematics library prior to patch integration. |
-| [mco_wave_library_pre_audit.py](firmware/mco_wave_library_pre_audit.py) | **[ACTIVE]** | Pre-audit snapshot of wave kinematics library retained for DO-178C traceability. |
-| [wing_drone_firmware.py](firmware/wing_drone_firmware.py) | **[ACTIVE]** | Consolidated prototype firmware reference and self-contained flight model. |
+| [mco_wave_library_clean.py](firmware/archive/mco_wave_library_clean.py) | **[ARCHIVE]** | Reference clean baseline of wave kinematics library prior to patch integration. |
+| [mco_wave_library_pre_audit.py](firmware/archive/mco_wave_library_pre_audit.py) | **[ARCHIVE]** | Pre-audit snapshot of wave kinematics library retained for DO-178C traceability. |
+| [wing_drone_firmware.py](firmware/archive/wing_drone_firmware.py) | **[ARCHIVE]** | Consolidated prototype firmware reference and self-contained flight model. |
 
 ---
 
@@ -135,10 +147,18 @@ Comprehensive index of all assets in the MCO-1D repository grouped into 10 funct
 
 ---
 
-## 9. Mechanical Drawings & CAD Specifications (cad/drawings/)
+## 9. Mechanical Drawings, 3D Print Packages & Slicer Profiles (`cad/`)
 
 | File | Status | Description |
 | :--- | :---: | :--- |
+| [README_3D_PRINT_GUIDE.md](cad/print_package_wing_root/README_3D_PRINT_GUIDE.md) | **[ACTIVE]** | Complete CDR 3D Print Guide & Hardware BOM for 1 full Wing Root Assembly (`01`–`08` + `PLATE_01`). |
+| [PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl](cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl) | **[ACTIVE]** | Pre-arranged single-bed PA12-CF print plate containing all 8 structural wing root parts (fits 220x220mm bed). |
+| [v10_complete_wing_root_assembly.step](cad/manufactured/v10_complete_wing_root_assembly.step) | **[ACTIVE]** | Master 9-solid STEP assembly of complete wing root mechanism with 0.0000 mm³ interference. |
+| [MCO-1D_V10_Wing_Root_Assembly.f3d](cad/manufactured/MCO-1D_V10_Wing_Root_Assembly.f3d) | **[ACTIVE]** | Autodesk Fusion 360 parametric archive with 19 components, 18 As-Built kinematic joints, and exploded views. |
+| [mco_pa12cf_structural_coreone.ini](cad/slicer_profiles/mco_pa12cf_structural_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 profile for PA12-CF structural parts on Prusa CORE One (6 walls, 60% Gyroid). |
+| [mco_pa12cf_solid_gears_coreone.ini](cad/slicer_profiles/mco_pa12cf_solid_gears_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 profile for 100% solid PA12-CF bevel gears, capstan pinion, gimbal yoke, and top brace. |
+| [mco_lwpla_aero_fairing_coreone.ini](cad/slicer_profiles/mco_lwpla_aero_fairing_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 foaming LW-PLA profile for NACA 0018 aerodynamic fairing and wing ribs. |
+| [mco_pla_prototype_coreone.ini](cad/slicer_profiles/mco_pla_prototype_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 PLA profile for rapid fit-check prototyping on Prusa CORE One. |
 | [MCO_1D_Rib_Drawing.pdf](cad/drawings/MCO_1D_Rib_Drawing.pdf) | **[ACTIVE]** | Dimensioned engineering drawing of universal S1223 rib with 2.2mm spar holes and D-box. |
 | [MCO_1D_Wing_Construction.pdf](cad/drawings/MCO_1D_Wing_Construction.pdf) | **[ACTIVE]** | Rev H2 wing construction drawing showing spar stations, rib spacing, and membrane. |
 | [MCO_1D_wing_design.html](cad/drawings/MCO_1D_wing_design.html) | **[ACTIVE]** | Interactive HTML schematic of S1223 airfoil cross-section and structural stations. |

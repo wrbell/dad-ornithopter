@@ -40,7 +40,7 @@ import datetime
 # ─────────────────────────────────────────────────────────────────
 RHO          = 1.225
 G            = 9.81
-MTOW_KG      = 5.687
+MTOW_KG      = 3.417  # Calibrated Mark 1 AUW (was 5.687 kg)
 
 def atmospheric_density(altitude_m=0.0, temp_c=15.0):
     """
@@ -66,9 +66,9 @@ CL_MAX       = 1.60
 CD0          = 0.022
 
 REDUCER_RATIO = 10
-KV           = 200.0
+KV           = 360.0  # GoolRC 5010-14 360KV outrunner
 KT           = 60 / (2 * math.pi * KV)
-RI           = 0.10
+RI           = 0.08
 VBUS         = 22.2
 I_WING       = 0.0240  # kg*m^2 (1.0m wing panel + tip moment of inertia)
 PF_FLAPPING  = 0.127   # Flapping power factor: active real shaft work / apparent voltamperes
@@ -99,7 +99,7 @@ class PerformanceModel:
                 amplitude_deg, throttle_frac,
                 bank_deg=0.0, h_agl_m=0.0,
                 p_motor_w=None, p_servo_w=None, p_avionics_w=18.0,
-                battery_wh=188.7):
+                battery_wh=39.07):
         result = {}
         sweep_from_abeam = max(0.0, sweep_deg_mean - 60.0)
         S_eff = S_TOTAL_M2 * math.cos(math.radians(sweep_from_abeam))

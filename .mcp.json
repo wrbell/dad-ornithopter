@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "prusaslicer": {
+      "type": "stdio",
+      "command": "/Users/drbell/Code/flight/ornithopter-cad/.venv-agentcad/bin/python",
+      "args": [
+        "/Users/drbell/Code/flight/scripts/mcp/prusaslicer_mcp_server.py"
+      ],
+      "env": {
+        "PRUSASLICER_BIN": "/Applications/Original Prusa Drivers/PrusaSlicer.app/Contents/MacOS/PrusaSlicer",
+        "PRUSASLICER_DATADIR": "/Users/drbell/Library/Application Support/PrusaSlicer",
+        "MCO_REPO_ROOT": "/Users/drbell/Code/flight"
+      }
+    },
+    "agentcad": {
+      "type": "stdio",
+      "command": "/Users/drbell/Code/flight/ornithopter-cad/.venv-agentcad/bin/python",
+      "args": [
+        "-m",
+        "agentcad.mcp"
+      ],
+      "env": {
+        "AGENTCAD_RUN_TIMEOUT_S": "600"
+      }
+    },
+    "fusion": {
+      "type": "http",
+      "url": "http://127.0.0.1:27182/mcp"
+    }
+  }
+}

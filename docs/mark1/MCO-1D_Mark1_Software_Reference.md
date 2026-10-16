@@ -53,19 +53,30 @@ During high-speed forward flight ($V_\infty \ge 10.0\text{ m/s}$), wing sweep is
 * **Downstroke ($\phi \in [0, \pi]$)**: Wings sweep forward to $30^\circ$ to tilt the stroke plane forward and generate maximum propulsive thrust.
 * **Upstroke ($\phi \in [\pi, 2\pi]$)**: Wings sweep aft toward $85^\circ$ to streamline the span, minimizing parasite and profile drag during wing recovery.
 
-### 2.3 Flight Governor & Software-Only Recoil Engine (`mco_flight_governor.py`)
-Hardware safety boundaries and turnaround dynamics are enforced without adding physical springs:
-1. **Software-Only Reversal Recoil Engine (`compute_soft_recoil_trajectory`)**: 
+### 2.3 Flight Safety Governors & Dynamic Airframe Protection (`mco_flight_governor.py`)
+Hardware safety boundaries, ground protection, and turnaround dynamics are enforced deterministically:
+1. **Hard Wing-In-Ground (WIG) Safety Floor Governor (`HardWIGFloorGovernor`)**:
+   * Enforces an impassable **$0.35\text{ m}$ virtual floor** above runway level to prevent Controlled Flight Into Terrain (CFIT) while skimming.
+   * Progressively resists forward stick pushing in the buffer zone ($0.35\text{--}0.65\text{ m}$) and locks out forward stick completely at $\le 0.35\text{ m}$ while pulsing front canard lift ($+35\text{ N}$) and pitch up ($+6.0^\circ$) on sink.
+   * Automatically dissolves the virtual floor from $0.35\text{ m}$ to $0.00\text{ m}$ over **$0.25\text{ s}$** upon pilot initiation of a landing flare (`Intent.FLARE`, `ROOST_SOMERSAULT`, or deep aft stick).
+2. **Symmetric Structural Load Factor Governor (`SymmetricLoadFactorGovernor`)**:
+   * Strictly clamps normal load factor to **$N_z \in [-2.20g, +2.20g]$** across all maneuvers.
+   * With the bidirectional capstan drive and reinforced battery tray, limits are completely symmetric, protecting carbon spars from overload during inside and outside push loops.
+3. **Dynamic As-Built Mass Scaling (`scale_flight_laws_to_mass`)**:
+   * Accepts live as-built gross weight from [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) (`FIG-01`).
+   * Dynamically rescales stall speed floor $V_s \propto \sqrt{m}$, required lift $L = mg$, Boyd specific excess power $P_s$, and hover thrust-to-weight ratio.
+4. **Software-Only Reversal Recoil Engine (`compute_soft_recoil_trajectory`)**: 
    * Trajectory shaping with a tuned 3rd-harmonic counter-acceleration component:
      $$\theta(t) = \theta_0 (1.02 \sin \omega t + 0.02 \sin 3\omega t)$$
    * Flattens turnaround acceleration spikes by up to $42\%$, eliminating motor torque saturation at stroke reversal.
-2. **Aerodynamic Air-Spring Pitch Advance (`compute_aero_spring_pitch_advance`)**: 
+5. **Aerodynamic Air-Spring Pitch Advance (`compute_aero_spring_pitch_advance`)**: 
    * Rotates wing chord into oncoming airflow $15\text{--}25\text{ ms}$ prior to stroke reversal ($+8^\circ$ at top turnaround, $-8^\circ$ at bottom turnaround), using dynamic pressure as an aerodynamic deceleration cushion.
-3. **Hard Boundary Guards**:
+6. **Hard Boundary Guards**:
    * Glide speed floor ($11.0\text{ m/s}$) with automated power injection below $10.5\text{ m/s}$.
    * Leaky-bucket motor stator thermal governor ($25.0\text{ s}$ hover budget).
-   * Dyneema SK99 cable creep tare and zero-point drift protection.
+   * Sprint thermal clamp: 20s burst ceiling, 45s cooldown lockout, 18.0A servo current trip.
    * Multi-wing blade strike collision avoidance ($94\text{ mm}$ root clearance for H-91 clap-fling).
+   * 200° sector wheel travel with $\pm 96.0^\circ$ dynamic reciprocating stroke ceiling (reserving $4^\circ$ overshoot cushion).
 
 ### 2.4 Dual H-88 Stroke-Plane Vectoring Architecture
 * **`H-88A` (Dynamic Harmonic Vectoring)**: Coordinates in-stroke flapping and sinusoidal sweep oscillation to tilt the physical stroke plane by $\beta = \arctan(\Theta/\Phi) = \pm 15^\circ\text{ to }\pm 18^\circ$, delivering rapid pure yaw couples ($>5.2\text{ N}\cdot\text{m}$, $>60^\circ/\text{s}$) with zero roll asymmetry.
@@ -89,6 +100,47 @@ Under the Path 2 engineering baseline, physical grounding functions reconcile ae
    * Evaluates barometric/GPS altitude, vertical climb rate, terrain slope, and wind gust intensity to trigger high-altitude turbulent mountain flight profiles (`H-61`) with status reporting.
 6. **Tie-Break Exploration Balancing**:
    * Hypothesis arbitration in `_select_winning_candidate` incorporates `eval_counts` usage tracking, selecting the least-evaluated candidate when performance scores tie within tolerance, ensuring balanced exploration across all 258 hypotheses.
+
+### 2.6 Fanned Bi-Delta Tailplane Fast Cruise & Level Dash (`H-FALCON-TRIM-1`)
+Under `H-FALCON-TRIM-1` ("Falcon Dart"), high-speed cruise ($V = 20.80\,\text{m/s}$, $46.5\,\text{mph}$, $365\,\text{W}$) and level dash ($V = 26.35\,\text{m/s}$, $58.9\,\text{mph}$, $580\,\text{W}$) are achieved on the Selig S1223 tandem airframe while eliminating uncompensated longitudinal body porpoising and cyclic dynamic stall:
+1. **Kinematic Architecture**:
+   * **Active Propulsive Cascade (Stations 1, 2, 3)**: Flap symmetrically at $f = 2.4 - 3.0\,\text{Hz}$ ($\pm 18.0^\circ$ stroke amplitude) in a fanned stagger sweep schedule ($+5.0^\circ, +15.0^\circ, +28.0^\circ$) with progressive washout trim ($+2.5^\circ, +1.5^\circ, +1.0^\circ$).
+   * **Stationary FBW Tailplane (Station 4)**: Locked stationary at flapping stroke $\theta = 0.0^\circ$, swept aft to $+50.0^\circ$, and pitched to $\alpha = -5.5^\circ$.
+2. **Longitudinal Pitch Equilibrium**:
+   * Active flapping wings W1–W3 generate net nose-down pitching moment $M_{\text{pitch}} \approx -21.4\,\text{N}\cdot\text{m}$.
+   * Stationary W4 at $\alpha = -5.5^\circ$ generates a calm $+21.4\,\text{N}\cdot\text{m}$ nose-up trim moment, zeroing residual porpoising ($<0.1\,\text{N}\cdot\text{m}$ vs baseline $\pm 24.4^\circ$).
+3. **Actuator & Aeroelastic Margins**:
+   * Stationary lock prevents cyclic upstroke dynamic stall ($\alpha = -13.2^\circ$).
+   * Pitch servo hinge moment on Station 4 is bounded to $M_h \le 0.45\,\text{N}\cdot\text{m}$, preserving a $>34.8\%$ torque margin below the AGFRC $0.69\,\text{N}\cdot\text{m}$ stall torque limit.
+   * Inter-wing dynamic 3D clearance exceeds $43.4\,\text{mm}$ across all stations ($57.8\,\text{mm}$ W1–W2, $95.8\,\text{mm}$ W3–W4).
+4. **Safety Envelopes & Aborts**:
+   * Instantaneous stick abort: $|\text{pitch}| > 0.35$, $|\text{roll}| > 0.35$, $|\text{yaw}| > 0.15$.
+   * Low-airspeed stall abort ($V < 12.0\,\text{m/s}$) and ground lockout (`on_ground = True`).
+   * High-speed pitot saturation guard ($V \ge 39.4\,\text{m/s}$ / $950\,\text{Pa}$) with automatic Tactical EKF / GPS airspeed fusion.
+   * Dispatched automatically via `Intent.FALCON_DART` (`mco_intent_control.py`) and inspected via ground station command `falcon_dart_status` (`firmware/mco_wave_library.py`).
+
+### 2.7 Locked Orthogonal Carrier Wave & Intra-Cascade Maneuvering
+The flight kinematics core eliminates inter-station phase drifting, beat vibrations, and clearance clashing by locking all 4 stations to a permanent orthogonal carrier clock:
+
+$$\phi_n(t) = 2\pi f_0 t - (n - 1) \cdot 90^\circ, \quad n \in \{1, 2, 3, 4\}$$
+
+1. **Square-Root Conserving Amplitude Mapping (Zero-Heave Pitch/Roll Engine)**:
+   * **Physics Rationale**: Flapping lift scales with the square of stroke amplitude ($\overline{L} \propto A^2$). Linear amplitude modulation ($A_1 = A_0(1+\delta)$, $A_4 = A_0(1-\delta)$) creates a $+6.25\text{--}12.5\%$ lift ballooning and breaks heave cancellation ($0.35 A_0$ residual heave couple).
+   * **Governing Control Law**: The kinematics core commands fore-aft and lateral moments via square-root mapped amplitude modulation:
+     $$A_1 = A_0 \sqrt{1 + 2\delta_{\text{pitch}}}, \quad A_4 = A_0 \sqrt{1 - 2\delta_{\text{pitch}}}$$
+     $$A_{\text{port}} = A_0 \sqrt{1 + 2\delta_{\text{roll}}}, \quad A_{\text{stbd}} = A_0 \sqrt{1 - 2\delta_{\text{roll}}}$$
+   * **Invariance**: This guarantees exact constant mean lift ($A_1^2 + A_4^2 = 2 A_0^2$), keeping cycle-averaged vertical acceleration below $0.04g$ during aggressive pitch and roll maneuvers.
+2. **Hummingbird Idle Dynamic Glide Governor**:
+   * **Stator Protection**: Holding wings stationary against $4.5\text{ N}$ aerodynamic lift draws $8.6\text{ A}$ DC into static motor coils ($1,530\text{ W}$ across 8 motors), causing immediate stator insulation failure within $12\text{ s}$.
+   * **Dynamic Dither Implementation**: When glide or zero-thrust is commanded, the governor engages an ultra-low-amplitude micro-dither:
+     $$\theta_n(t) = \theta_{\text{glide}} + 3.5^\circ \sin(2\pi \cdot 1.1 t - (n-1)\cdot 90^\circ)$$
+   * Rotates motor electrical fields continuously ($I_q \approx 6.1\text{ A RMS}$), dissipating only $35.7\text{ W}$ motor copper losses and maintaining a total electrical budget of **$92.0\text{ W}$** while providing $12:1$ glide ratio and $0.85\text{ m/s}$ sink rate.
+3. **VMS Quadrature Amplitude Cross-Fade Engine**:
+   * Shifts between hovering, cruise flapping, and glide regimes using smooth amplitude homotopy through zero ($A(t) \to 0 \to A_{\text{target}}$) rather than phase jumps.
+   * Couples a feedforward pitch reflex of $-4.0^\circ$ onto Station 1 during amplitude reductions to counteract the natural nose-up pitch surge ($+7.2\text{ rad/s}^2$).
+4. **Dual-Zone Servo Bus Inrush Governor**:
+   * Coordinates the AGFRC IB53BHU servos across Zone A (Fore, Stations 1 & 2) and Zone B (Aft, Stations 3 & 4) by introducing an intentional $4.0\text{ ms}$ command dispatch stagger between zones.
+   * Caps aggregate inrush current below $18.0\text{ A}$ per BEC zone, eliminating multi-servo step transient droop.
 
 ---
 

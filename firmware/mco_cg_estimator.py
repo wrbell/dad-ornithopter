@@ -60,14 +60,14 @@ import math
 # REPLACE all values marked # CAL: with measured data at first flight.
 DATUM_DESCRIPTION = "Nose tip of fuselage"
 
-# Mean Aerodynamic Chord position
-LEMAC_MM    = 475.0   # mm aft of datum (mean leading edge of 4 tandem stations: [100, 350, 600, 850]mm)
-MAC_MM      = 143.7   # mm (= CHORD_MM, confirmed)
+# Mean Aerodynamic Chord position (Compact Delta Frame: [95, 275, 455, 635]mm)
+LEMAC_MM    = 365.0   # mm aft of datum (mean leading edge of 4 tandem stations)
+MAC_MM      = 165.0   # mm (= S1223 CHORD_MM, locked specification)
 
-# CG envelope limits (% MAC — referenced to LEMAC = 475mm, Neutral Point = 510.9mm)
-# Static Margin +5% to +20% corresponds to -10.0% to +15.0% MAC relative to LEMAC
-CG_FWD_LIMIT_PCT_MAC  = -10.0 # % MAC forward limit (460.6 mm aft of datum)
-CG_AFT_LIMIT_PCT_MAC  = 25.0  # % MAC aft limit (510.9 mm aft of datum, neutral point)
+# CG envelope limits (% MAC — referenced to LEMAC = 365.0mm, Neutral Point = 406.3mm)
+# Static Margin +5% to +20% corresponds to -10.0% to +20.0% MAC relative to LEMAC (348.5mm to 398.0mm)
+CG_FWD_LIMIT_PCT_MAC  = -10.0 # % MAC forward limit (348.5 mm aft of datum)
+CG_AFT_LIMIT_PCT_MAC  =  20.0 # % MAC aft limit (398.0 mm aft of datum)
 
 # Compensation authority limits
 CG_COMP_AUTHORITY_MM  = 30.0  # mm — max CG offset we can compensate
@@ -80,40 +80,43 @@ CG_CRITICAL_MM        = 25.0  # mm — reduce performance above this
 # Replace zeros / estimates with measured values at build time.
 # =================================================================
 COMPONENT_ARMS = [
-    # Airframe structure & central spine (1000mm tube datum 0 at nose)
-    ("Aluminium spine & mounts",  500,   450,  "20mm tube (1000mm) + 8 station brackets"),
-    ("W1 wing pair (1150mm)",     100,   320,  "Universal ribs, 4x 250mm segments/side, ⌀10mm CF spars, wingtip"),
-    ("W2 wing pair (1150mm)",     350,   320,  "Universal ribs, 4x 250mm segments/side, ⌀10mm CF spars, wingtip"),
-    ("W3 wing pair (1150mm)",     600,   320,  "Universal ribs, 4x 250mm segments/side, ⌀10mm CF spars, wingtip"),
-    ("W4 wing pair (1150mm)",     850,   320,  "Universal ribs, 4x 250mm segments/side, ⌀10mm CF spars, wingtip"),
-    ("Wing pivot & sector units", 475,   240,  "8 pivots, bearings, 8 sector wheels"),
+    # Airframe structure & compact delta frame (700mm delta truss datum 0 at nose post)
+    ("Carbon delta frame & mounts", 365,   220,  "⌀20mm spine + ⌀12mm keel/post + 8 PA-CF clamp collars"),
+    ("W1 wing pair (1150mm)",        95,   138,  "Universal LW-PLA ribs, ⌀10mm CF main spar, ⌀2mm hollow secondary spars, Mylar wrap"),
+    ("W2 wing pair (1150mm)",       275,   138,  "Universal LW-PLA ribs, ⌀10mm CF main spar, ⌀2mm hollow secondary spars, Mylar wrap"),
+    ("W3 wing pair (1150mm)",       455,   138,  "Universal LW-PLA ribs, ⌀10mm CF main spar, ⌀2mm hollow secondary spars, Mylar wrap"),
+    ("W4 wing pair (1150mm)",       635,   138,  "Universal LW-PLA ribs, ⌀10mm CF main spar, ⌀2mm hollow secondary spars, Mylar wrap"),
+    ("Wing pivot & sector units",   365,   114,  "8 pivots, bearings, 8x 3D-printed Tough PLA 10:1 sector wheels (14.3g ea)"),
 
     # Flap drive system (8 motors + rope drives + pulleys)
-    ("GoolRC 5010-14 motors x8",  475,   760,  "8x 95g baseline brushless motors (360KV), 8x pinion pulleys"),
-    ("ODrive S1 controllers x8",  475,   640,  "8x 80g along motor rail"),
-    ("50W Brake resistors x8",    475,   200,  "Mounted on heat sink rail"),
-    ("Dyneema capstan system",    475,    50,  "Ropes and capstans"),
+    ("GoolRC 5010-14 motors x8",    365,   760,  "8x 95g baseline brushless motors (360KV)"),
+    ("ODrive S1 controllers x8",    365,   640,  "8x 80g along motor rail"),
+    ("50W Central brake resistors x2",365,  50,  "2x shared clamp resistors on 22.2V bus rail"),
+    ("Dyneema capstan system",      365,    60,  "3D-printed PETG drums & Dyneema SK99 lines"),
 
-    # Servos (16x AGFRC IB53BHU - 69.5g each, BOM v18)
-    ("AGFRC IB53BHU sweep x8",    475,   556,  "8x 69.5g sweep servos"),
-    ("AGFRC IB53BHU pitch x8",    475,   556,  "8x 69.5g pitch servos"),
+    # Morphing Servos (Option C Task-Optimized Hybrid: 8x 44g sweep + 8x 21g pitch)
+    ("AGFRC B44BLS sweep servos x8",365,   352,  "8x 44.0g mini brushless sweep servos (15 kg·cm)"),
+    ("AGFRC B24CLM pitch servos x8",365,   168,  "8x 21.0g micro pitch servos (7 kg·cm, 545°/s)"),
 
     # Computers and avionics
-    ("Raspberry Pi 4B (4GB)",     180,    55,  "Flight computer"),
-    ("Pixhawk 4 Mini + GPS",      160,    80,  "Autopilot and mast GPS"),
-    ("MCP3208 ADC boards x2",     250,    20,  "Pitch and sweep 12-bit SPI feedback"),
-    ("Sensors (IMU, Baro, Pitot)",120,    25,  "Nose bay sensor suite"),
-    ("Wiring harness (silicone)", 475,   120,  "High-current silicone bus wiring"),
+    ("Raspberry Pi 4B (4GB)",       180,    46,  "Flight computer"),
+    ("Pixhawk 4 Mini + GPS",        160,    38,  "Autopilot and GPS"),
+    ("MCP3208 ADC boards x2",       250,    20,  "Pitch and sweep 12-bit SPI feedback"),
+    ("Sensors (IMU, Baro, Pitot)",  120,    22,  "Nose bay sensor suite"),
+    ("Wiring harness (silicone)",   365,    80,  "Optimized 20 AWG / 14 AWG silicone bus wiring"),
 
-    # Undercarriage
-    ("Landing gear & skids",      475,   150,  "Carbon landing bow / skids"),
+    # Taildragger Undercarriage (Mains at X=400mm, PETG Tailskid at X=690mm)
+    ("NOBRIM Carbon main landing gear", 400, 36,  "Single molded carbon arch + 55mm foam wheels (X=400mm)"),
+    ("3D-printed PETG tailskid",    690,     9,  "Curved leaf skid at Corner 3 (X=690mm)"),
+    ("Frame clamps & gear saddle",  340,    39,  "3D-printed topology-optimized Corner 1, 2, 3 clamps + gear saddle"),
 
-    # Power system (Adjustable slide rail with indexing quick-pins: 120–550mm)
-    ("6S LiPo 5000mAh (Main)",    475,   540,  "Main propulsion — quick-pin sliding tray (120–550mm rail, nominal at 475mm)"),
-    ("2S LiPo 3000mAh (Servos)",  475,   175,  "Isolated 45C servo power bus — quick-pin sliding tray (nominal at 475mm)"),
+    # Aerodynamic Teardrop Bay & Power System (Single 6S Pack + 20A Switching BEC)
+    ("Hybrid Teardrop Bay & Cradle", 295,  116,  "Hybrid 3D pod: PETG tub 98.3g + LW-PLA hatch 17.5g + RC latches"),
+    ("6S LiPo 2200mAh 70C (Main)",  320,   295,  "Sweet-spot propulsion & avionics battery (8–9 min flight time)"),
+    ("Matek 20A HV Switching BEC",  240,    25,  "Synchronous 6S to 7.4V/8.4V step-down regulator (replaces 2S battery)"),
 
-    # Reserve payload
-    ("Payload bay (empty)",       475,     0,  "Reserve SAR payload allowance"),
+    # Reserve payload allowance
+    ("Reserve payload",             365,     0,  "Reserve payload allowance"),
 ]
 
 

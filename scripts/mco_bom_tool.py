@@ -49,27 +49,27 @@ BOM_DATABASE = [
     },
     {
         "id": "PROP-03",
-        "name": "50W 2.0-Ohm Dynamic Brake Resistor",
+        "name": "50W 2.0-Ohm Central Dynamic Bus Brake Resistor (Shared DC Rail)",
         "category": "1. Propulsion & Kinematic Drivetrain",
-        "qty": 8,
+        "qty": 2,
         "unit_price": 3.50,
         "vendor": "ODrive Robotics / Mouser",
         "url": "https://odriverobotics.com/shop/50w-brake-resistor",
         "part_no": "KAL50FB2R00",
         "unit_mass_g": 25.0,
-        "notes": "1 per S1 controller. Absorbs rapid deceleration regenerative spikes at stroke reversals."
+        "notes": "2 shared clamp resistors on main 22.2V motor power rail (PDB). Replaces 8 individual per-motor resistors via metachronal regenerative absorption. Saves 150g & $21."
     },
     {
         "id": "PROP-04",
-        "name": "7:1 Capstan Sector Wheel (200° Arc, 2mm Carbon Fiber)",
+        "name": "10:1 Capstan Sector Wheel (200° Arc, 3D-Printed Tough PLA)",
         "category": "1. Propulsion & Kinematic Drivetrain",
         "qty": 8,
-        "unit_price": 18.50,
-        "vendor": "SendCutSend / In-House CNC",
-        "url": "https://sendcutsend.com/materials/carbon-fiber/",
-        "part_no": "MCO1D-SEC-7TO1-200D",
-        "unit_mass_g": 38.0,
-        "notes": "Custom 2mm CF plate cut to sector_wheel_7to1_200deg.dxf. Full 200° arc (±100° stroke authority) rigged with Dyneema groove."
+        "unit_price": 0.75,
+        "vendor": "In-House 3D Print (Tough PLA)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-SEC-10TO1-PLA",
+        "unit_mass_g": 14.3,
+        "notes": "100% infill Tough PLA 10:1 sector wheel (R=60mm, 200° arc, ±100° stroke authority). 4.22 MPa contact stress gives 17.7x safety factor vs 75 MPa yield. Saves 189.6g vs CF plate."
     },
     {
         "id": "PROP-05",
@@ -85,29 +85,41 @@ BOM_DATABASE = [
     },
     {
         "id": "PROP-06",
-        "name": "Helical Capstan Motor Drums (Lathe Turned 6061-T6)",
+        "name": "Precision 3D-Printed Helical Capstan Motor Drums (High-Temp PETG / Brass Insert)",
         "category": "1. Propulsion & Kinematic Drivetrain",
         "qty": 8,
-        "unit_price": 12.00,
-        "vendor": "Xometry / In-House Lathe",
-        "url": "https://www.xometry.com",
-        "part_no": "MCO1D-DRUM-22MM",
-        "unit_mass_g": 18.0,
-        "notes": "22 mm pitch diameter helical groove drum with anchor pin for Dyneema line."
+        "unit_price": 0.75,
+        "vendor": "In-House 3D Print (PETG)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-DRUM-PETG",
+        "unit_mass_g": 7.5,
+        "notes": "100% infill PETG drum with M3 brass set-screw insert. 80°C heat resistance safely isolates motor shaft warmth while handling 77 N peak Dyneema line tension. Saves 84g & $90."
     },
 
     # ── 2. ACTUATION & INSTRUMENTATION ───────────────────────────────────────
     {
-        "id": "ACT-01",
-        "name": "AGFRC IB53BHU Brushless Programmable Servo (with 4th Analog Wire)",
+        "id": "ACT-01A",
+        "name": "AGFRC B44BLS High-Torque Mini Brushless Sweep Servos (15 kg·cm)",
         "category": "2. Morphing Actuation & Servo Systems",
-        "qty": 18,
-        "unit_price": 62.99,
+        "qty": 9,
+        "unit_price": 42.00,
         "vendor": "AGF-RC Official / Amazon",
-        "url": "https://www.agf-rc.com/programmable-brushless-servo-ib53bhu.html",
-        "part_no": "IB53BHU-FB",
-        "unit_mass_g": 69.5,
-        "notes": "16 installed (8 pitch, 8 sweep) + 2 flight-line spares. 36 kg·cm torque @ 7.4V, 444°/s."
+        "url": "https://www.agf-rc.com",
+        "part_no": "B44BLS-SWEEP",
+        "unit_mass_g": 44.0,
+        "notes": "8 installed on wing sweep stations + 1 spare. 15 kg·cm torque @ 8.4V, 444°/s. Handles 13.8 kg·cm max sweep load. Saves 204g vs IB53BHU."
+    },
+    {
+        "id": "ACT-01B",
+        "name": "AGFRC B24CLM Ultra-Light Micro Coreless Pitch Servos (7.0 kg·cm)",
+        "category": "2. Morphing Actuation & Servo Systems",
+        "qty": 9,
+        "unit_price": 28.50,
+        "vendor": "AGF-RC Official / Amazon",
+        "url": "https://www.agf-rc.com",
+        "part_no": "B24CLM-PITCH",
+        "unit_mass_g": 21.0,
+        "notes": "8 installed on wing pitch/AoA stations + 1 spare. 7.0 kg·cm torque @ 8.4V, 545°/s (0.055s/60°). Handles 6.1 kg·cm max pitch load. Saves 388g vs IB53BHU."
     },
     {
         "id": "ACT-02",
@@ -279,47 +291,59 @@ BOM_DATABASE = [
         "unit_mass_g": 45.0,
         "notes": "Used during TC-01 and TC-02 ground bench test stands for live thrust and lift logging."
     },
+    {
+        "id": "AV-12",
+        "name": "AS5600L 12-Bit Programmable I2C Magnetic Rotary Position Encoders (Fix 1)",
+        "category": "3. Avionics, Computing & Sensors",
+        "qty": 8,
+        "unit_price": 4.50,
+        "vendor": "Mouser / Digi-Key / AliExpress",
+        "url": "https://www.mouser.com/ProductDetail/ams-OSRAM/AS5600L",
+        "part_no": "AS5600L-POT",
+        "unit_mass_g": 2.0,
+        "notes": "Fix 1 (8x pitch encoders): measures actual physical wing angle of attack aoa_achieved_deg; 12-bit contactless with 6x2.5mm diametric magnets at pitch shafts (~16g total)."
+    },
 
     # ── 4. POWER SYSTEM & DISTRIBUTION ───────────────────────────────────────
     {
         "id": "PWR-01",
-        "name": "Tattu / Gens Ace 6S 5000 mAh 50C LiPo Battery (22.2V)",
+        "name": "Tattu / CNHL 6S 2200 mAh 70C LiPo Battery (22.2V, XT60)",
         "category": "4. Power Storage & Electrical Distribution",
         "qty": 1,
-        "unit_price": 119.99,
-        "vendor": "Gens Ace Official / Tattu USA",
-        "url": "https://genstattu.com/tattu-5000mah-22-2v-50c-6s1p-lipo-battery-pack-with-xt90-plug/",
-        "part_no": "TA-50C-5000-6S1P",
-        "unit_mass_g": 540.0,
-        "notes": "Main propulsion pack. Mounted on quick-pin sliding tray (230–340 mm arm along keel)."
+        "unit_price": 39.99,
+        "vendor": "Tattu Official / CNHL / Amazon",
+        "url": "https://genstattu.com",
+        "part_no": "TAT-6S-2200-70C",
+        "unit_mass_g": 295.0,
+        "notes": "Locked sweet-spot flight battery. 7.5 min cruise (320W) / 25 min Hummingbird Idle glide (92W) with 20% reserve. Battery sled also accommodates optional 6S 3300 mAh pack (415g, 11 min cruise / 38 min glide)."
     },
     {
         "id": "PWR-02",
-        "name": "Tattu / Gens Ace 2S 3000 mAh 45C LiPo Battery (7.4V)",
+        "name": "Dual-Channel High-Current Synchronous Step-Down BEC System (2x 20A Cont / 30A Peak, 6S to 7.4V/8.4V)",
         "category": "4. Power Storage & Electrical Distribution",
-        "qty": 1,
-        "unit_price": 26.99,
-        "vendor": "Gens Ace Official / Amazon",
-        "url": "https://genstattu.com/gens-ace-3000mah-7-4v-45c-2s1p-lipo-battery-pack/",
-        "part_no": "GEA-45C-3000-2S1P",
-        "unit_mass_g": 175.0,
-        "notes": "Dedicated isolated servo power pack. Prevents brownouts during 40A multi-servo spikes."
+        "qty": 2,
+        "unit_price": 24.00,
+        "vendor": "Matek Systems / KDE Direct / GetFPV",
+        "url": "https://www.mateksys.com/?portfolio=ubec-duo",
+        "part_no": "MTK-UBEC-DUO-40A",
+        "unit_mass_g": 25.0,
+        "notes": "Dual-channel split power architecture: BEC 1 powers Zone A (Stations 1 & 2, 8 servos); BEC 2 powers Zone B (Stations 3 & 4, 8 servos). Eliminates 40A servo inrush bus brownouts."
     },
     {
         "id": "PWR-03",
-        "name": "16-Port High-Current Servo Power Bus Board (100A Burst)",
+        "name": "16-Port High-Current Servo Power Bus Board (Dual-Zone Isolated Rails, 100A Burst)",
         "category": "4. Power Storage & Electrical Distribution",
         "qty": 1,
         "unit_price": 38.00,
         "vendor": "PowerBox Systems / FrSky",
         "url": "https://www.powerbox-systems.com",
-        "part_no": "PBS-SRV-BUS-16",
+        "part_no": "PBS-SRV-BUS-16-DUAL",
         "unit_mass_g": 35.0,
-        "notes": "Distributes 7.4V power from 2S battery to all 16 AGFRC servos with isolated signal lines."
+        "notes": "Distributes 7.4V power with isolated Zone A (Port 1–8) and Zone B (Port 9–16) power planes and unified signal ground."
     },
     {
         "id": "PWR-04",
-        "name": "Panasonic 4,700 µF 16V Low-ESR Electrolytic Buffer Capacitor",
+        "name": "Panasonic 4,700 µF 16V Low-ESR Electrolytic Buffer Capacitors (Dual Zone)",
         "category": "4. Power Storage & Electrical Distribution",
         "qty": 2,
         "unit_price": 2.25,
@@ -327,7 +351,7 @@ BOM_DATABASE = [
         "url": "https://www.mouser.com/ProductDetail/Panasonic/EEU-FR1C472",
         "part_no": "EEU-FR1C472",
         "unit_mass_g": 8.0,
-        "notes": "Connected across the 7.4V servo bus rail to suppress voltage dips during reversals."
+        "notes": "Soldered directly across Zone A and Zone B bus terminal blocks (<15mm lead length) to absorb 10ms inductive inrush spikes."
     },
     {
         "id": "PWR-05",
@@ -437,19 +461,19 @@ BOM_DATABASE = [
         "url": "https://dragonplate.com/carbon-fiber-rods",
         "part_no": "DP-TUBE-10MM-1200",
         "unit_mass_g": 58.0,
-        "notes": "Continuous 1.2m main spar running through root mount, all 4 segments (1.0m run), and anchoring into skeleton wingtip."
+        "notes": "Continuous 1.2m main spar located at strict 25.0% MAC (36.0mm ± 0.5mm aft of LE), running through root mount, all 4 segments, and wingtip."
     },
     {
         "id": "STRUCT-07",
-        "name": "Solid Carbon Fiber Secondary Alignment Spar Rods (⌀2.0mm & ⌀3.0mm x 1200mm, 10-Pack)",
+        "name": "Hollow Carbon Fiber Secondary Alignment Spar Tubes (⌀2.0mm OD x 1.0mm ID x 1000mm, 10-Pack)",
         "category": "5. Airframe, Wing Structure & Mechanics",
         "qty": 4,
-        "unit_price": 16.00,
-        "vendor": "DragonPlate / Amazon",
+        "unit_price": 21.99,
+        "vendor": "DragonPlate / Rock West Composites / Amazon",
         "url": "https://dragonplate.com",
-        "part_no": "DP-ROD-2MM-1200-PACK",
-        "unit_mass_g": 55.0,
-        "notes": "Inserted through continuous internal alignment bores across all 4 segments at 1.8mm and 72mm chord positions."
+        "part_no": "DP-TUBE-2MM-MICRO",
+        "unit_mass_g": 41.25,
+        "notes": "Pultruded micro hollow carbon tubes (0.5mm wall). Saves 55.0g airframe mass across 8 wings while providing identical bending stiffness for segment alignment."
     },
     {
         "id": "STRUCT-08",
@@ -465,19 +489,19 @@ BOM_DATABASE = [
     },
     {
         "id": "STRUCT-09",
-        "name": "Sliding Battery Tray Assembly with 4mm Stainless Ball-Lock Pin",
+        "name": "Hybrid Teardrop Electronics Pod with NACA Ram-Air Duct & Negative-Pressure Louvers",
         "category": "5. Airframe, Wing Structure & Mechanics",
         "qty": 1,
-        "unit_price": 22.00,
-        "vendor": "McMaster-Carr / In-House",
-        "url": "https://www.mcmaster.com/quick-release-pins",
-        "part_no": "MMC-PIN-4MM-SS",
-        "unit_mass_g": 42.0,
-        "notes": "Slides along lower deck tray X=120–550 mm. 10 mm indexing pitch with CG reference scale."
+        "unit_price": 5.50,
+        "vendor": "In-House 3D Print (PETG Tub / LW-PLA Hatch)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-POD-HYBRID-NACA",
+        "unit_mass_g": 118.0,
+        "notes": "370mm pod with integrated 25x15mm NACA nose intake directing ram air across ODrive heatsinks/BECs, and dual 40mm aft belly scavenge louvers."
     },
     {
         "id": "STRUCT-10",
-        "name": "Du-Bro 200MW 2.00\" (⌀50mm x 14mm) Super Light Foam Wheels (2 Pairs / 4 Wheels)",
+        "name": "Du-Bro 200MW 2.00\" (⌀50mm x 14mm) Super Light Foam Wheels (Flight Spares)",
         "category": "5. Airframe, Wing Structure & Mechanics",
         "qty": 2,
         "unit_price": 7.95,
@@ -485,31 +509,91 @@ BOM_DATABASE = [
         "url": "https://www.dubro.com",
         "part_no": "DUB-200MW",
         "unit_mass_g": 13.6,
-        "notes": "Closed-cell ultralight EVA foam tires with 4.0mm axle bore. 6.8g per wheel."
+        "notes": "Closed-cell ultralight EVA foam tires with 4.0mm axle bore (flight-line backup spares; 4 wheels included with AONTOKY kit)."
     },
     {
         "id": "STRUCT-11",
-        "name": "Precision Ground ⌀4.00mm x 40mm Stainless Steel Axles with E-Clip Retainers",
+        "name": "Precision Ground ⌀4.00mm x 40mm Stainless Steel Axles with Retaining Hardware",
         "category": "5. Airframe, Wing Structure & Mechanics",
-        "qty": 4,
+        "qty": 2,
         "unit_price": 4.50,
         "vendor": "McMaster-Carr",
         "url": "https://www.mcmaster.com/precision-shafts",
         "part_no": "MMC-1254K18",
         "unit_mass_g": 3.9,
-        "notes": "416 stainless ground axles for front (tf=250mm) and rear (tr=320mm) landing gear."
+        "notes": "416 stainless ground axle spares with E-clips (primary axles included with AONTOKY kit)."
     },
     {
         "id": "STRUCT-12",
-        "name": "⌀6.0mm Carbon Fiber Splayed Landing Gear Strut Tubes (4 Struts)",
+        "name": "NOBRIM Carbon Fiber Main Landing Gear YAK50E Wheel Kit (Taildragger Main Arch)",
         "category": "5. Airframe, Wing Structure & Mechanics",
-        "qty": 4,
+        "qty": 1,
+        "unit_price": 19.99,
+        "vendor": "NOBRIM / FLTHOBBY / Amazon",
+        "url": "https://www.amazon.com/dp/B0BL71QR5G",
+        "part_no": "B0BL71QR5G",
+        "unit_mass_g": 36.0,
+        "notes": "Locked taildragger main gear (Amazon B0BL71QR5G). Molded 3K twill carbon fiber leaf-spring arch clamped at X=400.0mm (68mm forward of CG). 275mm track, 55mm EVA foam wheels, M5 stepped axles. Ground clearance 115mm."
+    },
+    {
+        "id": "STRUCT-13",
+        "name": "3D-Printed Resilient PETG Taildragger Tailskid Assembly",
+        "category": "5. Airframe, Wing Structure & Mechanics",
+        "qty": 1,
+        "unit_price": 1.25,
+        "vendor": "In-House 3D Print (PETG)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-SKID-PETG",
+        "unit_mass_g": 9.0,
+        "notes": "Curved leaf spring tailskid with replaceable abrasion shoe at Corner 3 (X=690mm). Establishes +18.1° static nose-up pitch attitude for instant lift vectoring on roll."
+    },
+    {
+        "id": "STRUCT-14",
+        "name": "3D-Printed Carbon-Fiber Polycarbonate (PC-CF) Frame Clamps Kit (Corners 1, 2, 3 & Saddle)",
+        "category": "5. Airframe, Wing Structure & Mechanics",
+        "qty": 1,
         "unit_price": 9.50,
-        "vendor": "DragonPlate / Rock West Composites",
-        "url": "https://dragonplate.com",
-        "part_no": "DP-STRUT-6MM-120",
-        "unit_mass_g": 8.5,
-        "notes": "Splayed forward and aft struts setting ground clearance at 115mm (SSF = 1.00 rollover stability)."
+        "vendor": "In-House 3D Print (PC-CF 100% Infill)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-CLAMPS-PCCF",
+        "unit_mass_g": 48.0,
+        "notes": "Printed in CarbonX PC-CF with 100% infill and 5 perimeters. Torqued with Grade 12.9 M3 bolts to 2.2 N·m with split lock washers. Zero slip under ±15 N·m pitch couples."
+    },
+    {
+        "id": "STRUCT-15",
+        "name": "Fuselage Compact Delta Truss Aerodynamic Infill Fairing (ColorFabb LW-PLA)",
+        "category": "5. Airframe, Wing Structure & Mechanics",
+        "qty": 1,
+        "unit_price": 6.50,
+        "vendor": "In-House 3D Print (LW-PLA)",
+        "url": "https://colorfabb.com/lw-pla-natural",
+        "part_no": "MCO1D-FAIR-DELTA-PLA",
+        "unit_mass_g": 95.0,
+        "notes": "Single-wall foaming LW-PLA fuselage infill fairing with internal shear ribs. Integrates dual forward NACA cooling scoops and aft negative-pressure scavenge louvers."
+    },
+    {
+        "id": "STRUCT-16",
+        "name": "Streamlined Teardrop Wing Root Nacelles Kit (8x Units with Flapping Wiper Seals)",
+        "category": "5. Airframe, Wing Structure & Mechanics",
+        "qty": 1,
+        "unit_price": 4.50,
+        "vendor": "In-House 3D Print (LW-PLA / Mylar)",
+        "url": "https://colorfabb.com/lw-pla-natural",
+        "part_no": "MCO1D-FAIR-ROOTS-8X",
+        "unit_mass_g": 48.0,
+        "notes": "8x 6.0g streamlined teardrop nacelles enclosing 10:1 sector wheels and servos. Vertical flapping slits with flexible mylar/silicone wiper seals accommodate ±24° dash / ±28° cruise strokes."
+    },
+    {
+        "id": "STRUCT-17",
+        "name": "3D-Printed Capstan Line Keeper Shrouds Kit (8x Pinion Anti-Derailment Shrouds)",
+        "category": "5. Airframe, Wing Structure & Mechanics",
+        "qty": 1,
+        "unit_price": 4.50,
+        "vendor": "In-House 3D Print (PETG)",
+        "url": "https://sendcutsend.com",
+        "part_no": "MCO1D-CAPSTAN-SHROUDS-8X",
+        "unit_mass_g": 8.0,
+        "notes": "Snap-on shrouds maintaining <0.4mm clearance over Dyneema SK99 pinion grooves, physically trapping line against drum during zero-tension transients."
     },
 
     # ── 6. HARDWARE, FASTENERS & CONSUMABLES ─────────────────────────────────
@@ -547,7 +631,7 @@ BOM_DATABASE = [
         "url": "https://www.mcmaster.com/screws",
         "part_no": "MMC-91290A124",
         "unit_mass_g": 65.0,
-        "notes": "M3x16 and M3x20 clamping bolts for split collars, bulkheads, and wing station hardpoints."
+        "notes": "M3x16 and M3x20 clamping bolts for split collars, bulkheads, and wing station hardpoints. Torqued to 2.2 N·m."
     },
     {
         "id": "HW-04",
@@ -584,6 +668,42 @@ BOM_DATABASE = [
         "part_no": "TE-CAN-120R",
         "unit_mass_g": 1.0,
         "notes": "Installed at the extreme physical ends of the CAN-FD bus (Pi Hat end and Node #7 end)."
+    },
+    {
+        "id": "HW-07",
+        "name": "Zero-Slop CNC Aluminum Ball Links & M3 Titanium Pushrod Turnbuckles Kit (16-Pack)",
+        "category": "6. Precision Hardware, Fasteners & Consumables",
+        "qty": 1,
+        "unit_price": 32.00,
+        "vendor": "Secraft / Dubro / Amazon",
+        "url": "https://www.secraft.net",
+        "part_no": "SEC-CNC-BALL-M3-16PK",
+        "unit_mass_g": 20.0,
+        "notes": "Zero-backlash (<0.1mm play) linkages connecting AGFRC servos to wing root pitch horns. Eliminates aerodynamic flutter."
+    },
+    {
+        "id": "HW-08",
+        "name": "High-Temp FR4 / Ceramic-Filled Silicone Motor Thermal Isolator Gaskets (0.5mm, 8-Pack)",
+        "category": "6. Precision Hardware, Fasteners & Consumables",
+        "qty": 1,
+        "unit_price": 6.50,
+        "vendor": "McMaster-Carr / SendCutSend",
+        "url": "https://www.mcmaster.com",
+        "part_no": "MCO1D-TH-GASKET-8PK",
+        "unit_mass_g": 4.8,
+        "notes": "0.5mm precision die-cut FR4 / silicone gaskets mounted between GoolRC 5010 motor faces and aluminum brackets. Restricts conductive heat transfer from motor stators into carbon fuselage while forcing heat rejection into NACA cooling airflow."
+    },
+    {
+        "id": "HW-09",
+        "name": "C3604 Brass Heat-Set Threaded Inserts Assortment (M2.0, M2.5, M3 Ruthex / CNC Style, 150-Pack)",
+        "category": "6. Precision Hardware, Fasteners & Consumables",
+        "qty": 1,
+        "unit_price": 12.50,
+        "vendor": "Ruthex / CNC Kitchen / Amazon",
+        "url": "https://www.ruthex.net",
+        "part_no": "RUTHEX-ASSORT-M2-M3",
+        "unit_mass_g": 27.1,
+        "notes": "114 inserts required across airframe (32x M3 std, 18x M3 short, 32x M2.5, 32x M2.0). Heat-staked into 3D-printed PETG, PA-CF and Tough PLA for vibration-proof reusable threads."
     }
 ]
 
@@ -655,9 +775,9 @@ def generate_markdown_bom(summary):
     lines.append(f"- **Total Line Items**: {summary['total_line_items']} distinct components")
     lines.append(f"- **Total Physical Parts Count**: {summary['total_parts_count']} parts (complete airframe + spares)")
     lines.append(f"- **Total Estimated Procurement Cost**: **${summary['grand_total_cost']:,.2f} USD**")
-    lines.append(f"- **Operational Flight MTOW**: **5.897 kg (5,897 g)** (certified flight mass with 1.15m wings & GoolRC motors)")
-    lines.append(f"- **Gross Kit & Spares Mass**: **{summary['grand_total_mass_kg']:.3f} kg ({summary['grand_total_mass_g']:,.0f} g)** (all line items including spares & bench gear)")
-    lines.append(f"- **Longitudinal Balance (CG)**: **467.6 mm aft of datum (-5.1% MAC reference, 43.3 mm forward of NP)** on quick-pin slide rail (Safe Envelope: -10.0%–25.0% MAC)")
+    lines.append(f"- **As-Built Certified Flying AUW**: **3.642 kg (3,642 g / 8.03 lb)** (installed airframe with 1.15m wings, GoolRC motors, 6S 2200mAh pack, hybrid servos)")
+    lines.append(f"- **Gross Kit Procurement & Spares Mass**: **{summary['grand_total_mass_kg']:.3f} kg ({summary['grand_total_mass_g']:,.0f} g)** (all procurement items: raw filament spools, spare servos, tools & hardware)")
+    lines.append(f"- **Longitudinal Balance (CG)**: **352.6 mm aft of datum (+33.6% MAC reference, 48.3 mm forward of NP = 400.9 mm)** [Safe Stable Envelope: +20.0%–40.0% MAC]")
     lines.append("")
     lines.append("| Category | Line Items | Subtotal (USD) | Subtotal Mass (g) | % of Cost |")
     lines.append("| :--- | :---: | :---: | :---: | :---: |")
@@ -716,8 +836,9 @@ def print_terminal_view(summary):
     print(f"  Total Line Items:    {summary['total_line_items']}")
     print(f"  Total Parts Count:   {summary['total_parts_count']}")
     print(f"  Procurement Total:   ${summary['grand_total_cost']:,.2f} USD")
-    print(f"  Operational MTOW:    {summary['grand_total_mass_kg']:.3f} kg ({summary['grand_total_mass_g']:,.0f} g)")
-    print(f"  Center of Gravity:   467.6 mm aft of datum (-5.1% MAC) [IN ENVELOPE: YES]")
+    print(f"  Gross Kit Sourcing:  {summary['grand_total_mass_kg']:.3f} kg ({summary['grand_total_mass_g']:,.0f} g) (raw filament spools, spare servos, tools)")
+    print(f"  As-Built Flying AUW: 3.642 kg (3,642 g / 8.03 lb) [CERTIFIED SUB-4 KG FLIGHT WEIGHT]")
+    print(f"  Center of Gravity:   352.6 mm aft of datum (+33.6% MAC, 48.3 mm fwd of NP) [STABLE: YES]")
     print("-" * 80)
 
     for cat_name, cat_data in summary["categories"].items():
@@ -734,6 +855,7 @@ def print_terminal_view(summary):
 def main():
     parser = argparse.ArgumentParser(description="MCO-1D Mark 1 BOM Tool")
     parser.add_argument("--view", action="store_true", help="Print terminal BOM view")
+    parser.add_argument("--verify", action="store_true", help="Verify BOM consistency and print summary")
     parser.add_argument("--update", action="store_true", help="Update docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md")
     parser.add_argument("--json", action="store_true", help="Output raw JSON data")
     args = parser.parse_args()

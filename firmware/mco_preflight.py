@@ -140,6 +140,9 @@ class PowerUpBIT:
         # 10. Wave library version consistent
         results.append(self._check_library_version())
 
+        # 11. Calibrated airframe physical profile
+        results.append(self._check_calibrated_profile())
+
         return results
 
     def _check_python_version(self):
@@ -256,6 +259,27 @@ class PowerUpBIT:
                                value=ver)
         return CheckResult("Wave library version", WARN,
                            "VERSION not set in wave_library.py")
+
+    def _check_calibrated_profile(self):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        prof_path = os.path.join(script_dir, "calibrated_airframe_profile.json")
+        if os.path.exists(prof_path):
+            try:
+                import json
+                with open(prof_path, "r") as f:
+                    pdata = json.load(f)
+                status = pdata.get("calibrated_status", "UNKNOWN")
+                ts = pdata.get("validated_at", "unknown")
+                if status == "FLIGHT_READY":
+                    return CheckResult("Airframe Physical Calibration", PASS,
+                                       value=f"validated {ts}")
+                else:
+                    return CheckResult("Airframe Physical Calibration", WARN,
+                                       f"status: {status} — reconciliation required")
+            except Exception as e:
+                return CheckResult("Airframe Physical Calibration", WARN, f"error reading profile: {e}")
+        return CheckResult("Airframe Physical Calibration", WARN,
+                           "not found — run 'python3 mco_main.py --discover' to calibrate")
 
 
 # ─────────────────────────────────────────────────────────────────

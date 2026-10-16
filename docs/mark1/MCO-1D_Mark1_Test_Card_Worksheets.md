@@ -13,7 +13,8 @@
 Data collection is supported across two synchronized workflows:
 
 ### Mode A: Printable PDF Field Cards (Clipboard Longhand Mode)
-Pre-rendered vector PDF cards are located in [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/):
+Pre-rendered vector PDF cards are located in [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/) and [`docs/mark1/`](file:///Users/drbell/Code/flight/docs/mark1/):
+* **[MCO-1D Mark 1 Builder Calibration Sheet (Primary Handoff)](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)** (`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`)
 * **[All-in-One 8-Page Field Binder](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_Mark1_All_Worksheets_Binder.pdf)** (`MCO-1D_Mark1_All_Worksheets_Binder.pdf`)
 * **[WS-00: As-Built Physical Inspection (2 Pages)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS00_As_Built_Physical_Inspection.pdf)** (`MCO-1D_WS00_As_Built_Physical_Inspection.pdf`)
 * **[WS-01: TC-01 Ground Bench Test (1 Page)](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)** (`MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`)
@@ -43,7 +44,7 @@ Weigh with a precision digital scale (0.1 g or 1 g resolution).
 
 | Parameter Key | Description | Unit | Nominal Target | As-Built Measurement |
 | :--- | :--- | :---: | :---: | :--- |
-| `mtow_total_g` | **Total Assembled Flying Mass** (All 8 wings, 6S + 2S batteries, ready for flight) | g | $5,687\text{ g}$ | `[  __________ g  ]` |
+| `mtow_total_g` | **Total Assembled Flying Mass** (All 8 wings, 6S + 2S batteries, ready for flight) | g | **$< 5,600\text{ g}$** ($5,687\text{ g}$ max) | `[  __________ g  ]` |
 | `mass_dry_airframe_g`| Dry airframe mass (both flight batteries removed) | g | $\le 4,972\text{ g}$ | `[  __________ g  ]` |
 | `mass_main_battery_6s_g`| 6S 4500mAh 60C LiPo motor pack (weighed separately) | g | $570.0\text{ g}$ | `[  __________ g  ]` |
 | `mass_servo_battery_2s_g`| 2S 3000mAh LiPo receiver/servo pack (weighed separately)| g | $145.0\text{ g}$ | `[  __________ g  ]` |

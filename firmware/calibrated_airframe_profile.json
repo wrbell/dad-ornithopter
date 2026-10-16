@@ -1,0 +1,108 @@
+{
+  "manifest": {
+    "auw_kg": 5.367,
+    "cg_x_mm": 300.2,
+    "cg_z_mm": 78.5,
+    "station_stagger_mm": 185.0,
+    "vert_staircase_drop_mm": 32.0,
+    "chord_mm": 165.0,
+    "semispans_mm": [
+      772.0,
+      749.0,
+      735.0,
+      712.0
+    ],
+    "capstan_nominal_ratio": 10.0,
+    "nominal_cable_tension_n": 180.0,
+    "main_gear_track_mm": 250.0,
+    "wheelbase_mm": 460.0
+  },
+  "discovered": {
+    "measured_gear_ratios": [
+      10.02,
+      9.99,
+      10.02,
+      9.99,
+      10.02,
+      9.99,
+      10.02,
+      9.99
+    ],
+    "measured_stroke_arcs_deg": [
+      200.0,
+      200.0,
+      200.0,
+      200.0,
+      200.0,
+      199.5,
+      199.5,
+      199.5
+    ],
+    "cable_stiffness_nm_deg": [
+      0.62,
+      0.63,
+      0.64,
+      0.62,
+      0.63,
+      0.64,
+      0.62,
+      0.63
+    ],
+    "estimated_cable_tensions_n": [
+      177.5,
+      180.0,
+      177.5,
+      180.0,
+      177.5,
+      180.0,
+      177.5,
+      180.0
+    ],
+    "wing_inertias_kg_m2": [
+      0.0206,
+      0.02091,
+      0.0194,
+      0.01969,
+      0.0187,
+      0.01898,
+      0.0175,
+      0.01776
+    ],
+    "joint_friction_nm": [
+      0.045,
+      0.05,
+      0.045,
+      0.05,
+      0.045,
+      0.05,
+      0.045,
+      0.05
+    ],
+    "servo_sweep_travel_deg": [
+      170.0,
+      170.0,
+      170.0,
+      170.0,
+      170.0,
+      170.0,
+      170.0,
+      170.0
+    ],
+    "servo_pitch_travel_deg": [
+      70.0,
+      70.0,
+      70.0,
+      70.0,
+      70.0,
+      70.0,
+      70.0,
+      70.0
+    ],
+    "min_cascade_clearance_mm": 102.1,
+    "discovery_timestamp": 1792178965.732097,
+    "all_gates_passed": true,
+    "discrepancies": []
+  },
+  "validated_at": "2026-10-16 19:29:25",
+  "calibrated_status": "FLIGHT_READY"
+}

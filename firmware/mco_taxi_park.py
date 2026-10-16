@@ -114,9 +114,9 @@ def taxi_amplitudes_asymmetric(yaw_cmd, amp_up=None):
     return up_port, up_stbd
 
 
-def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False):
+def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False, wind_data=None, snow_mode=False):
     """
-    Returns command dict for ground taxi.
+    Returns command dict for ground taxi with active wind, crosswind, and ski/snow compensation.
     Uses asymmetric stroke: full upstroke, shallow −4° downstroke.
 
     Control inputs:
@@ -124,6 +124,8 @@ def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False):
     - yaw_cmd: −1.0 to +1.0 from rudder pedals (differential upstroke amplitude for heading yaw)
     - lateral_cmd: −1.0 to +1.0 from roll stick (H-26 differential AoA + dihedral side-force for direct sideways translation)
     - reverse: True for reverse taxi (negative pitch)
+    - wind_data: Optional dict with 'V_wind_ms', 'wind_bearing_deg', 'heading_deg' for active crosswind compensation
+    - snow_mode: True when aircraft is operating on skis/snow (enables stiction breakout pulse & high-gain lateral anti-drift)
     """
     try:
         from mco_wave_library import metachronal_phase_offsets
@@ -133,41 +135,109 @@ def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False):
     freq     = taxi_freq(throttle_frac)
     base_pitch = TAXI['REVERSE_PITCH_DEG'] if reverse else TAXI['PITCH_DEG']
 
+    # ── Active Ground Wind & Crosswind Compensation (H-TAXI-WIND-1 / H-TAXI-REEF-1 / H-TAXI-YAW-1) ──
+    active_suction_pitch = 0.0
+    sw_port = TAXI['SWEEP_DEG']
+    sw_stbd = TAXI['SWEEP_DEG']
+    anti_weathervane_delta_amp = 0.0
+    wind_mitigated = False
+
+    if wind_data and isinstance(wind_data, dict):
+        try:
+            import mco_advanced_physics as ap
+            V_w = wind_data.get('V_wind_ms', wind_data.get('wind_speed_ms', 0.0))
+            w_bearing = wind_data.get('wind_bearing_deg', wind_data.get('wind_dir_deg', 0.0))
+            hdg = wind_data.get('heading_deg', 0.0)
+            if V_w > 1.5:
+                pitch_comp, (sw_p, sw_s), delta_a, comp_diag = ap.ground_wind_active_compensator(
+                    V_wind_ms=V_w, wind_bearing_deg=w_bearing, heading_deg=hdg,
+                    pilot_yaw=yaw_cmd, pilot_throttle=throttle_frac
+                )
+                active_suction_pitch = pitch_comp
+                sw_port = sw_p
+                sw_stbd = sw_s
+                anti_weathervane_delta_amp = delta_a
+                wind_mitigated = comp_diag.get('wind_hazard_mitigated', True)
+        except Exception:
+            pass
+
     up_port, up_stbd = taxi_amplitudes_asymmetric(yaw_cmd)
+
+    # Apply anti-weathervaning differential stroke
+    if abs(anti_weathervane_delta_amp) > 0.5:
+        up_port = max(20.0, min(85.0, up_port + anti_weathervane_delta_amp / 2.0))
+        up_stbd = max(20.0, min(85.0, up_stbd - anti_weathervane_delta_amp / 2.0))
 
     # Lateral ground crab / sidestep via H-26 force vector decoupling:
     # Right stick (lateral_cmd > 0): Port wings higher AoA & dihedral, pushing craft toward starboard
     # Left stick  (lateral_cmd < 0): Stbd wings higher AoA & dihedral, pushing craft toward port
+    # ── Ski / Snow Surface Adaptations ──────────────────────────────────────────
+    # Skis have low lateral resistance (mu_lat ~ 0.08 vs 0.60 for rubber wheels).
+    # In snow mode:
+    # 1. Stiction breakout: when throttle is initiated from standstill, apply short high-pitch pulse
+    # 2. Enhanced lateral anti-drift authority (boost lateral authority by 1.6x)
     lat_deadband = 0.08
     lateral_active = abs(lateral_cmd) > lat_deadband
+    lat_multiplier = 1.60 if snow_mode else 1.00
     if lateral_active:
         lat_scale = (abs(lateral_cmd) - lat_deadband) / (1.0 - lat_deadband)
         lat_scale = min(1.0, max(0.0, lat_scale)) * (1.0 if lateral_cmd > 0 else -1.0)
-        port_pitch_bias = +4.0 * lat_scale
-        stbd_pitch_bias = -3.0 * lat_scale
-        port_dih_bias   = +5.0 * lat_scale
-        stbd_dih_bias   = -3.0 * lat_scale
+        port_pitch_bias = +4.0 * lat_scale * lat_multiplier
+        stbd_pitch_bias = -3.0 * lat_scale * lat_multiplier
+        port_dih_bias   = +5.0 * lat_scale * lat_multiplier
+        stbd_dih_bias   = -3.0 * lat_scale * lat_multiplier
     else:
         port_pitch_bias = 0.0
         stbd_pitch_bias = 0.0
         port_dih_bias   = 0.0
         stbd_dih_bias   = 0.0
 
-    # Build per-wing commands
+    # Build per-wing commands with Station-Graded Taildragger Ground Protection:
+    # W1/W2 (Front tractor drive): do 100% of ground taxi thrust (downstroke limited to -8°/-6°)
+    # W3/W4 (Aft cascade): locked in high-dihedral V-stance (+25° to +28°) to eliminate runway tip strikes
     wing_cmds = []
     for i in range(8):
         is_port = (i % 2 == 0)
+        station_idx = (i // 2) + 1  # 1 for W1, 2 for W2, 3 for W3, 4 for W4
         p_bias = port_pitch_bias if is_port else stbd_pitch_bias
         d_bias = port_dih_bias   if is_port else stbd_dih_bias
+        eff_sweep = sw_port if is_port else sw_stbd
+        # Apply ground suction pitch (negative downforce bias) to prevent rollover and wheel unweighting
+        # In snow mode, clamp max negative suction to -10° to avoid burying ski tips into powder
+        applied_suction = max(-10.0, active_suction_pitch) if snow_mode else active_suction_pitch
+        eff_pitch = round(base_pitch + p_bias + applied_suction, 1)
+
+        if station_idx <= 2:
+            # W1 & W2: active forward taxi flapping
+            amp_u = round(up_port if is_port else up_stbd, 1)
+            amp_d = TAXI['AMP_DOWN_DEG']
+            eff_dih = round(max(0.0, d_bias), 1)
+        else:
+            # W3 & W4: high dihedral lock (+25° to +28°) with flapping disengaged for ground protection
+            amp_u = 0.0
+            amp_d = TAXI['AMP_DOWN_DEG']
+            eff_dih = round(max(26.0, 26.0 + d_bias), 1)
+
         wing_cmds.append({
-            'amp_up':       up_port if is_port else up_stbd,
-            'amp_down':     TAXI['AMP_DOWN_DEG'],     # always ~4° — ground limit
-            'pitch':        round(base_pitch + p_bias, 1),
-            'dihedral_deg': round(max(0.0, d_bias), 1),
-            'sweep':        TAXI['SWEEP_DEG'],
+            'amp_up':       amp_u,
+            'amp_down':     amp_d,
+            'flap_amp_deg': amp_u,
+            'pitch':        eff_pitch,
+            'pitch_deg':    eff_pitch,
+            'dihedral_deg': eff_dih,
+            'sweep':        eff_sweep,
+            'sweep_deg':    eff_sweep,
+            'station_idx':  station_idx,
         })
 
     offsets = metachronal_phase_offsets(offset_deg=TAXI['PHASE_OFFSET_DEG'])
+
+    notes_str = (f"asymmetric stroke: up={up_port:.0f}/{up_stbd:.0f}° "
+                 f"down={TAXI['AMP_DOWN_DEG']:.0f}° "
+                 f"freq={freq:.2f}Hz"
+                 + (f" sidestep={lateral_cmd:+.2f}" if lateral_active else "")
+                 + (f" wind_suction_pitch={active_suction_pitch:+.1f}°" if abs(active_suction_pitch) > 0.1 else "")
+                 + (" [SNOW_SKI_MODE]" if snow_mode else ""))
 
     return {
         'freq_hz':                 freq,
@@ -177,10 +247,13 @@ def taxi_commands(throttle_frac, yaw_cmd, lateral_cmd=0.0, reverse=False):
         'lateral_active':          lateral_active,
         'lateral_cmd':             round(lateral_cmd, 2),
         'yaw_cmd':                 round(yaw_cmd, 2),
-        'notes':                   (f"asymmetric stroke: up={up_port:.0f}/{up_stbd:.0f}° "
-                                    f"down={TAXI['AMP_DOWN_DEG']:.0f}° "
-                                    f"freq={freq:.2f}Hz"
-                                    + (f" sidestep={lateral_cmd:+.2f}" if lateral_active else "")),
+        'active_suction_pitch_deg': round(active_suction_pitch, 1),
+        'sweep_port_deg':          sw_port,
+        'sweep_stbd_deg':          sw_stbd,
+        'anti_weathervane_delta_amp': round(anti_weathervane_delta_amp, 1),
+        'wind_mitigated':          wind_mitigated,
+        'snow_mode':               snow_mode,
+        'notes':                   notes_str,
     }
 
 

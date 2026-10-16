@@ -99,6 +99,10 @@ class MCOMAVLink:
             'rangefinder_m':    2.0,
             'lat':              None,
             'lon':              None,
+            'V_wind_ms':        0.0,
+            'wind_bearing_deg': 0.0,
+            'wind_speed_z_ms':  0.0,
+            'wind_valid':       False,
             'lever_pct':        50.0,
             'pitch_stick':      0.0,
             'roll_stick':       0.0,
@@ -240,6 +244,13 @@ class MCOMAVLink:
                     s['rc_signal_valid'] = (msg.rssi > 0)
                 except Exception:
                     pass
+
+            elif t == 'WIND':
+                # MAVLink WIND message (ID 168): direction (deg from), speed (m/s), speed_z (m/s)
+                s['V_wind_ms']        = float(getattr(msg, 'speed', 0.0))
+                s['wind_bearing_deg'] = float(getattr(msg, 'direction', 0.0))
+                s['wind_speed_z_ms']  = float(getattr(msg, 'speed_z', 0.0))
+                s['wind_valid']       = True
 
             # Compute time to impact from sink rate and height
             h   = s['h_agl_m']

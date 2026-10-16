@@ -68,8 +68,35 @@ import mco_advanced_physics as ap
 from mco_flight_governor import (
     check_glide_speed_floor,
     check_tandem_blade_clearance,
+    check_pitot_saturation,
     clamp_sprint_dynamics,
+    clamp_universal_kinematics,
     govern_regen_brake_resistor,
+    get_sprint_thermal_status,
+    govern_dive_recovery,
+    get_dive_recovery_status,
+    govern_ground_wind_safety,
+    govern_servo_bus,
+    govern_weight_on_wheels,
+    govern_servo_rates,
+    govern_turn_coordination,
+    set_turn_coordination,
+    is_turn_coordination_enabled,
+    govern_strouhal_cruise,
+    govern_cascade_slipstream,
+    check_pitot_blockage_and_synthetic_airspeed,
+    govern_desert_thermal_interleaving,
+    govern_preflight_snow_shake,
+    govern_zero_friction_ice_steering,
+    estimate_cold_lipo_ocv,
+    govern_extreme_gust_squeeze,
+    govern_pilot_alpine_takeoff_and_rollout,
+    govern_unsteady_lev_rain,
+    govern_orographic_wave_loiter,
+    govern_wrist_gear_damage,
+    govern_symmetrical_rth,
+    reset_symmetrical_rth_governor,
+    govern_hard_wig_floor,
 )
 from mco_certification_tools import (
     structural_recorder,
@@ -132,11 +159,16 @@ class MCOHardware:
         self._h41_residual_my = 0.0
         self._h41_cabin_rms_g = 0.0
         self._h41_heave_err_g = 0.0
+        self._h41_stall_margin_deg = 13.0
+        self._h41_servo_derate     = 1.0
         self._h42_active      = False
         self._h42_diag        = {}
+        self._symmetrical_rth_active = False
+        self._symmetrical_rth_telem  = {}
 
         self._h43_active      = False
         self._h43_delta_g     = 0.0
+        self._h43_freq_boost  = 0.0
         self._h44_active      = False
         self._h45_active      = False
         self._h45_shed_pct    = 0.0
@@ -231,11 +263,15 @@ class MCOHardware:
             else:
                 self._h37_active = False
 
-            # H-39: Differential Sweep Yaw Vectoring
+            # H-39: Differential Sweep Yaw Vectoring & Crosswind Sideslip Decoupling
             yaw_stick = sensors.get('yaw_stick', 0.0) if sensors else 0.0
-            if abs(yaw_stick) > 0.05:
+            sideslip_beta = sensors.get('sideslip_beta_deg', sensors.get('beta_deg', 0.0)) if sensors else 0.0
+            if abs(yaw_stick) > 0.05 or abs(sideslip_beta) > 0.5:
                 raw_sweeps = [c.get('sweep_deg', 90.0) for c in wc[:8]]
-                diff_sweeps, yaw_active = ap.h39_differential_sweep_yaw(raw_sweeps, yaw_stick)
+                max_amp = max((c.get('flap_amp_deg', 80.0) for c in wc[:8]), default=80.0)
+                diff_sweeps, yaw_active = ap.h39_differential_sweep_yaw(
+                    raw_sweeps, yaw_stick, sideslip_beta_deg=sideslip_beta, flap_amp_deg=max_amp
+                )
                 self._h39_active = yaw_active
                 if yaw_active:
                     for idx, sw in enumerate(diff_sweeps):
@@ -244,8 +280,23 @@ class MCOHardware:
             else:
                 self._h39_active = False
 
+            # Progressive Wrist Gear Damage Monitor & Mitigation (H-GEAR-COPE-1)
+            actual_pitches = sensors.get('servo_actual_aoa_deg') if sensors else None
+            actual_sweeps = sensors.get('sweep_actual_deg') if sensors else None
+            wrist_gear_telem = govern_wrist_gear_damage(
+                wing_commands=wc,
+                actual_pitch_degs=actual_pitches,
+                actual_sweep_degs=actual_sweeps,
+                dt=0.02,
+                result=result
+            )
+            self._wrist_gear_telem = wrist_gear_telem
+            result['wrist_gear_health'] = wrist_gear_telem
+
             # H-42: Asymmetric N-1 Actuator Loss Re-Trim (Fail-Operational)
             failed_wing = sensors.get('failed_wing_idx') if sensors else None
+            if failed_wing is None and wrist_gear_telem.get('primary_failed_wing') is not None:
+                failed_wing = wrist_gear_telem['primary_failed_wing']
             if failed_wing is None and sensors and sensors.get('wing_errors'):
                 for i, err in enumerate(sensors['wing_errors']):
                     if err in (0x1000, 0x2000): # hard motor/rope fault
@@ -257,19 +308,80 @@ class MCOHardware:
                 self._h42_active = False
                 self._h42_diag = {}
 
-            # H-41: Active Heave Damping & Metachronal Pitch Reaction Moment Cancellation
-            wc, self._pair_offsets, self._h41_active, self._h41_diag = ap.h41_active_ride_stabilization(
-                sensors or {}, wc, pair_offsets=self._pair_offsets
-            )
-            self._h41_vib_red_pct = self._h41_diag.get('vibration_reduction_pct', 0.0)
-            self._h41_residual_my = self._h41_diag.get('residual_my_Nm', 0.0)
-            self._h41_cabin_rms_g = self._h41_diag.get('cabin_rms_g', 0.0)
-            self._h41_heave_err_g = self._h41_diag.get('heave_error_g', 0.0)
+            # H-RTH-6WING / H-42-RTH: Symmetrical Pair Quarantine & 6-Wing Sustained RTH
+            failed_wings = []
+            if failed_wing is not None:
+                failed_wings.append(failed_wing)
+            if sensors and sensors.get('failed_wings'):
+                fw = sensors['failed_wings']
+                if isinstance(fw, (list, tuple, set)):
+                    failed_wings.extend(list(fw))
+                elif isinstance(fw, int):
+                    failed_wings.append(fw)
+            if wrist_gear_telem.get('stripped_wings'):
+                failed_wings.extend(wrist_gear_telem['stripped_wings'])
+            failed_wings = sorted(list(set(w for w in failed_wings if 0 <= w < 8)))
 
-            # H-43: Severe Wind Shear & Direct Collective Vectoring (DLTV)
-            w_sink = sensors.get('w_sink_ms', sensors.get('VSI_ms', 0.0)) if sensors else 0.0
-            climb_ovr = sensors.get('climb_override', False) if sensors else False
-            wc, self._h43_active, self._h43_delta_g = ap.h43_direct_lift_thrust_vectoring(wc, w_sink, climb_ovr)
+            curr_intent = (sensors.get('intent') or result.get('intent') or 'cruise') if (sensors or result) else 'cruise'
+            curr_intent = str(curr_intent).lower()
+
+            h_agl = sensors.get('h_agl_m', 50.0) if sensors else 50.0
+            frozen_angles = sensors.get('frozen_angles', {}) if sensors else {}
+            rope_lost = bool(sensors.get('rope_integrity_lost', False)) if sensors else False
+
+            rth_telem = govern_symmetrical_rth(
+                wing_commands=wc,
+                failed_wings=failed_wings if failed_wings else None,
+                intent=curr_intent,
+                dt=0.02,
+                base_freq_hz=freq_hz,
+                result=result,
+                h_agl_m=h_agl,
+                frozen_angles=frozen_angles,
+                rope_integrity_lost=rope_lost
+            )
+            self._symmetrical_rth_telem = rth_telem
+            self._symmetrical_rth_active = rth_telem.get('rth_engaged', False)
+            if self._symmetrical_rth_active:
+                freq_hz = rth_telem.get('recommended_freq_hz', freq_hz)
+                result['freq_hz'] = freq_hz
+                self._h42_active = False  # Symmetrical quarantine cleanly supersedes asymmetric N-1 trim
+                if rth_telem.get('recommended_pair_offsets_rad'):
+                    self._pair_offsets = rth_telem['recommended_pair_offsets_rad']
+                    result['pair_phase_offsets'] = self._pair_offsets
+
+            is_braking = bool(result.get('rollout_suction_braking_active'))
+            if not is_braking:
+                # H-41: Active Heave Damping & Metachronal Pitch Reaction Moment Cancellation
+                wc, self._pair_offsets, self._h41_active, self._h41_diag = ap.h41_active_ride_stabilization(
+                    sensors or {}, wc, pair_offsets=self._pair_offsets
+                )
+                self._h41_vib_red_pct = self._h41_diag.get('vibration_reduction_pct', 0.0)
+                self._h41_residual_my = self._h41_diag.get('residual_my_Nm', 0.0)
+                self._h41_cabin_rms_g = self._h41_diag.get('cabin_rms_g', 0.0)
+                self._h41_heave_err_g = self._h41_diag.get('heave_error_g', 0.0)
+                self._h41_stall_margin_deg = self._h41_diag.get('stall_margin_deg', 13.0)
+                self._h41_servo_derate = self._h41_diag.get('servo_bus_derate', 1.0)
+
+                # H-43: Severe Wind Shear & Direct Collective Vectoring (DLTV)
+                w_sink = sensors.get('w_sink_ms', sensors.get('VSI_ms', 0.0)) if sensors else 0.0
+                climb_ovr = sensors.get('climb_override', False) if sensors else False
+                v_ias = sensors.get('V_ms', sensors.get('airspeed_ms', 10.0)) if sensors else 10.0
+                wc, self._h43_active, self._h43_delta_g = ap.h43_direct_lift_thrust_vectoring(
+                    wc, w_sink, climb_ovr, V_ias_ms=v_ias
+                )
+                if self._h43_active:
+                    freq_boost = getattr(ap.h43_direct_lift_thrust_vectoring, 'last_freq_boost_hz', 0.0)
+                    self._h43_freq_boost = freq_boost
+                    if freq_boost > 0.0:
+                        freq_hz = min(2.6, freq_hz + freq_boost)
+                        result['freq_hz'] = freq_hz
+                else:
+                    self._h43_freq_boost = 0.0
+            else:
+                self._h41_active = False
+                self._h43_active = False
+                self._h43_freq_boost = 0.0
 
             # H-44: Heavy Rain & Icing Boundary Layer LEV Re-Energization
             rain_or_ice = bool(sensors.get('rain_detected') or sensors.get('icing_detected')) if sensors else False
@@ -280,19 +392,52 @@ class MCOHardware:
             tot_i = sum(sensors.get('motor_currents_a', [10.0]*8)) if sensors else 80.0
             wc, self._h45_active, self._h45_shed_pct = ap.h45_predictive_bus_load_shedding(wc, bus_v, tot_i)
 
-            # H-46: Micro-Stroke Resonant Buzz & Pitch Reflex (Dash Speed)
-            lever = sensors.get('lever_pct', 50.0) if sensors else 50.0
-            v_ms = sensors.get('V_ms', 9.0) if sensors else 9.0
-            wc, self._h46_active, self._h46_freq_hz = ap.h46_micro_stroke_resonant_buzz(lever, v_ms, wc, freq_hz)
-            if self._h46_active:
-                freq_hz = self._h46_freq_hz
-                result['freq_hz'] = freq_hz
+            if not is_braking and not self._symmetrical_rth_active and curr_intent == 'cruise':
+                # H-46: Micro-Stroke Resonant Buzz & Pitch Reflex (Dash Speed)
+                lever = sensors.get('lever_pct', 50.0) if sensors else 50.0
+                v_ms = sensors.get('V_ms', 9.0) if sensors else 9.0
+                airfoil = sensors.get('airfoil_type', 'S1223') if sensors else 'S1223'
+                wc, self._h46_active, self._h46_freq_hz = ap.h46_micro_stroke_resonant_buzz(lever, v_ms, wc, freq_hz, airfoil_type=airfoil)
+                if self._h46_active:
+                    freq_hz = self._h46_freq_hz
+                    result['freq_hz'] = freq_hz
 
-            # H-47: Tandem Interleaved Bound-and-Glide (Fast Cruise)
-            wc, self._h47_active, self._h47_group = ap.h47_tandem_interleaved_bound_glide(lever, v_ms, wc, time.monotonic())
+                # H-47: Tandem Interleaved Bound-and-Glide (Fast Cruise)
+                wc, self._h47_active, self._h47_group = ap.h47_tandem_interleaved_bound_glide(lever, v_ms, wc, time.monotonic())
 
-            # H-49: Cascade Tip-Vortex Katzmayr Energy Ingestion (Range Extension)
-            wc, self._h49_active, self._h49_thrust_boost_N = ap.h49_katzmayr_vortex_energy_ingestion(wc, v_ms, self._master_phase, lever)
+                # H-49: Cascade Tip-Vortex Katzmayr Energy Ingestion (Range Extension)
+                wc, self._h49_active, self._h49_thrust_boost_N = ap.h49_katzmayr_vortex_energy_ingestion(wc, v_ms, self._master_phase, lever, freq_hz=freq_hz)
+            else:
+                self._h46_active = False
+                self._h47_active = False
+                self._h47_group = 'NONE'
+                self._h49_active = False
+
+            # Pelican Deep-Stroke Mode (H-DEEP-STROKE): High-thrust free-flight acceleration (1.9 Hz, ±30.0°, aft splay fan)
+            if curr_intent == 'pelican_deep_stroke':
+                freq_hz = 1.90
+                result['freq_hz'] = 1.90
+                splay_sweeps = [56.0, 56.0, 60.0, 60.0, 68.0, 68.0, 76.0, 76.0]
+                splay_pitches = [12.0, 12.0, 10.0, 10.0, 10.0, 10.0, 8.0, 8.0]
+                for i in range(min(8, len(wc))):
+                    wc[i]['flap_amp_deg'] = 30.0
+                    wc[i]['sweep_deg'] = splay_sweeps[i]
+                    wc[i]['pitch_deg'] = splay_pitches[i]
+
+            # Hard Wing-In-Ground (WIG) Floor Governor with Asymmetric Dihedral Bias (H-WIG-BIAS)
+            try:
+                p_stk = sensors.get('pitch_stick', 0.0) if sensors else 0.0
+                thr = sensors.get('throttle', 0.5) if sensors else 0.5
+                on_gnd = bool(sensors.get('on_ground', False)) if sensors else False
+                wig_telem = govern_hard_wig_floor(
+                    h_agl_m=h_agl, V_ms=v_ms, vz_ms=w_sink,
+                    pitch_stick=p_stk, throttle=thr,
+                    on_ground=on_gnd, intent=curr_intent,
+                    dt_s=0.02, wing_commands=wc
+                )
+                result['wig_floor_telem'] = wig_telem
+            except Exception:
+                pass
 
             result['wing_commands'] = wc
         except Exception:
@@ -382,16 +527,21 @@ class MCOHardware:
         # Advance master phase
         self._master_phase = (self._master_phase + 2.0 * math.pi * freq_hz * dt) % (2.0 * math.pi)
 
-        # Dynamic amplitude clamping: tau_root_max = 5.9 Nm (30A peak on MN5008)
-        # I_wing = 0.0240 kg*m^2 (1.0m wing + raked tip). Max rad = tau_max / (I_wing * (2pi*f)^2)
+        # Dynamic amplitude clamping: 10:1 capstan drive with GoolRC 5010-14 360KV baseline
+        # (or T-Motor MN5008 heavy-duty option). Sector wheel has 200° total mechanical travel (±100°).
+        # Dynamic reciprocating stroke uses FLAP_AMP_LIMIT_MAX_DEG (96.0°, 192° peak-to-peak),
+        # leaving 4° dynamic cushion at each capstan stop to prevent slack/impact under overshoot.
+        # Torque: GoolRC 5010 (Kt ≈ 0.0265 Nm/A) produces 7.95 Nm cont / 10.6 Nm burst at root.
+        # MN5008 option (Kt ≈ 0.0477 Nm/A) produces 14.30 Nm cont / 22.0 Nm burst at root.
+        # I_wing = 0.020-0.024 kg*m^2. Dynamic limit ensures inertial reversal torque <= tau_root_max.
         if freq_hz > 0.5:
-            max_amp_rad = 5.90 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
-            max_amp_deg = min(80.0, math.degrees(max_amp_rad))
+            max_amp_rad = 14.30 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
+            max_amp_deg = min(w.FLAP_AMP_LIMIT_MAX_DEG, math.degrees(max_amp_rad))
         else:
-            max_amp_deg = 80.0
+            max_amp_deg = w.FLAP_AMP_LIMIT_MAX_DEG
 
         for i, cmd in enumerate(wing_commands[:8]):
-            raw_amp = cmd.get('flap_amp_deg', FLAP_AMP_DEG)
+            raw_amp = cmd.get('flap_amp_deg', w.FLAP_AMP_DEG)
             amp     = min(raw_amp, max_amp_deg)
             pair_idx = i // 2
             wing_phase = (self._master_phase - self._pair_offsets[pair_idx]) % (2.0 * math.pi)
@@ -413,21 +563,23 @@ class MCOHardware:
         """
         import struct
         from mco_wave_library import (soft_stop_apply_to_commands,
-                                       REDUCER_RATIO, FLAP_AMP_DEG)
+                                       REDUCER_RATIO, FLAP_AMP_DEG,
+                                       FLAP_AMP_LIMIT_MAX_DEG)
 
         reducer = REDUCER_RATIO   # 10.0 (upgraded baseline)
 
         if freq_hz > 0.5:
-            max_amp_rad = 5.90 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
-            max_amp_deg = min(100.0, math.degrees(max_amp_rad))
+            max_amp_rad = 14.30 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
+            max_amp_deg = min(FLAP_AMP_LIMIT_MAX_DEG, math.degrees(max_amp_rad))
         else:
-            max_amp_deg = 100.0
+            max_amp_deg = FLAP_AMP_LIMIT_MAX_DEG
 
         # ── Apply soft-stop taper to all 8 wings ─────────────────
+        # ODrive S1 native velocity units are turns/s (vel_limit = 40.0 turns/s = 2400 RPM)
         vel_limit_overrides = soft_stop_apply_to_commands(
             wing_commands,
             motor_positions_rad or [None] * 8,
-            base_vel_limit_rps=150.0
+            base_vel_limit_rps=40.0
         )
 
         # ── Send velocity + optional vel_limit per wing ───────────
@@ -510,6 +662,7 @@ class MCOMain:
         self.gs_server         = MCOGSServer()
         self.hardware          = MCOHardware(sim_mode=sim)
         self.fcc               = w.MCOFlightController()
+        self.fc                = self
         self.intent_interpreter = IntentInterpreter()
 
         # Tactical Cursor-on-Target (CoT) ATAK Bridge
@@ -531,6 +684,11 @@ class MCOMain:
             print(f'Test card runners not available: {e}')
             self._handle_tc = None
 
+        # Real-time 50 Hz control loop deadline monitor & watchdog state
+        self._tick_latencies = []
+        self._deadline_miss_count = 0
+        self._watchdog_trip_count = 0
+
         # Graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT,  self._handle_signal)
@@ -538,6 +696,504 @@ class MCOMain:
     def _handle_signal(self, sig, frame):
         print(f"\nShutdown signal received ({sig})")
         self.alive = False
+
+    def tick(self, sensors=None, tick_count=0, tick_start=None):
+        """Execute a single 50 Hz control frame (flight dynamics + safety governors)."""
+        if tick_start is None:
+            tick_start = time.monotonic()
+        if sensors is None:
+            sensors = self.mavlink.get_sensors()
+        else:
+            sensors = dict(sensors)
+
+        # ── Intent arbitration via IntentInterpreter ─────────
+        sticks = {
+            'roll':     sensors.get('roll', sensors.get('roll_stick', 0.0)),
+            'pitch':    sensors.get('pitch', sensors.get('pitch_stick', 0.0)),
+            'throttle': sensors.get('throttle', (sensors.get('lever_pct', 50.0) / 100.0) if 'lever_pct' in sensors else 0.5),
+            'yaw':      sensors.get('yaw', sensors.get('yaw_stick', 0.0)),
+        }
+        switches = {'mode_sw': 0}
+        context = {
+            'V_ms':            sensors.get('V_ms', 11.0),
+            'h_agl_m':         sensors.get('h_agl_m', 50.0),
+            'bank_deg':        sensors.get('roll_deg_imu', 0.0),
+            'pitch_deg':       sensors.get('pitch_deg_imu', 0.0),
+            'Ps':              sensors.get('Ps_measured', 0.0),
+            'on_ground':       sensors.get('h_agl_m', 50.0) < 0.3,
+            'contested_ew':    w._ew_state.get('active', False),
+            'stealth_loiter':  w._ew_state.get('stealth_active', False),
+            'gps_jammed':      w._gps_state.get('status', 0) >= 3,
+            'bus_voltage_v':   sensors.get('bus_voltage_v', 24.0),
+        }
+        try:
+            intent_res = self.intent_interpreter.interpret(sticks, switches, context)
+            if isinstance(intent_res, tuple):
+                sensors['intent'] = intent_res[0]
+                if len(intent_res) > 1:
+                    sensors['intent_conf'] = intent_res[1]
+                if len(intent_res) > 2:
+                    sensors['intent_params'] = intent_res[2]
+            else:
+                sensors['intent'] = str(intent_res)
+                sensors['intent_conf'] = 1.0
+                sensors['intent_params'] = {}
+        except Exception:
+            sensors['intent'] = 'cruise'
+            sensors['intent_conf'] = 0.0
+            sensors['intent_params'] = {}
+
+        # Feed advancing kinematic wave states to FCC
+        kin = self.hardware.get_wing_kinematics()
+        sensors['flap_phases'] = kin['flap_phases']
+        sensors['stroke_dirs'] = kin['stroke_dirs']
+        sensors['flap_degs']   = kin['flap_degs']
+
+        # ── Per-wing sensing (MCP3208 ADCs + ODrive pos) ─
+        # Pitch servo feedback — MCP3208 #1 (SPI1 CE1)
+        sensors['servo_actual_aoa_deg'] = w.read_servo_feedback_adc()
+        # Sweep servo feedback — MCP3208 #2 (SPI1 CE0); None if not fitted
+        sensors['sweep_actual_deg'] = (
+            w._sweep_sense_state.get('actual_sweep_deg', [None]*8)
+            if w._sweep_sense_state.get('sweep_adc_fitted') else [None]*8)
+        # ODrive S1 stroke position — 8 values (1 per board, node == wing_idx)
+        sensors['motor_pos_rad']    = self.hardware._read_odrive_positions()
+        # ODrive S1 motor current — 8 values (1 per board)
+        sensors['motor_currents_a'] = self.hardware._read_odrive_currents()
+        # ODrive S1 FET and motor temperatures — NEW S1 capability
+        # read_temperatures() returns list of 8 {'fet_C', 'motor_C'} dicts
+        # Called at 5 Hz (every 10 ticks) to reduce CAN bus load
+        if tick_count % 10 == 0 and self.hardware.odi:
+            try:
+                sensors['motor_temps'] = self.hardware.odi.read_temperatures()
+            except Exception:
+                sensors['motor_temps'] = []
+        else:
+            sensors['motor_temps'] = getattr(self, '_last_motor_temps', [])
+        if sensors.get('motor_temps'):
+            self._last_motor_temps = sensors['motor_temps']
+        # ODrive S1 axis error states — for per-wing fault isolation
+        # Called at 1 Hz (every 50 ticks) to reduce CAN bus load
+        if tick_count % 50 == 0 and self.hardware.odi:
+            try:
+                states = self.hardware.odi.read_all_states()
+                sensors['wing_errors'] = [s.get('error', 0) for s in states]
+            except Exception:
+                sensors['wing_errors'] = []
+        else:
+            sensors['wing_errors'] = getattr(self, '_last_wing_errors', [])
+        if sensors.get('wing_errors'):
+            self._last_wing_errors = sensors['wing_errors']
+        # Actual tick period for thermal calculations
+        sensors['dt_s'] = max(0.001, time.monotonic() - tick_start)
+
+        # ── Derived sensor fields ─────────────────────────────────
+        # Air density (ISA approximation from OAT + baro altitude)
+        oat_c = sensors.get('oat_c', 15.0)
+        alt_m = sensors.get('baro_alt_m', 0.0)
+        sensors['air_density_kgm3'] = (
+            1.225 * ((288.15 - 0.0065 * alt_m) / 288.15) ** 4.256
+            * (273.15 / (273.15 + oat_c)))
+        # Roll/pitch rates already in sensors from mavlink IMU
+        # Ensure lateral_g present (from IMU accel Y)
+        if 'lateral_g' not in sensors:
+            sensors['lateral_g'] = 0.0
+        # Set baseline currents on first good reading
+        if (tick_count == 5 and
+                sensors.get('motor_currents_a') and
+                s1_monitor._baseline_I == [None]*8):
+            s1_monitor.set_baseline_currents(
+                sensors['motor_currents_a'])
+
+        # ── Flight control tick ───────────────────────────────
+        try:
+            result = self.fcc.tick(sensors)
+        except Exception as e:
+            print(f"Tick error: {e}")
+            result = {'wing_commands': [{}]*8, 'freq_hz': 0.0}
+
+        # ── Active Flight Safety Governors ────────────────────
+        # 1. Stall speed floor protection & pitot saturation/blockage safeguard
+        raw_v = sensors.get('V_ms', 11.0)
+        pitot_guard = check_pitot_saturation(
+            V_pitot_ms=raw_v,
+            q_dyn_pa=sensors.get('pitot_pressure_pa', None),
+            ekf_v_ms=sensors.get('v_ekf_ms', None),
+            gps_v_ms=sensors.get('gps_speed_ms', None)
+        )
+        throttle = sticks.get('throttle', 0.5)
+        curr_intent = sensors.get('intent', 'cruise')
+        alt_m = sensors.get('altitude_m', sensors.get('baro_alt_m', sensors.get('h_agl_m', 100.0)))
+        pitot_block = check_pitot_blockage_and_synthetic_airspeed(
+            V_pitot_ms=pitot_guard['effective_v_ms'],
+            gps_v_ms=sensors.get('gps_speed_ms', sensors.get('v_ekf_ms')),
+            throttle_frac=throttle,
+            h_agl_m=sensors.get('h_agl_m', alt_m),
+            on_ground=sensors.get('on_ground', False),
+            result=result
+        )
+        V_ias = pitot_block['effective_v_ms']
+        result['pitot_saturated'] = pitot_guard['is_saturated']
+        result['pitot_status'] = pitot_guard['status']
+
+        # Density calculation (ISA barometric + ambient temperature model)
+        p_baro = sensors.get('baro_press_pa', sensors.get('pitot_static_pa', 101325.0))
+        t_ambient_c = sensors.get('ambient_temp_c', sensors.get('imu_temp_c', 20.0))
+        t_kelvin = max(220.0, min(335.0, t_ambient_c + 273.15))
+        rho_air = p_baro / (287.05 * t_kelvin)
+        sensors['air_density_kg_m3'] = rho_air
+        result['air_density_kg_m3'] = rho_air
+
+        glide_gov = check_glide_speed_floor(V_ias, throttle_frac=throttle, intent=curr_intent, rho_kg_m3=rho_air)
+        if glide_gov.get('intervention_active'):
+            forced_f = glide_gov.get('forced_freq_hz', 2.0)
+            forced_a = glide_gov.get('forced_amp_deg', 40.0)
+            if result.get('freq_hz', 0.0) < forced_f:
+                result['freq_hz'] = forced_f
+            for cmd in result.get('wing_commands', []):
+                if isinstance(cmd, dict):
+                    cmd['flap_amp_deg'] = max(cmd.get('flap_amp_deg', 0.0), forced_a)
+            result['stall_intervention'] = True
+        else:
+            result['stall_intervention'] = False
+
+        # 2. Sprint dynamics clamp: protect ODrive S1 from velocity over-speed trips & thermal duty fence (Fix 4)
+        is_sprint_active = (curr_intent == 'sprint' or result.get('freq_hz', 0.0) > 3.0)
+        servo_curr = sum(sensors.get('servo_currents_a', [0.0]*16)) if sensors else 0.0
+        cmd_f = result.get('freq_hz', 0.0)
+        cmd_a = max((c.get('flap_amp_deg', 20.0) for c in result.get('wing_commands', []) if isinstance(c, dict)), default=20.0)
+        m_temps = sensors.get('motor_temps', []) if sensors else []
+        cf, ca, mrpm, margin = clamp_sprint_dynamics(
+            cmd_f, cmd_a, dt_s=0.02, is_sprint=is_sprint_active, servo_current_a=servo_curr,
+            motor_temps=m_temps, ambient_temp_c=t_ambient_c
+        )
+        # Apply universal kinematic hardware fence across ALL modes (max 1,800 RPM / f*amp <= 91.7 deg*Hz)
+        cf, ca = clamp_universal_kinematics(cf, ca)
+        result['freq_hz'] = cf
+        for cmd in result.get('wing_commands', []):
+            if isinstance(cmd, dict) and cmd.get('flap_amp_deg', 0.0) > ca:
+                cmd['flap_amp_deg'] = ca
+        result['sprint_rpm_margin_pct'] = margin
+        result['sprint_thermal_status'] = get_sprint_thermal_status()
+
+        # 3. Continuous Strouhal Matching in Cruise (St ~ 0.28) & Cascade Slipstream Phase Lock
+        curr_amp = max((c.get('flap_amp_deg', 20.0) for c in result.get('wing_commands', []) if isinstance(c, dict)), default=20.0)
+        vsi = sensors.get('vsi_ms', sensors.get('climb_rate_ms', 0.0))
+        strouhal_gov = govern_strouhal_cruise(
+            V_ias_ms=V_ias,
+            flap_amp_deg=curr_amp,
+            current_freq_hz=result.get('freq_hz', 2.0),
+            intent=curr_intent,
+            dt=0.02,
+            climb_rate_ms=vsi,
+            throttle_frac=throttle,
+            rho_kg_m3=rho_air,
+            result=result
+        )
+        if strouhal_gov.get('active'):
+            result['freq_hz'] = strouhal_gov['optimal_freq_hz']
+
+        slipstream_gov = govern_cascade_slipstream(
+            V_ias_ms=V_ias,
+            freq_hz=result.get('freq_hz', 2.0),
+            result=result
+        )
+        if slipstream_gov.get('active'):
+            # Dynamically set inter-tier phase offsets across 4 stations (Pairs 1 to 4)
+            tier_phase = slipstream_gov['intertier_phase_deg']
+            for idx, cmd in enumerate(result.get('wing_commands', [])):
+                if isinstance(cmd, dict):
+                    station = idx // 2
+                    cmd['phase_offset_deg'] = (station * tier_phase) % 360.0
+
+        # 4. Regenerative brake resistor voltage fence
+        bus_v = sensors.get('bus_voltage_v', 24.0)
+        req_regen_w = result.get('regen_watts', 0.0)
+        resistor_gov = govern_regen_brake_resistor(bus_v, req_regen_w)
+        result['brake_resistor_gov'] = resistor_gov
+
+        # 4b. Cold LiPo OCV & Transient Sag Discrimination (H-COLD-LIPO-1)
+        tot_bus_current_a = sum(sensors.get('motor_currents_a', [10.0]*8)) if sensors else 80.0
+        batt_temp = sensors.get('batt_temp_c', sensors.get('ambient_temp_c', 20.0))
+        lipo_ocv_gov = estimate_cold_lipo_ocv(
+            bus_voltage_v=bus_v,
+            bus_current_a=tot_bus_current_a,
+            batt_temp_c=batt_temp,
+            result=result
+        )
+
+        # 5. 2S 7.4V Servo Bus Brownout Governor
+        servo_bus_v = sensors.get('servo_bus_voltage_v', sensors.get('bus_voltage_7v4', 7.4))
+        servo_bus_gov = govern_servo_bus(
+            bus_voltage_v=servo_bus_v,
+            flap_amp_deg=curr_amp,
+            result=result
+        )
+
+        # 6. Dive speed closure & recovery governor (H-PULL-2 / H-DIVE-1 / H-BOYD-1 / H-SWEEP-VNE-1 / H-SWEEP-PULL-1)
+        current_sweep = 60.0
+        wing_cmds = result.get('wing_commands', [])
+        if wing_cmds and isinstance(wing_cmds, list) and isinstance(wing_cmds[0], dict) and 'sweep_deg' in wing_cmds[0]:
+            current_sweep = sum(c.get('sweep_deg', 60.0) for c in wing_cmds[:8]) / min(8, len(wing_cmds))
+        elif 'sweep_deg' in sensors:
+            current_sweep = float(sensors['sweep_deg'])
+
+        dive_gov = govern_dive_recovery(
+            V_ms=V_ias,
+            pitch_cmd_deg=sticks.get('pitch', 0.0),
+            bank_deg=sensors.get('roll_deg_imu', sticks.get('roll', 0.0) * 30.0),
+            altitude_m=alt_m,
+            dt=0.02,
+            intent=curr_intent,
+            sweep_deg=current_sweep,
+            result=result
+        )
+        result['dive_recovery_gov'] = dive_gov
+        if dive_gov.get('inhibit_flag'):
+            # Clamp / freeze commanded pitch stick to prevent servo stall tuck
+            result['pitch_cmd_deg'] = dive_gov.get('effective_pitch_cmd_deg', 0.0)
+            for cmd in result.get('wing_commands', []):
+                if isinstance(cmd, dict) and cmd.get('pitch_deg', 0.0) > 0.0:
+                    cmd['pitch_deg'] = 0.0
+
+        # 7. Unified Multi-Sensor Weight-on-Wheels (WoW) Fusion
+        wow_gov = govern_weight_on_wheels(
+            h_agl_m=sensors.get('h_agl_m', alt_m),
+            az_g=sensors.get('accel_z_g', 1.0),
+            gear_contact=sensors.get('gear_contact', None),
+            ground_speed_ms=sensors.get('gps_speed_ms', 0.0),
+            dt=0.02,
+            result=result
+        )
+        if 'on_ground' in sensors:
+            on_ground_flag = bool(sensors['on_ground'])
+        else:
+            on_ground_flag = wow_gov['on_ground'] or (curr_intent in ('taxi_fwd', 'taxi_rev', 'park', 'takeoff_roll', 'preflight', 'snow_shake'))
+
+        # 8. Ground Wind & Crosswind Safety Governor (H-TAXI-WIND-1 / H-TAXI-REEF-1 / H-TAXI-YAW-1 / H-TAXI-TAIL-1)
+        if on_ground_flag:
+            w_spd = sensors.get('V_wind_ms', sensors.get('wind_speed_ms', 0.0))
+            w_brg = sensors.get('wind_bearing_deg', sensors.get('wind_dir_deg', 0.0))
+            craft_hdg = sensors.get('heading_deg', sensors.get('yaw_deg', 0.0))
+            rwy_hdg = sensors.get('runway_heading_deg', craft_hdg)
+            ground_wind_gov = govern_ground_wind_safety(
+                on_ground=True,
+                V_wind_ms=w_spd,
+                wind_bearing_deg=w_brg,
+                heading_deg=craft_hdg,
+                runway_heading_deg=rwy_hdg,
+                pilot_throttle=throttle,
+                pilot_yaw=sticks.get('yaw', 0.0),
+                pilot_pitch=sticks.get('pitch', 0.0),
+                intent=curr_intent,
+                mass_kg=sensors.get('gross_weight_kg', 5.367),
+                servo_currents_a=sensors.get('servo_currents_a'),
+                pitot_v_ms=V_ias,
+                result=result
+            )
+            result['ground_wind_gov'] = ground_wind_gov
+
+            # Pre-Flight Snow / Frost Shake Governor (H-COLD-SHAKE-1)
+            snow_req = (curr_intent == 'snow_shake') or sensors.get('snow_shake_requested', False)
+            snow_gov = govern_preflight_snow_shake(
+                dt_s=0.02,
+                on_ground=True,
+                throttle_frac=throttle,
+                requested=snow_req,
+                result=result
+            )
+
+            # Zero-Friction Ice & Snow Differential Sweep Steering (H-COLD-ICE-STEER-1)
+            ice_surf = bool(sensors.get('ice_surface') or sensors.get('ice_mode') or (curr_intent == 'ice_taxi'))
+            if ice_surf:
+                govern_zero_friction_ice_steering(
+                    wing_commands=result.get('wing_commands', []),
+                    pilot_yaw_stick=sticks.get('yaw', 0.0),
+                    on_ground=True,
+                    ice_surface=True,
+                    result=result
+                )
+
+        # 8b. Pilot-Centered Alpine Takeoff Assist & Unified Rollout/Abort Braking (H-ALPINE-TO-1)
+        vz_val = sensors.get('vz_ms', sensors.get('Vz_ms', -sensors.get('sink_rate_ms', 0.0)))
+        alpine_gov = govern_pilot_alpine_takeoff_and_rollout(
+            dt_s=0.02,
+            V_ias_ms=V_ias,
+            p_baro_pa=p_baro,
+            t_ambient_c=t_ambient_c,
+            throttle_frac=throttle,
+            pilot_pitch_stick=sticks.get('pitch', 0.0),
+            on_ground=on_ground_flag,
+            intent=curr_intent,
+            wing_commands=result.get('wing_commands', []),
+            result=result,
+            vz_ms=vz_val
+        )
+
+        # 9. Fly-By-Wire Turn Coordination (Pilot toggleable; bypassed in flat turn mode)
+        if 'turn_coordination' in sticks:
+            set_turn_coordination(bool(sticks['turn_coordination']))
+        bank_val = sensors.get('roll_deg_imu', sticks.get('roll', 0.0) * 30.0)
+        pitch_val = sensors.get('pitch_deg_imu', sticks.get('pitch', 0.0) * 20.0)
+        turn_coord_gov = govern_turn_coordination(
+            bank_deg=bank_val,
+            pitch_deg=pitch_val,
+            V_ms=V_ias,
+            on_ground=on_ground_flag,
+            intent=curr_intent,
+            pilot_yaw_stick=sticks.get('yaw', 0.0),
+            coord_mode=result.get('coord_mode', 'auto'),
+            result=result
+        )
+        if turn_coord_gov.get('coordination_active') and curr_intent != 'flat_turn':
+            coord_yaw = turn_coord_gov['delta_yaw_cmd']
+            result['pilot_yaw'] = result.get('pilot_yaw', sticks.get('yaw', 0.0)) + coord_yaw
+            # Apply proverse yaw trim directly to wing commands via differential sweep
+            delta_sweep_deg = coord_yaw * 6.0   # Up to +/- 6 deg differential sweep
+            delta_pitch_turn = turn_coord_gov.get('delta_pitch_cmd', 0.0)
+            pitch_taper = turn_coord_gov.get('pitch_taper_deg', [delta_pitch_turn]*4)
+            turn_freq_mult = turn_coord_gov.get('turn_freq_mult', 1.0)
+            if turn_freq_mult > 1.0 and not on_ground_flag:
+                # Energy coordination: counteract n^2 induced drag surge in banked turns
+                curr_f = result.get('freq_hz', 2.0)
+                result['freq_hz'] = min(3.2, round(curr_f * turn_freq_mult, 2))
+
+            for idx, cmd in enumerate(result.get('wing_commands', [])):
+                if isinstance(cmd, dict):
+                    is_port = (idx % 2 == 0)
+                    cmd['sweep_deg'] = cmd.get('sweep_deg', 60.0) + (delta_sweep_deg if is_port else -delta_sweep_deg)
+                    stn = idx // 2
+                    d_p = pitch_taper[stn] if stn < len(pitch_taper) else delta_pitch_turn
+                    if d_p > 0.0:
+                        cmd['pitch_deg'] = min(12.5, cmd.get('pitch_deg', 6.0) + d_p)
+
+        # 9b. Desert Thermal Interleaver (H-DESERT-COOL-1: 30s tier duty swap across pairs 1&3 vs 2&4)
+        if not on_ground_flag and V_ias >= 10.0:
+            motor_temps = sensors.get('motor_temps_c', [])
+            fet_temps = sensors.get('fet_temps_c', [])
+            desert_force = bool(sensors.get('desert_thermal_mode') or (curr_intent == 'desert_cruise'))
+            govern_desert_thermal_interleaving(
+                dt_s=0.02,
+                motor_temps_c=motor_temps,
+                fet_temps_c=fet_temps,
+                wing_commands=result.get('wing_commands', []),
+                V_ias_ms=V_ias,
+                on_ground=False,
+                forced=desert_force,
+                result=result
+            )
+
+        # 9c. Extreme Gust & Convective Shear Decambering (H-GUST-SQUEEZE-1)
+        az_val = sensors.get('accel_z_g', sensors.get('az_g', 1.0))
+        govern_extreme_gust_squeeze(
+            az_g=az_val,
+            dt_s=0.02,
+            wing_commands=result.get('wing_commands', []),
+            on_ground=on_ground_flag,
+            result=result
+        )
+
+        # 9d. Unsteady LEV Rain Penetration & Boundary Layer Boost (H-RAIN-LEV-1)
+        rain_flag = bool(sensors.get('rain_detected', False) or sensors.get('rain_rate_mm_h', 0.0) >= 1.5)
+        govern_unsteady_lev_rain(
+            dt_s=0.02,
+            rain_detected=rain_flag,
+            rain_rate_mm_h=sensors.get('rain_rate_mm_h', 0.0),
+            base_freq_hz=result.get('freq_hz', 2.2),
+            wing_commands=result.get('wing_commands', []),
+            result=result
+        )
+
+        # 9e. Energy-Throttled Orographic Mountain Wave Loiter (H-WAVE-LOITER-1)
+        govern_orographic_wave_loiter(
+            dt_s=0.02,
+            V_ias_ms=V_ias,
+            vz_ms=vz_val,
+            pitch_deg=pitch_val,
+            throttle_frac=throttle,
+            pilot_pitch_stick=sticks.get('pitch', 0.0),
+            on_ground=on_ground_flag,
+            base_freq_hz=result.get('freq_hz', 2.2),
+            wing_commands=result.get('wing_commands', []),
+            result=result,
+            w_atm_override=sensors.get('w_atm_ms')
+        )
+
+        # 10. Servo Dynamic Slew Rate & Acceleration Clamp (16 AGFRC IB53BHU servos)
+        q_dyn = sensors.get('pitot_pressure_pa', 0.5 * 1.225 * (V_ias ** 2))
+        wing_cmds = result.get('wing_commands', [])
+        result['wing_commands'] = govern_servo_rates(
+            wing_commands=wing_cmds,
+            dt=0.02,
+            q_dyn_pa=q_dyn,
+            result=result
+        )
+
+        # ── Apply to hardware ─────────────────────────────────
+        self.hardware.apply_commands(result, sensors)
+        # Store intent for next tick's CG management
+        self._last_intent = result.get('intent', 'cruise')
+
+        # ── S1 dynamic velocity limit & H-40 Regenerative Braking ──
+        try:
+            v_cur = sensors.get('V_ms', 0.0)
+            pitch_imu = sensors.get('pitch_deg_imu', 0.0)
+            regen_status = ap.h40_stoop_energy_harvesting(v_cur, pitch_imu, bus_v)
+            result['h40_regen'] = regen_status
+        except Exception:
+            pass
+
+        result['h37_active'] = getattr(self.hardware, '_h37_active', False)
+        result['h38_active'] = getattr(self.hardware, '_h38_active', False)
+        result['h38_savings_pct'] = getattr(self.hardware, '_h38_savings_pct', 0.0)
+        result['h39_active'] = getattr(self.hardware, '_h39_active', False)
+        result['h41_active'] = getattr(self.hardware, '_h41_active', False)
+        result['h41_vib_red_pct'] = getattr(self.hardware, '_h41_vib_red_pct', 0.0)
+        result['h41_diag'] = getattr(self.hardware, '_h41_diag', {})
+        result['h41_residual_my_Nm'] = getattr(self.hardware, '_h41_residual_my', 0.0)
+        result['h41_cabin_rms_g'] = getattr(self.hardware, '_h41_cabin_rms_g', 0.0)
+        result['h41_heave_err_g'] = getattr(self.hardware, '_h41_heave_err_g', 0.0)
+        result['h41_stall_margin_deg'] = getattr(self.hardware, '_h41_stall_margin_deg', 13.0)
+        result['h41_servo_derate'] = getattr(self.hardware, '_h41_servo_derate', 1.0)
+        result['h42_active'] = getattr(self.hardware, '_h42_active', False)
+        result['h42_diag'] = getattr(self.hardware, '_h42_diag', {})
+        result['symmetrical_rth_active'] = getattr(self.hardware, '_symmetrical_rth_active', False)
+        result['symmetrical_rth_telem'] = getattr(self.hardware, '_symmetrical_rth_telem', {})
+        result['h43_active'] = getattr(self.hardware, '_h43_active', False)
+        result['h43_delta_g'] = getattr(self.hardware, '_h43_delta_g', 0.0)
+        result['h43_freq_boost_hz'] = getattr(self.hardware, '_h43_freq_boost', 0.0)
+        result['h44_active'] = getattr(self.hardware, '_h44_active', False)
+        result['h45_active'] = getattr(self.hardware, '_h45_active', False)
+        result['h45_shed_pct'] = getattr(self.hardware, '_h45_shed_pct', 0.0)
+        result['h46_active'] = getattr(self.hardware, '_h46_active', False)
+        result['h46_freq_hz'] = getattr(self.hardware, '_h46_freq_hz', 0.0)
+        result['h47_active'] = getattr(self.hardware, '_h47_active', False)
+        result['h47_group'] = getattr(self.hardware, '_h47_group', 'NONE')
+        result['h49_active'] = getattr(self.hardware, '_h49_active', False)
+        result['h49_thrust_boost_N'] = getattr(self.hardware, '_h49_thrust_boost_N', 0.0)
+
+        dyn_vlim = result.get('dyn_vel_limit_rad_s')
+        if dyn_vlim is not None and self.hardware.odi:
+            try:
+                for wing_idx in range(8):
+                    self.hardware.odi.set_velocity_limit(wing_idx, dyn_vlim)
+            except Exception:
+                pass
+
+        # ── S1 per-wing clear_errors (fault isolation) ────────
+        wings_to_clear = result.get('wings_need_clear_errors', [])
+        if wings_to_clear and self.hardware.odi:
+            try:
+                self.hardware.odi.clear_errors()
+            except Exception:
+                pass
+
+        # ── S1 in-flight health monitor ───────────────────────
+        # Updates per-wing temperature, current, rope wear, and
+        # axis error picture. Produces result['motor_health'].
+        result = s1_monitor.update(sensors, result)
+
+        return result
 
     def start(self):
         """Start all subsystems and enter flight loop."""
@@ -563,108 +1219,6 @@ class MCOMain:
                 if inbound_wp:
                     w.accept_external_fix(inbound_wp[0], inbound_wp[1], inbound_wp[2], source=inbound_wp[3])
 
-            # ── Get sensor data ───────────────────────────────────
-            sensors = self.mavlink.get_sensors()
-
-            # ── Intent arbitration via IntentInterpreter ─────────
-            sticks = {
-                'roll':     sensors.get('roll_stick', 0.0),
-                'pitch':    sensors.get('pitch_stick', 0.0),
-                'throttle': sensors.get('lever_pct', 50.0) / 100.0,
-                'yaw':      sensors.get('yaw_stick', 0.0),
-            }
-            switches = {'mode_sw': 0}
-            context = {
-                'V_ms':            sensors.get('V_ms', 11.0),
-                'h_agl_m':         sensors.get('h_agl_m', 50.0),
-                'bank_deg':        sensors.get('roll_deg_imu', 0.0),
-                'pitch_deg':       sensors.get('pitch_deg_imu', 0.0),
-                'Ps':              sensors.get('Ps_measured', 0.0),
-                'on_ground':       sensors.get('h_agl_m', 50.0) < 0.3,
-                'contested_ew':    w._ew_state.get('active', False),
-                'stealth_loiter':  w._ew_state.get('stealth_active', False),
-                'gps_jammed':      w._gps_state.get('status', 0) >= 3,
-                'bus_voltage_v':   sensors.get('bus_voltage_v', 24.0),
-            }
-            try:
-                intent_res = self.intent_interpreter.interpret(sticks, switches, context)
-                if isinstance(intent_res, tuple):
-                    sensors['intent'] = intent_res[0]
-                    if len(intent_res) > 1:
-                        sensors['intent_conf'] = intent_res[1]
-                    if len(intent_res) > 2:
-                        sensors['intent_params'] = intent_res[2]
-                else:
-                    sensors['intent'] = str(intent_res)
-                    sensors['intent_conf'] = 1.0
-                    sensors['intent_params'] = {}
-            except Exception:
-                sensors['intent'] = 'cruise'
-                sensors['intent_conf'] = 0.0
-                sensors['intent_params'] = {}
-
-            # Feed advancing kinematic wave states to FCC
-            kin = self.hardware.get_wing_kinematics()
-            sensors['flap_phases'] = kin['flap_phases']
-            sensors['stroke_dirs'] = kin['stroke_dirs']
-            sensors['flap_degs']   = kin['flap_degs']
-
-            # ── Per-wing sensing (MCP3208 ADCs + ODrive pos) ─
-            # Pitch servo feedback — MCP3208 #1 (SPI1 CE1)
-            sensors['servo_actual_aoa_deg'] = w.read_servo_feedback_adc()
-            # Sweep servo feedback — MCP3208 #2 (SPI1 CE0); None if not fitted
-            sensors['sweep_actual_deg'] = (
-                w._sweep_sense_state.get('actual_sweep_deg', [None]*8)
-                if w._sweep_sense_state.get('sweep_adc_fitted') else [None]*8)
-            # ODrive S1 stroke position — 8 values (1 per board, node == wing_idx)
-            sensors['motor_pos_rad']    = self.hardware._read_odrive_positions()
-            # ODrive S1 motor current — 8 values (1 per board)
-            sensors['motor_currents_a'] = self.hardware._read_odrive_currents()
-            # ODrive S1 FET and motor temperatures — NEW S1 capability
-            # read_temperatures() returns list of 8 {'fet_C', 'motor_C'} dicts
-            # Called at 5 Hz (every 10 ticks) to reduce CAN bus load
-            if tick_count % 10 == 0 and self.hardware.odi:
-                try:
-                    sensors['motor_temps'] = self.hardware.odi.read_temperatures()
-                except Exception:
-                    sensors['motor_temps'] = []
-            else:
-                sensors['motor_temps'] = getattr(self, '_last_motor_temps', [])
-            if sensors.get('motor_temps'):
-                self._last_motor_temps = sensors['motor_temps']
-            # ODrive S1 axis error states — for per-wing fault isolation
-            # Called at 1 Hz (every 50 ticks) to reduce CAN bus load
-            if tick_count % 50 == 0 and self.hardware.odi:
-                try:
-                    states = self.hardware.odi.read_all_states()
-                    sensors['wing_errors'] = [s.get('error', 0) for s in states]
-                except Exception:
-                    sensors['wing_errors'] = []
-            else:
-                sensors['wing_errors'] = getattr(self, '_last_wing_errors', [])
-            if sensors.get('wing_errors'):
-                self._last_wing_errors = sensors['wing_errors']
-            # Actual tick period for thermal calculations
-            sensors['dt_s'] = max(0.001, time.monotonic() - tick_start)
-
-            # ── Derived sensor fields ─────────────────────────────────
-            # Air density (ISA approximation from OAT + baro altitude)
-            oat_c = sensors.get('oat_c', 15.0)
-            alt_m = sensors.get('baro_alt_m', 0.0)
-            sensors['air_density_kgm3'] = (
-                1.225 * ((288.15 - 0.0065 * alt_m) / 288.15) ** 4.256
-                * (273.15 / (273.15 + oat_c)))
-            # Roll/pitch rates already in sensors from mavlink IMU
-            # Ensure lateral_g present (from IMU accel Y)
-            if 'lateral_g' not in sensors:
-                sensors['lateral_g'] = 0.0
-            # Set baseline currents on first good reading
-            if (tick_count == 5 and
-                    sensors.get('motor_currents_a') and
-                    s1_monitor._baseline_I == [None]*8):
-                s1_monitor.set_baseline_currents(
-                    sensors['motor_currents_a'])
-
             # ── Process ground station commands ───────────────────
             cmds = self.gs_server.get_pending_commands()
             for cmd_item in cmds:
@@ -676,120 +1230,31 @@ class MCOMain:
                         cmd_str  = str(cmd_item)
                         cmd_dict = {'cmd': cmd_str}
 
-                    # Try test card commands first
-                    tc_ack = None
-                    if self._handle_tc:
-                        tc_ack = self._handle_tc(cmd_str)
-                    if tc_ack is not None:
-                        ack = tc_ack if isinstance(tc_ack, dict) else {'type': 'ack', 'cmd': cmd_str, 'msg': str(tc_ack)}
+                    # Handle pilot / GS turn coordination toggle
+                    if cmd_str in ('coord_off', 'turn_coord_off') or cmd_dict.get('action') == 'disable_turn_coordination':
+                        set_turn_coordination(False)
+                        ack = {'type': 'ack', 'cmd': cmd_str, 'msg': 'Turn coordination disabled'}
+                    elif cmd_str in ('coord_on', 'turn_coord_on') or cmd_dict.get('action') == 'enable_turn_coordination':
+                        set_turn_coordination(True)
+                        ack = {'type': 'ack', 'cmd': cmd_str, 'msg': 'Turn coordination enabled'}
                     else:
-                        ack = w._gs_execute_cmd(cmd_dict)
+                        # Try test card commands first
+                        tc_ack = None
+                        if self._handle_tc:
+                            tc_ack = self._handle_tc(cmd_str)
+                        if tc_ack is not None:
+                            ack = tc_ack if isinstance(tc_ack, dict) else {'type': 'ack', 'cmd': cmd_str, 'msg': str(tc_ack)}
+                        else:
+                            ack = w._gs_execute_cmd(cmd_dict)
                     self.gs_server.queue_ack(ack)
                 except Exception as e:
                     self.gs_server.queue_ack(
                         {'type': 'error', 'msg': str(e)})
 
-            # ── Flight control tick ───────────────────────────────
-            try:
-                result = self.fcc.tick(sensors)
-            except Exception as e:
-                print(f"Tick error: {e}")
-                result = {'wing_commands': [{}]*8, 'freq_hz': 0.0}
+            # ── Get sensor data & tick flight control ─────────────
+            sensors = self.mavlink.get_sensors()
+            result = self.tick(sensors, tick_count=tick_count, tick_start=tick_start)
 
-            # ── Active Flight Safety Governors ────────────────────
-            # 1. Stall speed floor protection: auto-inject minimum safe flapping below 10.5 m/s unpowered
-            V_ias = sensors.get('V_ms', 11.0)
-            throttle = sticks.get('throttle', 0.5)
-            curr_intent = sensors.get('intent', 'cruise')
-            glide_gov = check_glide_speed_floor(V_ias, throttle_frac=throttle, intent=curr_intent)
-            if glide_gov.get('intervention_active'):
-                forced_f = glide_gov.get('forced_freq_hz', 2.0)
-                forced_a = glide_gov.get('forced_amp_deg', 40.0)
-                if result.get('freq_hz', 0.0) < forced_f:
-                    result['freq_hz'] = forced_f
-                for cmd in result.get('wing_commands', []):
-                    if isinstance(cmd, dict):
-                        cmd['flap_amp_deg'] = max(cmd.get('flap_amp_deg', 0.0), forced_a)
-                result['stall_intervention'] = True
-            else:
-                result['stall_intervention'] = False
-
-            # 2. Sprint dynamics clamp: protect ODrive S1 from velocity over-speed trips
-            if curr_intent == 'sprint' or result.get('freq_hz', 0.0) > 3.0:
-                cmd_f = result.get('freq_hz', 0.0)
-                cmd_a = max((c.get('flap_amp_deg', 20.0) for c in result.get('wing_commands', []) if isinstance(c, dict)), default=20.0)
-                cf, ca, mrpm, margin = clamp_sprint_dynamics(cmd_f, cmd_a)
-                result['freq_hz'] = cf
-                for cmd in result.get('wing_commands', []):
-                    if isinstance(cmd, dict) and cmd.get('flap_amp_deg', 0.0) > ca:
-                        cmd['flap_amp_deg'] = ca
-                result['sprint_rpm_margin_pct'] = margin
-
-            # 3. Regenerative brake resistor voltage fence
-            bus_v = sensors.get('bus_voltage_v', 24.0)
-            req_regen_w = result.get('regen_watts', 0.0)
-            resistor_gov = govern_regen_brake_resistor(bus_v, req_regen_w)
-            result['brake_resistor_gov'] = resistor_gov
-
-            # ── Apply to hardware ─────────────────────────────────
-            self.hardware.apply_commands(result, sensors)
-            # Store intent for next tick's CG management
-            self._last_intent = result.get('intent', 'cruise')
-
-            # ── S1 dynamic velocity limit & H-40 Regenerative Braking ──
-            try:
-                v_cur = sensors.get('V_ms', 0.0)
-                pitch_imu = sensors.get('pitch_deg_imu', 0.0)
-                regen_status = ap.h40_stoop_energy_harvesting(v_cur, pitch_imu, bus_v)
-                result['h40_regen'] = regen_status
-            except Exception:
-                pass
-
-            result['h37_active'] = getattr(self.hardware, '_h37_active', False)
-            result['h38_active'] = getattr(self.hardware, '_h38_active', False)
-            result['h38_savings_pct'] = getattr(self.hardware, '_h38_savings_pct', 0.0)
-            result['h39_active'] = getattr(self.hardware, '_h39_active', False)
-            result['h41_active'] = getattr(self.hardware, '_h41_active', False)
-            result['h41_vib_red_pct'] = getattr(self.hardware, '_h41_vib_red_pct', 0.0)
-            result['h41_diag'] = getattr(self.hardware, '_h41_diag', {})
-            result['h41_residual_my_Nm'] = getattr(self.hardware, '_h41_residual_my', 0.0)
-            result['h41_cabin_rms_g'] = getattr(self.hardware, '_h41_cabin_rms_g', 0.0)
-            result['h41_heave_err_g'] = getattr(self.hardware, '_h41_heave_err_g', 0.0)
-            result['h42_active'] = getattr(self.hardware, '_h42_active', False)
-
-            result['h42_diag'] = getattr(self.hardware, '_h42_diag', {})
-            result['h43_active'] = getattr(self.hardware, '_h43_active', False)
-            result['h43_delta_g'] = getattr(self.hardware, '_h43_delta_g', 0.0)
-            result['h44_active'] = getattr(self.hardware, '_h44_active', False)
-            result['h45_active'] = getattr(self.hardware, '_h45_active', False)
-            result['h45_shed_pct'] = getattr(self.hardware, '_h45_shed_pct', 0.0)
-            result['h46_active'] = getattr(self.hardware, '_h46_active', False)
-            result['h46_freq_hz'] = getattr(self.hardware, '_h46_freq_hz', 0.0)
-            result['h47_active'] = getattr(self.hardware, '_h47_active', False)
-            result['h47_group'] = getattr(self.hardware, '_h47_group', 'NONE')
-            result['h49_active'] = getattr(self.hardware, '_h49_active', False)
-            result['h49_thrust_boost_N'] = getattr(self.hardware, '_h49_thrust_boost_N', 0.0)
-
-            dyn_vlim = result.get('dyn_vel_limit_rad_s')
-            if dyn_vlim is not None and self.hardware.odi:
-                try:
-                    for wing_idx in range(8):
-                        self.hardware.odi.set_velocity_limit(wing_idx, dyn_vlim)
-                except Exception:
-                    pass
-
-            # ── S1 per-wing clear_errors (fault isolation) ────────
-            wings_to_clear = result.get('wings_need_clear_errors', [])
-            if wings_to_clear and self.hardware.odi:
-                try:
-                    self.hardware.odi.clear_errors()
-                except Exception:
-                    pass
-
-            # ── S1 in-flight health monitor ───────────────────────
-            # Updates per-wing temperature, current, rope wear, and
-            # axis error picture. Produces result['motor_health'].
-            result = s1_monitor.update(sensors, result)
 
             # ── Log and telemetry ─────────────────────────────────
             self.logger.log(sensors, result)
@@ -893,14 +1358,62 @@ class MCOMain:
                     'h_la1_lift_N':       result.get('h_la1_lift_N', 0.0),
                     'h_la3_pigeon_climb':result.get('h_la3_pigeon_climb', False),
                     'h_la3_climb_deg':   result.get('h_la3_climb_deg', 0.0),
+                    'dive_inhibit_flag': result.get('dive_inhibit_flag', False),
+                    'dive_brake_active': result.get('dive_brake_active', False),
+                    'dive_brake_fraction': result.get('dive_brake_fraction', 0.0),
+                    'dive_recovery_status': result.get('dive_recovery_status', ''),
+                    'dive_v_target_ms': result.get('dive_v_target_ms', 16.3),
+                    'boyd_energy_saved_j': result.get('boyd_energy_saved_j', 0.0),
+                    'dive_vne_ms':       result.get('dive_vne_ms', 28.0),
+                    'dive_sweep_deg':    result.get('dive_sweep_deg', 60.0),
+                    'commanded_sweep_deg': result.get('commanded_sweep_deg', 60.0),
+                    'dive_unfold_status': result.get('dive_unfold_status', ''),
+                    'pitot_saturated': result.get('pitot_saturated', False),
+                    'pitot_status': result.get('pitot_status', 'PITOT_NOMINAL_UNSATURATED'),
+                    'pitot_blocked': result.get('pitot_blocked', False),
+                    'synthetic_airspeed_active': result.get('synthetic_airspeed_active', False),
+                    'servo_bus_status': result.get('servo_bus_status', 'NOMINAL'),
+                    'servo_bus_derate': result.get('servo_bus_derate_factor', 1.0),
+                    'servo_bus_brownout_lock': result.get('servo_bus_brownout_lock', False),
+                    'wow_on_ground': result.get('wow_on_ground', False),
+                    'wow_state': result.get('wow_state', 'ON_GROUND'),
+                    'wow_confidence': result.get('wow_confidence', 1.0),
+                    'turn_coord_active': result.get('turn_coordination_active', False),
+                    'turn_coord_enabled': is_turn_coordination_enabled(),
+                    'turn_coord_yaw_rate': result.get('turn_coord_yaw_rate_deg_s', 0.0),
+                    'strouhal_savings_pct': result.get('strouhal_savings_pct', 0.0),
+                    'strouhal_opt_freq_hz': result.get('strouhal_opt_freq_hz', 0.0),
+                    'cascade_slipstream_phase': result.get('cascade_slipstream_phase_deg', 90.0),
+                    'ground_wind_state': result.get('ground_wind_state', 'STANDBY'),
+                    'ground_suction_pitch_deg': result.get('ground_suction_pitch_deg', 0.0),
+                    'ground_gsf_compensated': result.get('ground_gsf_compensated', 99.0),
+                    'ground_rollover_mitigated': result.get('ground_rollover_mitigated', True),
+                    'ground_takeoff_mode': result.get('ground_takeoff_mode', 'CONV-STOL-1'),
+                    'deadline_misses': self._deadline_miss_count,
+                    'watchdog_trips': self._watchdog_trip_count,
                 }
                 self.gs_server.set_telemetry(telem)
                 self.mavlink.send_status(result)
 
             tick_count += 1
 
-            # ── Maintain tick rate ────────────────────────────────
+            # ── 50 Hz Control Loop Deadline Monitor & Watchdog ────
             elapsed = time.monotonic() - tick_start
+            self._tick_latencies.append(elapsed)
+            if len(self._tick_latencies) > 50:
+                self._tick_latencies.pop(0)
+
+            if elapsed > 0.018:   # 18 ms deadline warning threshold (>90% frame budget)
+                self._deadline_miss_count += 1
+                if self._deadline_miss_count % 10 == 1:
+                    print(f"WARN: 50 Hz loop deadline overrun: {elapsed*1000.0:.2f} ms (>18 ms, total misses: {self._deadline_miss_count})")
+
+            if elapsed > 0.050:   # 50 ms watchdog threshold (>2.5 frames missed)
+                self._watchdog_trip_count += 1
+                result['watchdog_safe_hold'] = True
+                print(f"CRITICAL: 50 Hz loop watchdog tripped! Tick latency {elapsed*1000.0:.2f} ms > 50 ms. Engaging safe-hold.")
+
+            # ── Maintain tick rate ────────────────────────────────
             sleep_s = self.TICK_S - elapsed
             if sleep_s > 0:
                 time.sleep(sleep_s)
@@ -986,11 +1499,19 @@ def main():
                         help='Simulation mode (no hardware output)')
     parser.add_argument('--wizard', action='store_true',
                         help='Launch MCO-1D first-run hardware configuration wizard')
+    parser.add_argument('--discover', action='store_true',
+                        help='Run autonomous physical plant self-discovery and parameter validation')
     args = parser.parse_args()
 
     if args.wizard:
         from mco_first_run_wizard import run as run_wizard
         run_wizard()
+        return
+
+    if args.discover:
+        from mco_physical_discovery import AutonomousPhysicalDiscoveryEngine
+        engine = AutonomousPhysicalDiscoveryEngine(sim_mode=args.sim)
+        engine.run_full_discovery_phase()
         return
 
     mco = MCOMain(port=args.port, baud=args.baud, sim=args.sim)

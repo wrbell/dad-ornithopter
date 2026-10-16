@@ -201,6 +201,21 @@ Lift vs Airspeed Operational Envelope:
 * **Mandatory Fix**:
   - A **$4,700\,\mu\text{F} \times 16\,\text{V}$ ultra-low ESR ($<0.02\,\Omega$) electrolytic capacitor** must be soldered with leads $<20\,\text{mm}$ directly across the 7.4V servo power distribution board terminals.
 
+### 6.3 Sprint Thermal Duty Cycle & AGFRC IB53BHU Protection (PHY-09)
+* **High-Speed Dash / Sprint Thermal Vulnerability**: During sustained dash or burst flapping ($f = 3.5\text{--}4.0\,\text{Hz}$ with stroke amplitudes up to $\pm 34^\circ$), 16 pitch and sweep servos operate near continuous peak torque against dynamic hinge moments and inertia. Continuous current on the 7.4V rail can reach $18.0\text{--}24.0\,\text{A}$, causing coreless motor winding temperatures to climb toward the $95^\circ\text{C}$ demagnetization threshold within 30 seconds.
+* **Firmware Fix 4 Enforcement**:
+  - Implemented in `firmware/mco_flight_governor.py` (`SprintThermalDutyTracker`) and integrated into the 50 Hz flight loop (`mco_main.py`).
+  - **Burst Duration Ceiling**: Maximum continuous sprint duration is hard-capped at **$20.0\,\text{s}$**.
+  - **Thermal Cooldown Lockout**: Requires a mandatory **$45.0\,\text{s}$** continuous sub-sprint cooldown ($f \le 2.5\,\text{Hz}$, Wave Lever $< 88\%$) before sprint mode can re-engage.
+  - **Servo Bus Current Clamp**: If total 7.4V servo bus current exceeds **$18.0\,\text{A}$** during sprint, the governor trips an immediate overcurrent lockout, derating flapping dynamics to safe cruise ceiling:
+    $$f_{\text{derated}} \le 2.2\,\text{Hz}, \quad \theta_{\text{stroke}} \le \pm 18.0^\circ$$
+* **Rejection of Open-Loop Phase-Lead Feedforward (Fix 3)**:
+  - Feedforwarding dynamic pitch lead ($\Delta t \approx 58\,\text{ms}$) open-loop based purely on nominal servo transfer functions was analyzed and rejected.
+  - *Failure Mode*: When battery bus voltage droops under heavy flapping or aero hinge moments fluctuate unpredictably, open-loop feedforward causes command saturation ("whiplash"), 100% duty stall torque spikes, and gear tooth micro-stripping on the AGFRC IB53BHU steel gear train, introducing phase overshoot that risks explosive aeroelastic divergence. Closed-loop phase tracking and duty cycle clamping (Fix 4) are strictly mandated instead.
+* **Biomimetic Pterostigma Slug Mass & Aft Subtraction Balance**:
+  - To prevent high-speed flutter divergence above $15\,\text{m/s}$ without penalizing flapping inertia, all 8 wings feature a $1.5\,\text{g} \pm 0.1\,\text{g}$ brass slug ($\varnothing 3.0\,\text{mm} \times 24\,\text{mm}$) installed at $85\%$ semispan ($y = 0.85b$) and $x/c \approx 0.08$ (forward of the $20\% c$ main spar).
+  - Paired with the **5.4:1 Aft Subtraction Rule**: every $1.0\,\text{g}$ of mass lightened from the trailing edge ($65\% c$ aft of spar) provides the same flutter-suppression forward CG shift as adding $5.4\,\text{g}$ of dead nose ballast, preserving wing lightness while pushing flutter divergence speed beyond $28\,\text{m/s}$.
+
 ---
 
 ## 7. Avionics & Low-Dynamic-Pressure Sensing
@@ -228,6 +243,12 @@ Lift vs Airspeed Operational Envelope:
 Before mounting the airframe onto the outdoor test rig or initiating low-speed taxi runs, the build team must sign off on every item below:
 
 ```
+[ ] 0. As-Built Gross Weight & Mass Budget Handoff (PRIMARY CALIBRATION GATE)
+       - Measure complete flight-ready airframe (with 6S + 2S LiPos, avionics, canopy) on calibrated digital scale.
+       - As-built target: < 5,600 g (baseline reference: 5,687 g MTOW).
+       - Record 3-point wheel reactions (nose gear, port main, stbd main) to confirm transverse symmetry and empty CG.
+       - Hand off exact gross weight figure to firmware: dynamically updates stall floor, Boyd Ps, and hover thrust margin.
+
 [ ] 1. Dyneema 48-Hour Creep Settlement
        - Verify cables rested at 200 N for 48 hours.
        - Re-tensioned to 180 N ± 5 N across all 8 capstans.
@@ -237,31 +258,56 @@ Before mounting the airframe onto the outdoor test rig or initiating low-speed t
        - Aluminum 6061-T6 ferrules (Ø8.0 mm x 40 mm) epoxied into all 8 spar roots.
        - Spar clamp bolts torqued to 2.2 N*m with Loctite 243.
 
-[ ] 3. Motor Mount Thermal Isolation
+[ ] 3. Motor Mount Thermal Isolation & Drive Model
+       - GoolRC 5010-14 360KV brushless motors verified on all 8 flapping stations (95g ea).
        - 0.5 mm silicone/FR4 thermal barrier gaskets installed between motors and mounts.
-       - 2.0 mm 6061-T6 aluminum faceplates verified under all 8 MN5008 motors.
+       - 2.0 mm 6061-T6 aluminum faceplates verified under all 8 motor mounts.
        - Ram-air NACA scoops verified clear with unobstructed internal airflow.
 
 [ ] 4. Center of Gravity (CG) Position
        - Sled quick-release pin locked into Hole 3 (250 mm mark).
        - Complete airframe balanced on knife-edge: CG falls at 311.8 mm ± 3.0 mm (26.5% MAC).
 
-[ ] 5. Servo Bus Electrical Integrity
+[ ] 5. Servo Bus Electrical Integrity & Sprint Protection
        - 4,700 µF 16V low-ESR capacitor verified on 7.4V servo rail (leads < 20 mm).
        - Full 16-servo simultaneous sweep test: 7.4V rail voltage remains >= 7.1V.
+       - Sprint thermal governor verified: 20s burst limit, 45s cooldown lockout, 18.0A trip.
 
-[ ] 6. CAN-FD Bus Resistance
+[ ] 6. Biomimetic Pterostigma Slug & Wing Mass Balance
+       - 1.5 g ± 0.1 g brass slug verified at y = 0.85b, x/c ≈ 0.08 in all 8 wings.
+       - Trailing-edge mass verified skeletonized (Aft Subtraction Rule: 5.4:1 ratio).
+       - Chordwise CG verified forward of elastic axis (<= 24% chord).
+
+[ ] 7. CAN-FD Bus Resistance
        - DMM resistance across CAN_H and CAN_L measures exactly 60.0 Ω ± 1.5 Ω.
 
-[ ] 7. Dynamic Clearance & Sweep Lock
+[ ] 8. Dynamic Clearance & Sweep Lock
        - Software sweep differential clamped to <= 15° during high-stroke flapping.
        - Station spacing verified at 250 mm stagger and 41.25 mm vertical staircase.
        - All 8 wingtips clear adjacent structures by >= 35.0 mm across all stroke phases.
+       - 200° sector wheel travel verified: mechanical stops at ±100.0°, dynamic flap bounded to ±96.0°.
 
-[ ] 8. Pitot Low-Speed Calibration
+[ ] 9. Pitot Low-Speed Calibration
        - Pitot tube zero-offset calibrated with cover attached at ambient temperature.
        - Low-speed rolling median filter enabled in flight controller EKF3.
 ```
+
+---
+
+## 9. Builder As-Built Calibration Figures Manifest
+
+Once the Mark 1 physical airframe is constructed, the builder must provide the following measured parameters to calibrate the flight controller firmware before first flight:
+
+| Param # | Parameter Name | Symbol | Baseline / Target | As-Built Measured Entry | Firmware Coupling & Impact |
+| :---: | :--- | :---: | :---: | :---: | :--- |
+| **FIG-01** | **All-Up Gross Weight** | $m_{\text{gross}}$ | **$< 5,600\text{ g}$** ($5,687\text{ g}$ max) | `__________ g` | Scales stall speed $V_s \propto \sqrt{m}$, required lift $L = mg$, Boyd $P_s$, climb ceiling, and hover thrust-to-weight ratio. Lighter mass expands all margins. |
+| **FIG-02** | **Wheel Weight Distribution** | $m_N, m_L, m_R$ | $15\% / 42.5\% / 42.5\%$ | `N:___ g, L:___ g, R:___ g` | Direct ground balance confirmation of longitudinal CG and lateral symmetry. |
+| **FIG-03** | **Longitudinal CG Station** | $x_{\text{CG}}$ | $311.8 \pm 3.0\text{ mm}$ (Hole 3) | `__________ mm` | Trim elevator bias, pitch stability derivative $C_{m\alpha}$, and neutral point static margin. |
+| **FIG-04** | **Sector Wheel Total Travel** | $\theta_{\text{sector\_total}}$ | **$200.0^\circ$** ($\pm 100.0^\circ$) | `__________ deg` | Mechanical travel envelope. Firmware sets reciprocating flapping ceiling to $\pm 96.0^\circ$ ($4.0^\circ$ soft margin) and macro maneuvers to $200.0^\circ$. |
+| **FIG-05** | **Flapping Motor Baseline** | Drive Model | **GoolRC 5010-14 360KV** | `Confirmed / Other` | $K_t \approx 0.0265\text{ N}\cdot\text{m/A}$, $10:1$ capstan, root torque $7.95\text{ N}\cdot\text{m}$ cont / $10.6\text{ N}\cdot\text{m}$ burst. |
+| **FIG-06** | **Dyneema Resting Cable Tension** | $T_{\text{cable}}$ | $180 \pm 5\text{ N}$ | `W1:___, W2:___, W3:___, W4:___ N` | Ensures zero cable backlash across stroke reversals without bearing preload overload. |
+| **FIG-07** | **Servo Neutral Centers (16)** | $\theta_{\text{sweep0}}, \theta_{\text{pitch0}}$ | $0.0^\circ \pm 0.5^\circ$ | `Recorded in EKF3 table` | AGFRC IB53BHU PWM microsecond neutral offsets for zero-incidence trim. |
+| **FIG-08** | **Pitot Static Offset** | $\Delta P_{\text{offset}}$ | $0.00 \pm 0.02\text{ hPa}$ | `__________ Pa` | Calibrates low-speed airspeed sensor zero before synthetic EKF3 fusion kicks in. |
 
 ---
 *Document certified into Mark 1 Technical Baseline.*

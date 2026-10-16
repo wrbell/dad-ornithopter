@@ -23,6 +23,8 @@ from mco_flight_governor import (
     check_tandem_blade_clearance,
     clamp_sprint_dynamics,
     govern_regen_brake_resistor,
+    evaluate_proprioceptive_cascade_clearance,
+    apply_proprioceptive_deconfliction,
 )
 
 
@@ -220,6 +222,55 @@ class TestSafetyGovernors(unittest.TestCase):
         self.assertTrue(gov['regen_allowed'])
         self.assertEqual(gov['battery_charge_w'], 0.0)
         self.assertEqual(gov['shunt_to_resistor_w'], 40.0)
+
+    def test_proprioceptive_metachronal_clearance(self):
+        """Metachronal 90 deg phase offset preserves clearance at ultra-compact s = 135mm."""
+        # 4 stations with 90 deg metachronal phase lag at theta = 70 deg peak stroke
+        stations = [
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': 5.0},     # St 1 mid-stroke
+            {'stroke_deg': 70.0, 'sweep_deg': 90.0, 'pitch_deg': 0.0},    # St 2 peak dorsal
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': -5.0},    # St 3 mid-stroke
+            {'stroke_deg': -70.0, 'sweep_deg': 90.0, 'pitch_deg': 0.0},   # St 4 peak ventral
+        ]
+        res = evaluate_proprioceptive_cascade_clearance(stations, stagger_mm=135.0, chord_mm=165.0)
+        self.assertTrue(res['clearance_safe'])
+        self.assertGreaterEqual(res['min_distance_mm'], 35.0)
+        self.assertFalse(res['intervention_required'])
+
+    def test_proprioceptive_active_deconfliction(self):
+        """Active deconfliction fans sweep angles when in-phase collision is imminent."""
+        # Simultaneous horizontal crossing (in-phase clash risk)
+        clash_stations = [
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': 10.0},
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': 10.0},
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': 10.0},
+            {'stroke_deg': 0.0, 'sweep_deg': 90.0, 'pitch_deg': 10.0},
+        ]
+        res = evaluate_proprioceptive_cascade_clearance(clash_stations, stagger_mm=135.0, chord_mm=165.0, vert_drop_mm=0.0)
+        self.assertFalse(res['clearance_safe'])
+        self.assertTrue(res['intervention_required'])
+        self.assertIn(res['critical_pair'], [(0, 1), (1, 2), (2, 3)])
+
+        # Apply deconfliction
+        deconflicted = apply_proprioceptive_deconfliction(clash_stations, res, splay_gain_deg=5.0)
+        i1, i2 = res['critical_pair']
+        self.assertLess(deconflicted[i1]['sweep_deg'], 90.0)   # Swept forward
+        self.assertGreater(deconflicted[i2]['sweep_deg'], 90.0) # Swept aft
+
+    def test_h_prop1_registered(self):
+        """H-PROP-1 is registered in AERO_HYPOTHESES with valid proprioceptive config."""
+        h = next((entry for entry in wl.AERO_HYPOTHESES if entry['id'] == 'H-PROP-1'), None)
+        self.assertIsNotNone(h)
+        cfg = h['config']
+        self.assertTrue(cfg.get('_h_prop_1'))
+        self.assertEqual(cfg.get('h_prop1_encoder_rate_hz'), 1000.0)
+        self.assertEqual(cfg.get('h_prop1_phase_lock_tolerance_deg'), 2.0)
+        self.assertEqual(cfg.get('h_prop1_fleet_angle_limit_deg'), 14.0)
+        # Check alias lookup via discovery_hypothesis_select
+        res_hyp = wl.discovery_hypothesis_select(focus='proprioception')
+        self.assertIsNotNone(res_hyp)
+        self.assertEqual(res_hyp['id'], 'H-PROP-1')
+
 
 
 class TestImportSafety(unittest.TestCase):
