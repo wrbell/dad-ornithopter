@@ -10,9 +10,7 @@ import os
 import pyvista as pv
 
 OUT_DIR = "cad/manufactured/renders_v10"
-ART_DIR = "/Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84/renders"
 os.makedirs(OUT_DIR, exist_ok=True)
-os.makedirs(ART_DIR, exist_ok=True)
 
 pv.set_plot_theme("document")
 
@@ -69,10 +67,7 @@ for fname, mesh, cam, color in views:
     plotter.camera_position = cam
     
     local_path = os.path.join(OUT_DIR, fname)
-    art_path = os.path.join(ART_DIR, fname)
-    
     plotter.screenshot(local_path)
-    plotter.screenshot(art_path)
     plotter.close()
     print(f"  Rendered: {fname}")
 

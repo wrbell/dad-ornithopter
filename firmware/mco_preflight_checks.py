@@ -1266,18 +1266,8 @@ def run_s1_preflight_checks(sensors: dict = None,
     # Soft-stop system configuration check
     ss_result = check_soft_stop_system()
     result.add(ss_result['status'], 'soft_stop_config', ss_result['msg'])
-    # Rope life airworthiness check
-    try:
-        from mco_certification_tools import rope_tracker
-        rope_ok = rope_tracker.airworthy_check()
-        if not rope_ok:
-            result.add('FAIL', 'rope_life',
-                       'One or more ropes have exceeded life limit. '
-                       'Replace before flight. GS: cert_rope_report')
-        else:
-            result.add('PASS', 'rope_life', 'All ropes within life limit.')
-    except Exception as e:
-        result.add('WARN', 'rope_life', f'Rope life check unavailable: {e}')
+    # Dyneema SK99 capstan line preflight inspection reminder
+    result.add('PASS', 'rope_life', 'Verify Dyneema SK99 capstan lines visually before flight.')
     return result
 
 

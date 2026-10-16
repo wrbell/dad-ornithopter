@@ -2,7 +2,8 @@
 import os
 import pyvista as pv
 
-OUT_DIR = '/Users/drbell/.gemini/antigravity/brain/6213fcb6-5e21-4842-8745-8b4c5b294586'
+OUT_DIR = 'cad/manufactured/renders'
+os.makedirs(OUT_DIR, exist_ok=True)
 
 pv.set_plot_theme("document")
 

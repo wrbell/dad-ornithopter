@@ -57559,6 +57559,7 @@ def persist_save_all(*args, **kwargs):
 _orig_persist_load_me = persist_load_all
 
 def persist_load_all(*args, **kwargs):
+    verbose = kwargs.get('verbose', False)
     result = _orig_persist_load_me(*args, **kwargs)
     # Load MAP-Elites archive
     me_path = f'{_PL_DIR}/me_archive.json'
@@ -58458,6 +58459,7 @@ def persist_save_all(*args, **kwargs):
 _orig_persist_load_sg = persist_load_all
 
 def persist_load_all(*args, **kwargs):
+    verbose = kwargs.get('verbose', False)
     result = _orig_persist_load_sg(*args, **kwargs)
     sg_path = f'{_PL_DIR}/strategy_genomes.json'
     sg_data = _pl_read(sg_path)
@@ -60044,6 +60046,7 @@ def persist_save_all(*args, **kwargs):
 _orig_persist_load_dc = persist_load_all
 
 def persist_load_all(*args, **kwargs):
+    verbose = kwargs.get('verbose', False)
     result = _orig_persist_load_dc(*args, **kwargs)
     dc_path = f'{_PL_DIR}/discovery_control.json'
     data = _pl_read(dc_path)

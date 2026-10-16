@@ -27,18 +27,20 @@ NEW: INSPECTION MODE
 
 import time, math
 
+from mco_config import WING_SPAN_MM
+
 # ─────────────────────────────────────────────────────────────────
 # TAXI GEOMETRY
 # ─────────────────────────────────────────────────────────────────
-H_GEAR_MM    = 200.0   # undercarriage height — measure and confirm
-B_W4_MM      = 712.0   # W4 semi-span — shortest, most restrictive
-MARGIN_MM    = 150.0   # tip clearance margin during downstroke
+H_GEAR_MM    = 200.0          # undercarriage height — measure and confirm
+B_W4_MM      = WING_SPAN_MM   # W4 semi-span (1150.0 mm uniform semi-span)
+MARGIN_MM    = 150.0          # tip clearance margin during downstroke
 
 # Maximum DOWNSTROKE angle — tip stays MARGIN_MM above ground
 # H_gear - b × sin(α_down) ≥ MARGIN
 # α_down = arcsin((H_gear - MARGIN) / b)
 TAXI_AMP_DOWN_DEG = math.degrees(
-    math.asin((H_GEAR_MM - MARGIN_MM) / B_W4_MM))   # ≈ 4.0°
+    math.asin((H_GEAR_MM - MARGIN_MM) / B_W4_MM))
 
 # Upstroke is unrestricted — use full normal amplitude
 TAXI_AMP_UP_DEG   = 80.0    # same as flight upstroke

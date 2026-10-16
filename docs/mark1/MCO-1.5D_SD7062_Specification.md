@@ -102,14 +102,13 @@ The CAD architecture enforces structural safety and print repeatability:
 3. **Interlocking Stepped Joint Sockets**:
    - Inboard male lip ($+4.5\text{ mm}$) engages into the outboard female socket ($5.0\text{ mm}$ depth) with $0.30\text{ mm}$ radial slip tolerance and $0.50\text{ mm}$ axial expansion bottoming gap.
 4. **Bilateral Symmetry**:
-   - Both Port and Starboard components are exported as dedicated mirrored models in [`cad/manufactured/`](file:///Users/drbell/Code/flight/cad/manufactured/), ensuring identical flight qualities and center of gravity symmetry.
+   - Both Port and Starboard components are exported as dedicated mirrored models in [`../../cad/manufactured/`](../../cad/manufactured/), ensuring identical flight qualities and center of gravity symmetry.
 
 ---
 
 ## 5. Authoritative Engineering Reference Files
 
-- **Specification**: [`docs/mark1/MCO-1.5D_SD7062_Specification.md`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1.5D_SD7062_Specification.md)
-- **CAD Generator**: [`scripts/generate_sd7062_wing_system.py`](file:///Users/drbell/Code/flight/scripts/generate_sd7062_wing_system.py)
-- **Aeroelastic Optimization Script**: [`scripts/orthotropic_wing_optimization_audit.py`](file:///Users/drbell/Code/flight/scripts/orthotropic_wing_optimization_audit.py)
-- **Manufactured 3D Models**: [`cad/manufactured/sd7062_*`](file:///Users/drbell/Code/flight/cad/manufactured/)
-- **Visual Previews**: [`cad/manufactured/sd7062_bilateral_wings_assembly_preview.png`](file:///Users/drbell/Code/flight/cad/manufactured/sd7062_bilateral_wings_assembly_preview.png)
+- **Specification**: [`MCO-1.5D_SD7062_Specification.md`](MCO-1.5D_SD7062_Specification.md)
+- **CAD Generator**: [`../../scripts/cad/generate_sd7062_wing_system.py`](../../scripts/cad/generate_sd7062_wing_system.py)
+- **Manufactured 3D Models**: [`../../cad/manufactured/`](../../cad/manufactured/)
+- **Visual Previews**: [`../../cad/manufactured/sd7062_bilateral_wings_assembly_preview.png`](../../cad/manufactured/sd7062_bilateral_wings_assembly_preview.png)

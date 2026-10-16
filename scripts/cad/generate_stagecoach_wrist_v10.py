@@ -22,9 +22,11 @@ Key Architectural Innovations:
 
 import math
 import os
+from pathlib import Path
 import build123d as b3d
 
-OUT_DIR = "cad/manufactured"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT_DIR = str(REPO_ROOT / "cad" / "manufactured")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 R_pitch = 37.5
@@ -64,6 +66,14 @@ print("=" * 76)
 print("  GENERATING V10 STAGE-COACH SKELETONIZED SECTOR DRUM CAD")
 print("=" * 76)
 
+helix_pitch = 4.0 / (210.0 / 360.0)
+helix_1 = b3d.Helix(pitch=helix_pitch, height=4.0, radius=R_pitch + 0.3).moved(
+    b3d.Location((0, 0, 4.0), (0, 0, 1), -195.0)
+)
+helix_2 = b3d.Helix(pitch=helix_pitch, height=4.0, radius=R_pitch + 0.3).moved(
+    b3d.Location((0, 0, 9.5), (0, 0, 1), -195.0)
+)
+
 with b3d.BuildPart() as stagecoach_v10:
     # 1. Base outer envelope
     with b3d.BuildSketch(b3d.Plane.XY):
@@ -72,10 +82,6 @@ with b3d.BuildPart() as stagecoach_v10:
 
     # 2. Dual-Track Self-supporting 45-deg V-groove Helical Dyneema Cable Tracks
     # Track 1 (Lower / Downstroke Cable): Z = 4.0mm -> 8.0mm over 210° arc, R_pitch = 37.5mm
-    helix_pitch = 4.0 / (210.0 / 360.0)
-    helix_1 = b3d.Helix(pitch=helix_pitch, height=4.0, radius=R_pitch + 0.3).moved(
-        b3d.Location((0, 0, 4.0), (0, 0, 1), -195.0)
-    )
     plane_1 = b3d.Plane(origin=helix_1 @ 0, x_dir=(math.cos(st_ang), math.sin(st_ang), 0), z_dir=helix_1 % 0)
     with b3d.BuildSketch(plane_1) as sk1:
         b3d.Polygon([
@@ -86,9 +92,6 @@ with b3d.BuildPart() as stagecoach_v10:
     b3d.sweep(sections=sk1.sketch, path=helix_1, mode=b3d.Mode.SUBTRACT)
 
     # Track 2 (Upper / Upstroke Return Cable): Z = 9.5mm -> 13.5mm over 210° arc, R_pitch = 37.5mm
-    helix_2 = b3d.Helix(pitch=helix_pitch, height=4.0, radius=R_pitch + 0.3).moved(
-        b3d.Location((0, 0, 9.5), (0, 0, 1), -195.0)
-    )
     plane_2 = b3d.Plane(origin=helix_2 @ 0, x_dir=(math.cos(st_ang), math.sin(st_ang), 0), z_dir=helix_2 % 0)
     with b3d.BuildSketch(plane_2) as sk2:
         b3d.Polygon([
@@ -114,11 +117,18 @@ with b3d.BuildPart() as stagecoach_v10:
         b3d.Circle(radius=5.0)
     b3d.loft(mode=b3d.Mode.SUBTRACT)
 
-    # 5. Top-Open Differential Gimbal & Trumpet Bay (Z = 4.0 to 29.0mm, X = -14.0 to +14.0mm -> zero interference with Yoke & 3 Bevel Gears!)
+    # 5. Top-Open Differential Gimbal & Trumpet Bay
+    # 5a. Internal Gimbal Bay (Z = 4.0 to 21.0mm, X = -14.0 to +14.0mm, Y = -11.0 to +29.0mm)
     with b3d.BuildSketch(b3d.Plane.XY.offset(4.0)):
         with b3d.Locations((0.0, 9.0)):
             b3d.Rectangle(width=28.0, height=40.0)
-    b3d.extrude(amount=26.0, mode=b3d.Mode.SUBTRACT)
+    b3d.extrude(amount=17.0, mode=b3d.Mode.SUBTRACT)
+
+    # 5b. Forward Trumpet Clearance (Z = 21.0 to 29.0mm, Y = 12.5 to 29.0mm) preserving Ø25.0mm upper bearing boss
+    with b3d.BuildSketch(b3d.Plane.XY.offset(21.0)):
+        with b3d.Locations((0.0, 20.75)):
+            b3d.Rectangle(width=28.0, height=16.5)
+    b3d.extrude(amount=8.0, mode=b3d.Mode.SUBTRACT)
 
     # 6. Internal Servo Bays (open from top Z = 3.5 to 28.0mm -> continuous flat bed floor on Z = 0)
     servo_depth_dfm = 24.5
@@ -127,6 +137,19 @@ with b3d.BuildPart() as stagecoach_v10:
             with b3d.Locations((sign * servo_x_cen, servo_y_cen)):
                 b3d.Rectangle(width=servo_len_x, height=servo_wid_y)
         b3d.extrude(amount=servo_depth_dfm + 1.0, mode=b3d.Mode.SUBTRACT)
+
+    # 6b. Solid Ø25.0mm (radius=12.5mm) Upper Bearing Boss (Z = 21.0 to 28.0mm) & Re-applied Central/Bearing Bores
+    with b3d.BuildSketch(b3d.Plane.XY.offset(21.0)):
+        b3d.Circle(radius=12.5)
+    b3d.extrude(amount=drum_height - 21.0, mode=b3d.Mode.ADD)
+
+    with b3d.BuildSketch(b3d.Plane.XY):
+        b3d.Circle(radius=5.0)
+    b3d.extrude(amount=drum_height + 4.0, mode=b3d.Mode.SUBTRACT)
+
+    with b3d.BuildSketch(b3d.Plane.XY.offset(drum_height - 5.2)):
+        b3d.Circle(radius=9.5)
+    b3d.extrude(amount=5.5, mode=b3d.Mode.SUBTRACT)
 
     # 7. Axial Through-Flow Stage-Coach Pie Windows (Top-to-Bottom through wheel)
     for (ang_deg, r_c, arc_len, radial_thick) in [
@@ -210,10 +233,6 @@ mass_pa12 = vol_drum * 1.25
 b3d.export_stl(drum_solid, os.path.join(OUT_DIR, "v10_stagecoach_sector_drum.stl"))
 b3d.export_step(drum_solid, os.path.join(OUT_DIR, "v10_stagecoach_sector_drum.step"))
 
-# Also update v9_topological_sector_drum to inherit the lightweight stagecoach geometry
-b3d.export_stl(drum_solid, os.path.join(OUT_DIR, "v9_topological_sector_drum.stl"))
-b3d.export_step(drum_solid, os.path.join(OUT_DIR, "v9_topological_sector_drum.step"))
-
 # Load existing yoke to create updated merged assembly
 yoke_step_path = os.path.join(OUT_DIR, "v9_differential_gimbal_yoke.step")
 if os.path.exists(yoke_step_path):
@@ -221,8 +240,6 @@ if os.path.exists(yoke_step_path):
     merged_solid = drum_solid + yoke_solid
     b3d.export_stl(merged_solid, os.path.join(OUT_DIR, "v10_stagecoach_merged_core.stl"))
     b3d.export_step(merged_solid, os.path.join(OUT_DIR, "v10_stagecoach_merged_core.step"))
-    b3d.export_stl(merged_solid, os.path.join(OUT_DIR, "v9_topological_merged_core.stl"))
-    b3d.export_step(merged_solid, os.path.join(OUT_DIR, "v9_topological_merged_core.step"))
     print("Merged core assembly updated!")
 
 print(f"V10 Stage-Coach Drum Successfully Exported!")

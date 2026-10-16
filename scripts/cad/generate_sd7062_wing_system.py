@@ -229,7 +229,6 @@ def generate_sd7062_wing_system():
     cq.exporters.export(mount_wp, mount_stl, tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(mount_wp, mount_step)
     cq.exporters.export(mount_wp, mount_3mf, tolerance=0.01, angularTolerance=0.1)
-    cq.exporters.export(mount_wp, os.path.join(OUT_DIR, 'sd7062_starboard_mount_2.4mm.stl'), tolerance=0.01, angularTolerance=0.1)
     print(f"  ✓ Exported Mount: {mount_stl}")
 
     # =========================================================================
@@ -313,14 +312,6 @@ def generate_sd7062_wing_system():
     cq.exporters.export(seg_wp, seg_stl, tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(seg_wp, seg_step)
     cq.exporters.export(seg_wp, seg_3mf, tolerance=0.01, angularTolerance=0.1)
-
-    for alias_base in [
-        'sd7062_starboard_25cm_segment_2.4mm',
-        'sd7062_wing_segment_25cm_starboard_2.4mm',
-    ]:
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.stl'), tolerance=0.01, angularTolerance=0.1)
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.step'))
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.3mf'), tolerance=0.01, angularTolerance=0.1)
     print(f"  ✓ Exported Segment: {seg_stl}")
 
     # =========================================================================
@@ -435,8 +426,6 @@ def generate_sd7062_wing_system():
     cq.exporters.export(tip_wp, stbd_stl, tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(tip_wp, stbd_step)
     cq.exporters.export(tip_wp, stbd_3mf, tolerance=0.01, angularTolerance=0.1)
-
-    cq.exporters.export(tip_wp, os.path.join(OUT_DIR, 'sd7062_starboard_wingtip_2.4mm.stl'), tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(tip_wp, os.path.join(OUT_DIR, 'sd7062_wingtip_smooth_2.4mm.stl'), tolerance=0.01, angularTolerance=0.1)
 
     port_stl = os.path.join(OUT_DIR, 'sd7062_wingtip_smooth_port_2.4mm.stl')

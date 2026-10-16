@@ -5,9 +5,6 @@ import pyvista as pv
 import cadquery as cq
 
 OUT_DIR = 'cad/manufactured'
-BRAIN_DIRS = [
-    '/Users/drbell/.gemini/antigravity/brain/6213fcb6-5e21-4842-8745-8b4c5b294586'
-]
 
 MOUNT_STL = os.path.join(OUT_DIR, 's1223_airfoil_mount_starboard_2.4mm.stl')
 SEG_STL   = os.path.join(OUT_DIR, 's1223_wing_segment_25cm_2.4mm.stl')
@@ -84,22 +81,6 @@ def render_matched_system():
     joint_png = os.path.join(OUT_DIR, 's1223_matched_joint_zoom.png')
     p_joint.screenshot(joint_png)
     print(f"Rendered: {joint_png}")
-
-    # Sync to brain artifacts
-    synced = [
-        's1223_matched_mount.png',
-        's1223_matched_segment.png',
-        's1223_matched_full_wing.png',
-        's1223_matched_joint_zoom.png'
-    ]
-    for bdir in BRAIN_DIRS:
-        if os.path.exists(bdir):
-            for f in synced:
-                src = os.path.join(OUT_DIR, f)
-                dst = os.path.join(bdir, f)
-                if os.path.exists(src):
-                    shutil.copyfile(src, dst)
-                    print(f"Synced to brain: {dst}")
 
 if __name__ == '__main__':
     render_matched_system()

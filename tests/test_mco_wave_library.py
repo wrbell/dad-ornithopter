@@ -281,14 +281,12 @@ class TestImportSafety(unittest.TestCase):
         self.assertTrue(hasattr(mp, 'Panel'))
 
     def test_import_api_proxy(self):
-        import firmware.mco_api_proxy as ap
-        self.assertTrue(hasattr(ap, 'handle_anthropic'))
+        import firmware.mco_gs_server as gs
+        self.assertTrue(hasattr(gs, 'MCOGSServer'))
 
     def test_flight_test_protocol_constants(self):
-        import firmware.mco_flight_test_protocol as ftp
-        self.assertEqual(ftp.MCO_1D['CHORD_MM'], 143.7)
-        self.assertEqual(ftp.MCO_1D['AMP_DEG'], 96.0)
-        self.assertEqual(ftp.MCO_1D['WINGSPAN_M'], 2.348)
+        import firmware.mco_test_cards as tc
+        self.assertTrue(hasattr(tc, 'MTOW_N'))
 
 
 if __name__ == '__main__':

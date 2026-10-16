@@ -58,25 +58,13 @@ LEVER_SAFE_THRESHOLD = 1150   # below this = safe to arm
 
 
 def read_channels_from_mavlink():
-    """Read current RC channel values from MAVLink bridge."""
-    try:
-        # Try to import the MAVLink module
-        sys.path.insert(0, os.path.dirname(__file__))
-        from mco_mavlink import get_sensors
-        sensors = get_sensors()
-        return sensors.get('rc_channels_raw', [])
-    except ImportError:
-        pass
-
-    # Try reading directly from a running mco_main instance via shared state
+    """Read current RC channel values from MAVLink bridge or shared sensor state."""
     try:
         import mco_wave_library as w
-        # If wave library has a sensor cache, use it
         if hasattr(w, '_last_sensors') and w._last_sensors:
             return w._last_sensors.get('rc_channels_raw', [])
     except Exception:
         pass
-
     return []
 
 

@@ -12,9 +12,7 @@ import os
 import pyvista as pv
 
 OUT_DIR = "cad/manufactured/renders_exploded"
-ART_DIR = "/Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84/renders"
 os.makedirs(OUT_DIR, exist_ok=True)
-os.makedirs(ART_DIR, exist_ok=True)
 
 pv.OFF_SCREEN = True
 pv.set_plot_theme("document")
@@ -138,9 +136,7 @@ for v in views:
     pl.add_mesh(fairing_exp, color="#f8fafc", opacity=0.32, smooth_shading=True, specular=0.3)
 
     out_file = os.path.join(OUT_DIR, v["filename"])
-    art_file = os.path.join(ART_DIR, v["filename"])
     pl.screenshot(out_file)
-    pl.screenshot(art_file)
     pl.close()
     print(f"  ✓ Rendered: {v['filename']}")
 

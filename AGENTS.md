@@ -1,102 +1,122 @@
-# MCO-1D Engineering Repository — Agent Rules & Workflow Contract (`AGENTS.md`)
+# AGENTS.md
 
-You are working in the **MCO-1D Metachronal Cascade Ornithopter** flight software, parametric CAD, and additive manufacturing repository. Always follow these rules to preserve repository organization, physical/software synchronization, and engineering verification.
+## Project
 
----
+This repository holds the engineering design, parametric CAD, bill of materials,
+and Raspberry Pi 5 flight-control software for the **MCO-1D Metachronal Cascade
+Ornithopter** (8-wing tandem-staggered flapping-wing research airframe).
 
-## 1. Repository Layout & Strict No-Root-Clutter Policy
+## Single source of truth
 
-**NEVER place temporary scripts, scratch `.py` files, `.stl`/`.step`/`.3mf` models, `.png` renders, or `.pdf` reports in the repository root.**
+Never hardcode physical constants, mass budgets, pin assignments, CAN node IDs,
+or drivetrain ratios in scripts, firmware modules, or documentation prose.
 
-| Directory | Purpose & Placement Rules |
-| :--- | :--- |
-| [`firmware/`](firmware/) | Active 50 Hz flight executive (`mco_main.py`), metachronal wave kinematics (`mco_wave_library.py`), safety governors (`mco_flight_governor.py`), intent control (`mco_intent_control.py`), and hardware drivers. Must remain runnable in `--sim` mode with zero hardware dependencies. |
-| [`tests/`](tests/) | Automated verification suites (`test_*.py`). Every new firmware feature, safety governor, or MCP tool must have unit test coverage here. |
-| [`cad/print_package_wing_root/`](cad/print_package_wing_root/) | Authoritative CDR 3D print package for one complete Wing Root Assembly (`01`–`09` + `PLATE_01` + [`README_3D_PRINT_GUIDE.md`](cad/print_package_wing_root/README_3D_PRINT_GUIDE.md)). |
-| [`cad/slicer_profiles/`](cad/slicer_profiles/) | Version-controlled PrusaSlicer 2.9.6 `.ini` profiles for **Prusa CORE One** (`pa12cf_structural`, `pa12cf_solid_gears`, `lwpla_aero_fairing`, `pla_prototype`). |
-| [`cad/manufactured/`](cad/manufactured/) | Active generated `.step`, `.stl`, and `.3mf` deliverables. Historical `v1`–`v8` iterations belong in `cad/manufactured/archive/`. |
-| [`scripts/`](scripts/) | Top-level operational entrypoints (`mco_cli.py`, `mco_bom_tool.py`, `run_tc01_bench_checkout.py`, `export_test_card_telemetry.py`) plus organized subdirectories:<ul><li>`scripts/mcp/` — MCP servers ([`prusaslicer_mcp_server.py`](scripts/mcp/prusaslicer_mcp_server.py))</li><li>`scripts/cad/` — Active `build123d` / CadQuery parametric CAD generators</li><li>`scripts/renders/` — Multi-view PNG & VTK/matplotlib rendering scripts</li><li>`scripts/docs/` — ReportLab PDF assembly & calibration guide generators</li><li>`scripts/audits/` — CFD, FEA, and full-envelope mission simulation audits</li><li>`scripts/archive/` — Legacy `v1`–`v8` scripts and scratch experiments</li></ul> |
-| [`docs/mark1/`](docs/mark1/) | Authoritative **MCO-1D Mark 1** specifications, BOM, manufacturing/commissioning/operator manuals, assembly PDFs, and CFD/FEA audit reports. |
+- **Airframe & hardware constants**: [`config/airframe_spec.json`](config/airframe_spec.json),
+  loaded in Python via [`firmware/mco_config.py`](firmware/mco_config.py) (`MCOConfig`).
+- **Bill of materials & mass budget**: [`bom/bom.csv`](bom/bom.csv), generated
+  and verified by [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py).
+- **Unmeasured physical values**: any quantity that requires physical bench or
+  flight measurement (as-built weighed mass, static thrust, actual center of
+  gravity, flight endurance) must be marked `"TBD (measure on hardware)"` until
+  recorded from an instrument or scale.
 
----
+Domain-specific rules live in:
 
-## 2. Python Runtime & Environment Selection
+- `firmware/AGENTS.md` — flight control loop, CAN bus, and GPIO rules
+- `cad/AGENTS.md` — parametric CadQuery scripts and print artifacts
+- `scripts/AGENTS.md` — CLI tools, BOM generator, and verification scripts
+- `docs/AGENTS.md` — technical manuals and zero-invention documentation rules
+- `tests/AGENTS.md` — unit and hardware-in-the-loop simulation test rules
 
-This macOS workspace has two Python environments with distinct roles:
-1. **CAD, 3D Printing, ReportLab PDFs & MCP Servers**:
-   - **MUST** use `ornithopter-cad/.venv-agentcad/bin/python` (Python 3.12 with `build123d`, `cadquery`, `agentcad`, `mcp`, `vtk`, `lib3mf`, `scipy`, `matplotlib`).
-   - Or invoke via `./mco cad ...`, `./mco slice ...`, `./mco docs ...` which automatically select `.venv-agentcad/bin/python`.
-2. **Flight Firmware & Unit Tests (`firmware/`, `tests/`)**:
-   - Compatible with both system `python3` and `ornithopter-cad/.venv-agentcad/bin/python`.
+## Commands
 
----
+Run these checks from the repository root before finishing any task:
 
-## 3. Mandatory Workflows via `./mco` and `Makefile`
-
-Always prefer `./mco <subcommand>` (or `make <target>`) over ad-hoc one-liner commands:
-
-```bash
-# 1. Repository Hygiene, Markdown Link & CAD/Slicer Health Check
-./mco doctor                  # or: make doctor
-
-# 2. Run Unit Verification Suites & TC-01 Bench Qualification
-./mco test                    # Full test suite (or: make test)
-./mco test --suite <name>     # Targeted suite (e.g., ./mco test --suite prusaslicer)
-./mco test --tc01             # TC-01 bench qualification (or: make tc01)
-
-# 3. Run 50 Hz SITL Flight Simulation
-./mco sim                     # or: ./run_sim.sh / make sim
-
-# 4. Update & Verify Bill of Materials (BOM) and MTOW Budget
-./mco bom --view              # or: ./view_bom.sh / make bom
-./mco bom --json
-
-# 5. Parametric CAD Generation & Mesh Manifold Verification
-./mco cad verify              # Verify all STLs in cad/print_package_wing_root/ (or: make cad-verify)
-./mco cad package             # Regenerate & package Wing Root CDR 3D print files (or: make cad)
-
-# 6. Slice & Inspect 3D Models with PrusaSlicer 2.9.6
-./mco slice <file.stl> --inspect
-./mco slice <file.stl> --profile pa12cf_structural
-./mco slice <file.stl> --profile pa12cf_solid_gears --gui
-
-# 7. Regenerate Publication-Grade PDF Manuals
-./mco docs all                # or: make docs
+```sh
+./mco doctor
+./mco test
+./mco bom --view
+python3 tools/agents_md_lint.py
+python3 tools/ai_file_lint.py .
+python3 tools/bom_lint.py --root .
+python3 tools/check_docs.py .
+python3 tools/check_prints.py .
 ```
 
----
+## Anti-slop engineering rules
 
-## 4. CAD & 3D Printing Workflow Rules (PrusaSlicer MCP)
+1. **No duplicated constants**: read `MCOConfig` from `firmware/mco_config.py`
+   or `config/airframe_spec.json`. Do not redefine mass (`3.642 kg`), wingspan
+   (`2.20 m`), capstan ratio (`10.0:1`), or GPIO pins in individual files.
+2. **No append-only function redefinitions**: every Python file must have
+   exactly one definition per function or class name at module scope.
+   `./mco doctor` parses every Python AST and fails on duplicate `def` names.
+3. **No fake physics or fabricated reports**: never write scripts that multiply
+   arbitrary numbers and print `CERTIFIED` or `0.0000 mm³` without running a
+   real solver or hardware measurement. Never commit synthetic bench reports as
+   completed hardware test results.
+4. **No machine-specific paths**: never commit absolute user paths or local
+   scratch directories in code, configs, or docs. Use `REPO_ROOT`-relative paths.
+5. **No tracked binary bloat**: keep `.bgcode`, `.gcode`, `.zip`, and duplicate
+   STL/STEP aliases out of git.
 
-Whenever you create or modify any 3D printable part (`.stl`, `.step`, `.3mf`):
-1. **Manifold & Bed-Fit Gate**:
-   - Call the **`prusaslicer` MCP** tool `inspect_model` (or `validate_mco_print_package` / `./mco cad verify`) to verify:
-     - `is_manifold: true` (`manifold = yes`)
-     - Positive volume (`volume_cm3 > 0`)
-     - Fits on the **Prusa CORE One** build plate ($250 \times 220 \times 250\text{ mm}$).
-2. **Slicing & Mass Budget Verification**:
-   - Use the `prusaslicer` MCP tool `slice_model` (or `./mco slice`) with the appropriate versioned profile in [`cad/slicer_profiles/`](cad/slicer_profiles/):
-     - `pa12cf_structural` — 6 walls, 60% Gyroid infill, 0.16mm layer height (Collar `01`, Powertrain Stand `02`, Stagecoach Drum `04`, `PLATE_01`).
-     - `pa12cf_solid_gears` — 6 walls, 100% solid rectilinear infill, 0.15mm layer height (Top Brace `03`, Capstan Pinion `05`, Gimbal Yoke `06`, Bevel Gears `07`/`08`).
-     - `lwpla_aero_fairing` — 2 walls, 15% Gyroid infill, 0.55 extrusion multiplier foaming profile (NACA 0018 Fairing `09`, S1223/SD7062 wing ribs & wingtips).
-     - `pla_prototype` — Prusament PLA rapid fit-check profile.
-   - Compare the G-code `filament_used_g` against the mass budget in [`cad/print_package_wing_root/README_3D_PRINT_GUIDE.md`](cad/print_package_wing_root/README_3D_PRINT_GUIDE.md) and [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py).
-3. **Visual Inspection**:
-   - Use `open_in_prusaslicer_gui` (or `./mco slice <file> --gui`) when the user asks to preview or plate parts in the PrusaSlicer macOS app.
+## Clarity
 
----
+Write explanations to Willem in Simplified Technical English. Use the same style
+for a pull request description, a commit message body, and prose in a README or
+another doc. Aim for about 80 percent of the rules. Full compliance with
+ASD-STE100 is not the goal.
 
-## 5. Strict No-GitHub-Actions Policy
+The rules are in the standards repository at `standards/writing-ste/ste.md`.
+The upstream skill is
+[simplified-technical-english](https://github.com/0xpili/simplified-technical-english/tree/1e148d670cba46685ad2b4c3f2354a637a7fdbbe)
+(MIT, commit `1e148d670cba46685ad2b4c3f2354a637a7fdbbe`). Link to that skill.
+Do not copy the skill into this repository again.
 
-**DO NOT use GitHub Actions or create `.github/workflows/` files in this repository under any circumstances.**
-- All continuous integration, unit testing (1,020+ tests), 50 Hz SITL flight simulation, CAD manifold verification, and doctor health audits **MUST** run locally on macOS via `./mco test`, `./mco doctor`, `./mco sim`, and `Makefile`.
-- Never create, commit, or push `.github/workflows` or any remote CI pipelines. Verification is 100% local.
+Code, identifiers, math, command-line output, and quoted error text are exempt.
 
----
+When structure, flow, or architecture is the point, use a mermaid diagram.
+For a complex result, offer a self-contained HTML page.
+That page is a throwaway file.
+Do not commit it unless Willem asks.
 
-## 6. Documentation & Pre-Completion Checklist
+Make a video only when Willem asks for a video.
+Do not add an API key or a secret.
 
-Before concluding any task that adds files, changes hardware/mass parameters, or modifies flight laws:
-1. If component masses or part counts changed, update [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py) and run `./mco bom --view` to refresh [`docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md`](docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md).
-2. If files were added, moved, or archived, update [`INDEX.md`](INDEX.md), [`README.md`](README.md), and [`docs/README.md`](docs/README.md).
-3. Run `./mco doctor` and verify it exits with `DOCTOR VERDICT: ALL CHECKS PASSED (100% HEALTHY)`.
+`scripts/ste_check.py` in the upstream skill is an optional check on docs.
+Do not use it as a CI gate.
+
+<!-- standards:begin -->
+## Collection standards
+
+Every project under `/Users/willem/Code` follows the shared standards in
+`/Users/willem/Code/standards/` (index: `standards/STANDARDS.md`; future
+standards: `standards/ROADMAP.md`).
+
+- **Presentations:** build every deck from
+  `standards/powerpoint template/Willem-Default.potx` (theme "Helena": Neue Haas
+  Grotesk Text Pro, 16:9, black on white with a gray ramp, template v2). Spec:
+  `standards/powerpoint template/STANDARD.md`. Generate with
+  `standards/powerpoint template/house_style.py` (open
+  `Willem-Default-Base.pptx`, never the `.potx`) and gate with
+  `standards/powerpoint template/deck_checks.py` before calling a deck done.
+- **Deck rules:** no speaker notes in submitted decks; editable shapes, not
+  chart images; numbered, linked superscript citations with a final References
+  slide; no bottom rules, citation strips, or page counters; footer text only
+  when a course or client requires it (for example `ME460 HWx`), which overrides
+  the default of no footer; export the deliverable PDF with native PowerPoint
+  and use LibreOffice renders only for QA.
+- **Everything else:** do not invent facts, dates, or numbers; mark unknowns TBD
+  and point at the source. Keep copyrighted course material out of git. This
+  block is managed by `standards/tools/apply_standards.py`; edit
+  `standards/ai-files/BLOCK-root.md`, not this copy.
+- **AI use (school work):** no AI-generated or AI-modified images in any school
+  deliverable; AI-written deliverable text only with written adviser
+  pre-clearance (`docs/ai-clearances/`); never cite an AI tool as a source;
+  never edit graded report text (the repo's `protected-paths.txt`; example:
+  `standards/enforcement/senior-design-repo/sd-protected-paths.txt`). AI-use
+  logging and attestation are opt-in per repo via `ai-attestation-roots.txt`;
+  see `standards/standards/ai-use-disclosure/ai-use-disclosure.md`.
+- **AI files:** one `AGENTS.md` (≤ 200 lines, Clarity verbatim); `CLAUDE.md` is
+  `@AGENTS.md`. Gates: `standards/tools/agents_md_lint.py`, `ai_file_lint.py`.
+<!-- standards:end -->

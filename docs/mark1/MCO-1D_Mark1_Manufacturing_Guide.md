@@ -50,7 +50,7 @@ Universal Rib Features (cad/manufactured/s1223_universal_rib_120mm.stl)
    * Reject any rib exceeding $1.70\text{ g}$ due to over-extrusion or inadequate foaming.
 
 ### 2.2 Optional CNC / Laser Cutting Profile
-For high-volume CNC waterjet or laser cutting from 1.5 mm balsa or 1.0 mm carbon/ply laminate, use [`cad/manufactured/s1223_universal_rib_120mm.dxf`](file:///Users/drbell/Code/flight/cad/manufactured/s1223_universal_rib_120mm.dxf).
+For high-volume CNC waterjet or laser cutting from 1.5 mm balsa or 1.0 mm carbon/ply laminate, use [`../../cad/manufactured/s1223_universal_rib_120mm.dxf`](../../cad/manufactured/s1223_universal_rib_120mm.dxf).
 
 ---
 
@@ -66,7 +66,7 @@ For high-volume CNC waterjet or laser cutting from 1.5 mm balsa or 1.0 mm carbon
 ### 3.1 10:1 Carbon Fiber Sector Wheels
 1. **Material**: 2.0 mm 3K quasi-isotropic solid carbon fiber plate.
 2. **Manufacturing Options**:
-   * **Baseline Option A (Direct Conversion with 15.4 mm Drum)**: Pitch Arc Radius $R = 77.0\text{ mm}$ over $100^\circ$ continuous sweep arc. Cut 8 units from [`cad/manufactured/sector_wheel_7to1_100deg.dxf`](file:///Users/drbell/Code/flight/cad/manufactured/sector_wheel_7to1_100deg.dxf). Paired with $15.4\text{ mm}$ pitch diameter motor drum yields $77.0 / 7.7 = \mathbf{10.0 : 1}$.
+   * **Baseline Option A (Direct Conversion with 15.4 mm Drum)**: Pitch Arc Radius $R = 77.0\text{ mm}$ over $100^\circ$ continuous sweep arc. Cut 8 units from [`../../cad/manufactured/sector_wheel_7to1_100deg.dxf`](../../cad/manufactured/sector_wheel_7to1_100deg.dxf). Paired with $15.4\text{ mm}$ pitch diameter motor drum yields $77.0 / 7.7 = \mathbf{10.0 : 1}$.
    * **Balanced Option B (90 mm Sector + 18.0 mm Drum)**: Pitch Arc Radius $R = 90.0\text{ mm}$ over $100^\circ$ arc ($+13\text{ mm}$ radial expansion, clears all adjacent fuselage stations). Paired with $18.0\text{ mm}$ pitch diameter drum yields $90.0 / 9.0 = \mathbf{10.0 : 1}$.
 3. **Features**:
    * Perimeter Cable Channel: 1.0 mm semicircular groove along the rim to guide the 0.8 mm Dyneema line.
@@ -344,7 +344,7 @@ Before proceeding to electrical commissioning and initial motor spin, the mechan
 * [ ] **Pneumatic Clap Skirt (H-91)**: Inboard trailing edges of Stations 1 & 2 have $15\text{ mm}$ silicone skirts sealing cleanly at $+70^\circ$ dihedral.
 
 ### 8.7 Formal Builder Calibration Sheet & Physical Handoff
-* [ ] **Builder Calibration Sheet Completion**: Complete all 8 measurement fields (`FIG-01` through `FIG-08`) on [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf).
+* [ ] **Builder Calibration Sheet Completion**: Complete all 8 measurement fields (`FIG-01` through `FIG-08`) on [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf).
 * [ ] **As-Built Gross Weight Recorded (`FIG-01`)**: All-up weight verified on calibrated scale (target $< 5,600\text{ g}$, e.g. $4,800\text{--}5,300\text{ g}$). Handed off to firmware lead for dynamic $V_s$ and $P_s$ scaling.
 * [ ] **200° Sector Stop Alignment (`FIG-04`)**: Sector wheel travel verified across full $200.0^\circ$ physical arc ($\pm 100.0^\circ$ stops). Software dynamic reciprocating flapping ceiling verified at $\pm 24.0^\circ$ sprint / $\pm 18.0^\circ\text{--}22.0^\circ$ cruise.
 * [ ] **Formal Signoff**: Chief Builder and Firmware Lead signatures recorded prior to mounting on outdoor test rig or proceeding to TC-01 bench testing.

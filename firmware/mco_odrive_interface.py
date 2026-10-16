@@ -61,6 +61,15 @@ import time
 import math
 import threading
 
+from mco_config import (
+    BATTERY_NOMINAL_V,
+    CAN_BITRATE_BPS,
+    CAN_BUS_INTERFACE,
+    CRUISE_FLAP_HALF_ANGLE_DEG,
+    GEAR_RATIO,
+    WING_COUNT,
+)
+
 try:
     import can
     CAN_AVAILABLE = True
@@ -91,8 +100,8 @@ STATE_CLOSED_LOOP       = 8
 STATE_FULL_CALIBRATION  = 3
 
 # Number of S1 boards / wings
-N_BOARDS = 8    # 8 × ODrive S1, one per wing
-N_WINGS  = 8    # always equal — each board drives exactly one wing
+N_BOARDS = WING_COUNT    # 8 × ODrive S1, one per wing
+N_WINGS  = WING_COUNT    # always equal — each board drives exactly one wing
 
 # Wing index → pair and side (for logging and wave library)
 WING_NAMES = [
@@ -125,7 +134,7 @@ class ODriveInterface:
     Wing index equals node ID — the simplest possible mapping.
     """
 
-    def __init__(self, channel="can0", bitrate=1_000_000):
+    def __init__(self, channel=CAN_BUS_INTERFACE, bitrate=CAN_BITRATE_BPS):
         self._bus   = None
         self._sim   = not CAN_AVAILABLE
         self._lock  = threading.Lock()
@@ -134,7 +143,7 @@ class ODriveInterface:
         self._velocities = [0.0] * N_WINGS
         self._currents = [0.0] * N_WINGS
         self._temperatures = [{'fet_C': 25.0, 'motor_C': 25.0} for _ in range(N_WINGS)]
-        self._vbus = 22.2
+        self._vbus = BATTERY_NOMINAL_V
         self._states = [
             {'responding': False, 'error': 0, 'state': STATE_IDLE, 'wing': WING_NAMES[i], 'node': i}
             for i in range(N_WINGS)
@@ -142,6 +151,7 @@ class ODriveInterface:
         self._last_seen = [0.0] * N_WINGS
         self._pending_requests = {}
         self._rx_thread = None
+        self._osc_t0 = time.monotonic()
 
         if CAN_AVAILABLE:
             try:
@@ -302,9 +312,40 @@ class ODriveInterface:
         data = struct.pack("<ff", vel_rps, torque_ff)
         self._send(node, CMD_SET_VEL, data)
 
-    def set_flap_freq(self, wing_idx, freq_hz, reducer_ratio=7):
-        """Command motor velocity for a target flap frequency."""
-        self.set_velocity(wing_idx, freq_hz * reducer_ratio)
+    def set_flap_freq(
+        self,
+        wing_idx,
+        freq_hz,
+        reducer_ratio=GEAR_RATIO,
+        stroke_half_angle_deg=CRUISE_FLAP_HALF_ANGLE_DEG,
+        phase_offset_deg=0.0,
+    ):
+        """
+        Command instantaneous reciprocating motor velocity for a target flap frequency.
+        Wait/safety note: Never send constant unidirectional velocity (`freq * ratio`)
+        to a 200-deg sector wheel, which would hit mechanical hard stops in <0.5 s.
+        """
+        t_s = time.monotonic() - self._osc_t0
+        phase_rad = 2.0 * math.pi * float(freq_hz) * t_s + math.radians(phase_offset_deg)
+        wing_turns_amp = float(stroke_half_angle_deg) / 360.0
+        vel_rps = (
+            2.0 * math.pi * float(freq_hz) * wing_turns_amp * float(reducer_ratio) * math.cos(phase_rad)
+        )
+        self.set_velocity(wing_idx, vel_rps)
+
+    def set_all_flap_freq(
+        self,
+        freq_hz,
+        reducer_ratio=GEAR_RATIO,
+        stroke_half_angle_deg=20.0,
+    ):
+        """Command reciprocating oscillation across all 8 wings."""
+        self.set_cascade_freq(
+            freq_hz,
+            phase_offsets_deg=[0.0, 0.0, 90.0, 90.0, 180.0, 180.0, 270.0, 270.0],
+            reducer_ratio=reducer_ratio,
+            stroke_half_angle_deg=stroke_half_angle_deg,
+        )
 
     def set_all_velocities(self, vel_rps_list):
         """
@@ -314,15 +355,55 @@ class ODriveInterface:
         for i, vel in enumerate(vel_rps_list[:N_WINGS]):
             self.set_velocity(i, vel)
 
-    def set_cascade_freq(self, freq_hz, reducer_ratio=7):
+    def set_cascade_freq(
+        self,
+        freq_hz,
+        phase_offsets_deg=None,
+        reducer_ratio=GEAR_RATIO,
+        stroke_half_angle_deg=20.0,
+    ):
         """
-        Command all 8 wings at the same flapping frequency.
-        Per-wing phase offset is handled in the wave library;
-        all motors run at the same shaft speed (frequency × gear ratio).
+        Command all 8 wings with zero-mean reciprocating velocity at `freq_hz`.
+        `phase_offsets_deg` may be a list of 8 per-wing phase offsets (deg) or None.
         """
-        rps = freq_hz * reducer_ratio
+        if isinstance(phase_offsets_deg, (int, float)):
+            # Backward-compatible call signature if caller passed reducer_ratio as 2nd arg
+            reducer_ratio = float(phase_offsets_deg)
+            offsets = [0.0, 0.0, 90.0, 90.0, 180.0, 180.0, 270.0, 270.0]
+        elif phase_offsets_deg is None:
+            offsets = [0.0, 0.0, 90.0, 90.0, 180.0, 180.0, 270.0, 270.0]
+        else:
+            offsets = list(phase_offsets_deg)
         for i in range(N_WINGS):
-            self.set_velocity(i, rps)
+            phi_deg = offsets[i] if i < len(offsets) else 0.0
+            self.set_flap_freq(
+                i,
+                freq_hz,
+                reducer_ratio=reducer_ratio,
+                stroke_half_angle_deg=stroke_half_angle_deg,
+                phase_offset_deg=phi_deg,
+            )
+
+    def oscillate_cascade(
+        self,
+        freq_hz,
+        duration_s=2.0,
+        phase_offsets_deg=None,
+        reducer_ratio=GEAR_RATIO,
+        stroke_half_angle_deg=20.0,
+        dt_s=0.02,
+    ):
+        """Run a closed-loop 50 Hz reciprocating oscillation for `duration_s` and return to zero velocity."""
+        t_end = time.monotonic() + float(duration_s)
+        while time.monotonic() < t_end:
+            self.set_cascade_freq(
+                freq_hz,
+                phase_offsets_deg=phase_offsets_deg,
+                reducer_ratio=reducer_ratio,
+                stroke_half_angle_deg=stroke_half_angle_deg,
+            )
+            time.sleep(dt_s)
+        self.set_all_velocities([0.0] * N_WINGS)
 
     def set_velocity_limit(self, wing_idx, vel_limit_rps, current_limit_A=None):
         """
@@ -349,15 +430,14 @@ class ODriveInterface:
         data = struct.pack("<fff", pos_turns, vel_ff, torque_ff)
         self._send(node, CMD_SET_POS, data)
 
-    def set_initial_phases(self, phase_offsets_deg, reducer_ratio=7):
+    def set_initial_phases(self, phase_offsets_deg, reducer_ratio=GEAR_RATIO, stroke_half_angle_deg=20.0):
         """
         Move each wing to its initial cascade phase before enabling velocity.
-        The S1 on-board absolute encoder means the motor knows where it is
-        from power-on — position commands are immediately meaningful.
-        phase_offsets_deg: list of 8 phase angles (0-360°)
+        Maps wing stroke phase angle into bounded capstan motor shaft turns.
         """
+        wing_turns_amp = float(stroke_half_angle_deg) / 360.0
         for i, phase_deg in enumerate(phase_offsets_deg[:N_WINGS]):
-            pos_turns = phase_deg / 360.0
+            pos_turns = math.sin(math.radians(phase_deg)) * wing_turns_amp * float(reducer_ratio)
             self.set_position(i, pos_turns)
             time.sleep(0.025)
         print("[S1] Initial cascade phases set")

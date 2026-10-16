@@ -2,8 +2,8 @@
 
 **Document Designation**: `MCO-1D-CALIB-MK1-R2`  
 **Classification**: Formal Production Handoff Manifest — Mark 1 Technical Baseline  
-**PDF Printable Companion**: [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)  
-**Latest Mirror**: [`docs/latest/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/latest/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)  
+**PDF Printable Companion**: [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)  
+**Latest Mirror**: [`../latest/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](../latest/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)  
 
 ---
 

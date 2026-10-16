@@ -40,6 +40,7 @@ sys.path.insert(0, str(REPO_ROOT / 'firmware'))
 import firmware.mco_wave_library as wl
 import firmware.mco_flight_governor as fg
 import firmware.mco_performance_model as pm
+from firmware.mco_config import DESIGN_MASS_KG
 
 
 class TC01BenchHarness:
@@ -51,11 +52,12 @@ class TC01BenchHarness:
             'airframe_serial': 'MCO-1D-001',
             'test_card': 'TC-01',
             'hardware_mode': hardware_mode,
+            'mode_label': 'HARDWARE_BENCH_TEST' if hardware_mode else 'SIMULATION_DRY_RUN_ONLY',
             'checks_passed': 0,
             'checks_failed': 0,
             'details': {}
         }
-        self.mtow_n = wl.MTOW_KG * 9.807
+        self.mtow_n = DESIGN_MASS_KG * 9.807
 
     def log_check(self, check_id, name, passed, data, message):
         status = "PASS" if passed else "FAIL"
@@ -78,7 +80,7 @@ class TC01BenchHarness:
     def run_all(self):
         print("\n" + "=" * 78)
         print("  MCO-1D TC-01 RIGID BENCH QUALIFICATION RUNNER")
-        print(f"  Target MTOW: {wl.MTOW_KG:.3f} kg ({self.mtow_n:.1f} N) | Mode: {'HARDWARE' if self.hardware_mode else 'SIMULATION'}")
+        print(f"  Design Mass: {DESIGN_MASS_KG:.3f} kg ({self.mtow_n:.1f} N) | Mode: {'HARDWARE' if self.hardware_mode else 'SIMULATION DRY-RUN (NOT HARDWARE CERTIFIED)'}")
         print("=" * 78 + "\n")
 
         all_passed = True
@@ -238,31 +240,14 @@ class TC01BenchHarness:
         )
 
     def export_reports(self, all_passed):
-        # 1. JSON Certificate
         os.makedirs(str(REPO_ROOT / 'knowledge'), exist_ok=True)
-        json_path = REPO_ROOT / 'knowledge' / 'tc01_bench_certification.json'
+        fname = 'tc01_bench_certification.json' if self.hardware_mode else 'tc01_sim_dryrun.json'
+        json_path = REPO_ROOT / 'knowledge' / fname
         with open(json_path, 'w') as f:
             json.dump(self.cert_data, f, indent=2)
-        print(f"  [EXPORT] JSON Certificate: {json_path}")
-
-        # 2. Markdown Report
-        os.makedirs(str(REPO_ROOT / 'docs' / 'mark1'), exist_ok=True)
-        md_path = REPO_ROOT / 'docs' / 'mark1' / 'MCO-1D_TC01_Bench_Certification_Report.md'
-        with open(md_path, 'w') as f:
-            f.write(f"# MCO-1D TC-01 Ground Bench Qualification Report\n\n")
-            f.write(f"**Aircraft**: MCO-1D Metachronal Cascade Ornithopter (S/N MCO-1D-001)  \n")
-            f.write(f"**Test Date**: {self.cert_data['timestamp']}  \n")
-            f.write(f"**Overall Result**: **{'PASSED — CLEARED FOR TC-02' if all_passed else 'FAILED — GATED'}**  \n\n")
-            f.write(f"## Qualification Checks\n\n")
-            f.write(f"| Check ID | System Under Test | Status | Value / Details |\n")
-            f.write(f"| :--- | :--- | :---: | :--- |\n")
-            for cid, d in self.cert_data['details'].items():
-                st = "PASS" if d['passed'] else "**FAIL**"
-                f.write(f"| `{cid}` | {d['name']} | {st} | {d['message']} |\n")
-            f.write(f"\n## Authority Sign-Off\n\n")
-            f.write(f"- Lead Flight Control Engineer: `Antigravity AI / Autonomous Flight Systems`\n")
-            f.write(f"- Clearance Status: **READY FOR TETHERED LIFT TEST (TC-02)**\n")
-        print(f"  [EXPORT] Markdown Report:   {md_path}\n")
+        print(f"  [EXPORT] JSON Output: {json_path}")
+        if not self.hardware_mode:
+            print("  [NOTE] Simulation dry-run only; no hardware certification report written to docs/mark1/.\n")
 
 
 def main():

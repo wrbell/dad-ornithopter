@@ -35,12 +35,10 @@ WARN_AMBER   = colors.HexColor("#d97706")   # Amber 600
 SUCCESS_GRN  = colors.HexColor("#16a34a")   # Green 600
 BADGE_BG     = colors.HexColor("#e0f2fe")   # Sky 100
 
-DOC_OUT = "docs/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf"
-ARTIFACT_DIR = "/Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84"
-ART_OUT = os.path.join(ARTIFACT_DIR, "MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DOC_OUT = os.path.join(REPO_ROOT, "docs", "mark1", "MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf")
 
-os.makedirs("docs", exist_ok=True)
-os.makedirs(ARTIFACT_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(DOC_OUT), exist_ok=True)
 
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
@@ -355,13 +353,7 @@ def build_pdf():
     story.append(t_alert)
 
     doc.build(story, canvasmaker=NumberedCanvas)
-    
-    if os.path.exists(DOC_OUT):
-        import shutil
-        shutil.copyfile(DOC_OUT, ART_OUT)
-        print(f"Hierarchical Exploded PDF built successfully:")
-        print(f"  • {DOC_OUT}")
-        print(f"  • {ART_OUT}")
+    print(f"Hierarchical Exploded PDF built successfully: {DOC_OUT}")
 
 if __name__ == "__main__":
     build_pdf()

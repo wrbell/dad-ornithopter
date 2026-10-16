@@ -198,7 +198,7 @@ The authoritative flying build achieves a certified flight All-Up Weight (AUW) o
 > **Builder As-Built Weight Calibration Gate (`FIG-01`)**:
 > - **Certified Flight Baseline**: **$3,642.0\text{ g}$ ($3.642\text{ kg}$)**.
 > - **Builder Calibration Ceiling**: **$< 4,000.0\text{ g}$** (Max design MTOW allowable: $4,500.0\text{ g}$).
-> - **Dynamic Scaling**: The firmware does not hardcode flight mass. The builder's measured scale weight from [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) is entered into configuration, dynamically setting stall speed floor $V_s \propto \sqrt{m}$, lift demands, Boyd $P_s$, and hover thrust-to-weight ratio.
+> - **Dynamic Scaling**: The firmware does not hardcode flight mass. The builder's measured scale weight from [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) is entered into configuration, dynamically setting stall speed floor $V_s \propto \sqrt{m}$, lift demands, Boyd $P_s$, and hover thrust-to-weight ratio.
 > - **Hover Feasibility**: At $3.642\text{ kg}$ ($35.72\text{ N}$ weight force), total static thrust ($51.5\text{ N}$) achieves an explosive **$T/W = 1.44 : 1$**, providing sustained VTOL hover and vertical obstacle clearance.
 
 ### 4.2 Longitudinal Center of Gravity & Stability
@@ -298,7 +298,7 @@ The MCO-1D Mark 1 uncrewed flight testbed functions as the active technology dem
 ## 8. Flight Safety Governors, Maneuverability Package & Aerobatic Envelope
 
 ### 8.1 Hard Wing-In-Ground (WIG) Safety Floor Governor
-Implemented in [`firmware/mco_flight_governor.py`](file:///Users/drbell/Code/flight/firmware/mco_flight_governor.py) (`HardWIGFloorGovernor`), this active safety governor prevents Controlled Flight Into Terrain (CFIT) while skimming in ground effect:
+Implemented in [`../../firmware/mco_flight_governor.py`](../../firmware/mco_flight_governor.py) (`HardWIGFloorGovernor`), this active safety governor prevents Controlled Flight Into Terrain (CFIT) while skimming in ground effect:
 * **Virtual Floor Boundary**: Establishes an impassable **$0.35\text{ m}$ hard floor** above the runway.
 * **Progressive Damping Corridor ($0.35\text{--}0.65\text{ m}$)**: Progressively attenuates nose-down stick inputs ($G_{\text{atten}} = (h - 0.35) / 0.30$).
 * **Hard Push Lockout ($\le 0.35\text{ m}$)**: Clamps forward stick to $\le 0.0$ and injects proportional nose-up pitch bias ($\Delta \theta = +6.0^\circ$) and front canard lift pulses ($+35.0\text{ N}$) on sink.
@@ -306,7 +306,7 @@ Implemented in [`firmware/mco_flight_governor.py`](file:///Users/drbell/Code/fli
 * **Balked Landing Auto-Rearm**: Instantly re-arms the $0.35\text{ m}$ virtual floor if full power is applied during a balked go-around.
 
 ### 8.2 Structural Symmetric Load Factor Governor
-Implemented in [`firmware/mco_flight_governor.py`](file:///Users/drbell/Code/flight/firmware/mco_flight_governor.py) (`SymmetricLoadFactorGovernor`):
+Implemented in [`../../firmware/mco_flight_governor.py`](../../firmware/mco_flight_governor.py) (`SymmetricLoadFactorGovernor`):
 * **Normal Load Limits**: Strictly clamps normal acceleration to **$N_z \in [-2.20g, +2.20g]$** (ultimate structural margin: $\pm 3.30g$).
 * **Symmetric Dynamic Authority**: The capstan drive and reinforced battery tray provide identical load path resistance in positive and negative $G$, enabling continuous outside loops and inverted cruise without structural risk.
 

@@ -98,30 +98,37 @@ from mco_flight_governor import (
     reset_symmetrical_rth_governor,
     govern_hard_wig_floor,
 )
-from mco_certification_tools import (
-    structural_recorder,
-    rope_tracker,
-    hq_analyser,
+from mco_config import (
+    ADC_PITCH_CE,
+    ADC_SPI_BUS,
+    ADC_SWEEP_CE,
+    GEAR_RATIO,
+    MAVLINK_BAUD,
+    MAVLINK_PORT,
+    MOTOR_COUNT as CONFIG_MOTOR_COUNT,
+    PITCH_GPIO_PINS,
+    SERVO_PWM_RATE_HZ,
+    SWEEP_GPIO_PINS,
 )
+from mco_kinematics import MetachronalSynthesizer
 
 
 # ── Servo PWM constants ───────────────────────────────────────────
-# Pin and motor constants — pulled from wave library to stay in sync
-MOTOR_COUNT = w.MOTOR_COUNT       # 8 independent motors
-REDUCER_RATIO = w.REDUCER_RATIO   # 10:1 (upgraded baseline)
-PITCH_PINS  = list(w.PITCH_PINS)  # 8 pitch servo GPIO pins
-SWEEP_PINS  = list(w.SWEEP_PINS)  # 8 sweep servo GPIO pins
-MCP3208_SPI_BUS  = w.MCP3208_SPI_BUS
-MCP3208_SPI_CE   = w.MCP3208_SPI_CE
-MCP3208_SWEEP_CE = w.MCP3208_SWEEP_SPI_CE
-SWEEP_PINS = [ 4, 17, 27, 22,  5,  6, 13, 19]
+# Pin and motor constants — pulled from mco_config.py single source of truth
+MOTOR_COUNT = CONFIG_MOTOR_COUNT
+REDUCER_RATIO = int(GEAR_RATIO)
+PITCH_PINS  = list(PITCH_GPIO_PINS)   # 8 pitch servo GPIO pins: [4, 5, 6, 12, 13, 16, 17, 18]
+SWEEP_PINS  = list(SWEEP_GPIO_PINS)   # 8 sweep servo GPIO pins: [19, 20, 21, 22, 23, 24, 25, 26]
+MCP3208_SPI_BUS  = ADC_SPI_BUS
+MCP3208_SPI_CE   = ADC_PITCH_CE
+MCP3208_SWEEP_CE = ADC_SWEEP_CE
 
 SERVO_MIN_US  = 900    # microseconds — full negative
 SERVO_MID_US  = 1500   # microseconds — centre
 SERVO_MAX_US  = 2100   # microseconds — full positive
-SWEEP_FREQ    = 333    # Hz for AGFRC IB53BHU programmable brushless sweep servos (8.4V capable)
-PITCH_FREQ    = 333    # Hz for AGFRC IB53BHU programmable brushless pitch servos (8.4V capable)
-SERVO_FREQ    = 333    # Uniform 333 Hz PWM update frequency across all 16 AGFRC servos
+SWEEP_FREQ    = SERVO_PWM_RATE_HZ
+PITCH_FREQ    = SERVO_PWM_RATE_HZ
+SERVO_FREQ    = SERVO_PWM_RATE_HZ
 
 
 def deg_to_servo_us(deg, deg_range=90.0):
@@ -140,12 +147,17 @@ class MCOHardware:
         self.can_bus  = None
         self.odi      = None
 
-        # Kinematic reciprocating phase tracking
+        # Deterministic 50 Hz metachronal kinematics synthesizer
+        self.kinematics      = MetachronalSynthesizer()
         self._master_phase   = 0.0
         self._pair_offsets   = [0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]  # 90° metachronal cascade
         self._last_flap_degs = [0.0] * 8
         self._last_phases    = [0.0] * 8
         self._last_dirs      = [+1] * 8
+        self._last_pitch_servo_degs = [0.0] * 8
+        self._last_sweep_servo_degs = [60.0] * 8
+        self._last_motor_pos_turns  = [0.0] * 8
+        self._last_motor_vel_rps    = [0.0] * 8
         self._last_kin_t     = time.monotonic()
 
         # Advanced physics status flags (H-37 to H-49)
@@ -212,12 +224,12 @@ class MCOHardware:
             self.can_bus = None
 
     def get_wing_kinematics(self):
-        """Return current flap positions, phases, and stroke directions for all 8 wings."""
-        return {
-            'flap_degs':   list(self._last_flap_degs),
-            'flap_phases': list(self._last_phases),
-            'stroke_dirs': list(self._last_dirs),
-        }
+        """Return current flap positions, phases, stroke directions, and servo/motor targets for all 8 wings."""
+        kin = self.kinematics.get_wing_kinematics()
+        kin['flap_degs']   = list(self._last_flap_degs)
+        kin['flap_phases'] = list(self._last_phases)
+        kin['stroke_dirs'] = list(self._last_dirs)
+        return kin
 
     def _read_odrive_positions(self):
         """
@@ -443,8 +455,8 @@ class MCOHardware:
         except Exception:
             pass
 
-        # Always advance internal kinematic simulation (both sim and hardware)
-        self._update_kinematics(freq_hz, wc, sensors=sensors)
+        # Always advance internal kinematic synthesizer (both sim and hardware)
+        self._update_kinematics(freq_hz, wc, sensors=sensors, result=result)
 
         # ── Tandem Multi-Wing Dynamic Blade Strike Safety Governor ───
         try:
@@ -462,6 +474,7 @@ class MCOHardware:
                     for w_idx in (p1 * 2, p1 * 2 + 1, p2 * 2, p2 * 2 + 1):
                         if w_idx < len(wc):
                             wc[w_idx]['sweep_deg'] = avg_sw
+                            wc[w_idx]['sweep_servo_deg'] = avg_sw
         except Exception:
             pass
 
@@ -470,12 +483,12 @@ class MCOHardware:
 
         for i, cmd in enumerate(wc[:8]):
             if i < len(PITCH_PINS) and self.pi:
-                pitch_deg = cmd.get('pitch_deg', 0.0)
+                pitch_deg = cmd.get('pitch_servo_deg', cmd.get('pitch_deg', 0.0))
                 self.pi.set_servo_pulsewidth(
                     PITCH_PINS[i], w.pitch_deg_to_us(pitch_deg, servo_index=i))
 
             if i < len(SWEEP_PINS) and self.pi:
-                sweep_deg = cmd.get('sweep_deg', 60.0)
+                sweep_deg = cmd.get('sweep_servo_deg', cmd.get('sweep_deg', 60.0))
                 self.pi.set_servo_pulsewidth(
                     SWEEP_PINS[i], w.sweep_deg_to_us(sweep_deg, servo_index=i))
 
@@ -485,15 +498,17 @@ class MCOHardware:
             self._send_odrive_velocity(
                 freq_hz, wc, motor_positions_rad=m_pos)
 
-    def _update_kinematics(self, freq_hz, wing_commands, sensors: dict = None):
-        """Advance metachronal reciprocating phase and update positions for all 8 wings."""
-        from mco_wave_library import FLAP_AMP_DEG
+    def _update_kinematics(self, freq_hz, wing_commands, sensors: dict = None, result: dict = None):
+        """Advance metachronal reciprocating phase and update 8-wing setpoints via MetachronalSynthesizer."""
         now = time.monotonic()
-        dt = max(0.001, min(0.05, now - self._last_kin_t))
+        if sensors and sensors.get('dt_s') is not None:
+            dt = max(0.001, min(0.05, float(sensors['dt_s'])))
+        else:
+            dt = max(0.001, min(0.05, now - self._last_kin_t))
         self._last_kin_t = now
 
         # ── H-38 Ground Effect Fountain Mode Phase Adjustment ─────────
-        if sensors and sensors.get('h_agl_m') is not None:
+        if not self._symmetrical_rth_active and sensors and sensors.get('h_agl_m') is not None:
             try:
                 ge_phase_deg, ge_active, ge_sav = ap.h38_ground_effect_phase(sensors['h_agl_m'])
                 self._h38_active = ge_active
@@ -505,7 +520,7 @@ class MCOHardware:
                     self._pair_offsets = [0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0]
             except Exception:
                 pass
-        else:
+        elif not self._symmetrical_rth_active:
             self._h38_active = False
             self._h38_savings_pct = 0.0
 
@@ -513,95 +528,72 @@ class MCOHardware:
         comfort_mode = bool(sensors.get('comfort_mode', False)) if sensors else False
         imu_rms_g = sensors.get('imu_rms_g', 0.0) if sensors else 0.0
         try:
-            if not self._h38_active:
-                offsets, self._h41_active, self._h41_vib_red_pct = ap.h41_heave_pitch_cancellation(
+            if not self._h38_active and not self._symmetrical_rth_active:
+                offsets, h41_phase_active, h41_vib = ap.h41_heave_pitch_cancellation(
                     comfort_mode, imu_rms_g, self._pair_offsets)
-                if self._h41_active:
+                if h41_phase_active:
                     self._pair_offsets = offsets
-            else:
-                self._h41_active = False
-                self._h41_vib_red_pct = 0.0
+                    self._h41_active = True
+                    self._h41_vib_red_pct = h41_vib
         except Exception:
             pass
 
-        # Advance master phase
-        self._master_phase = (self._master_phase + 2.0 * math.pi * freq_hz * dt) % (2.0 * math.pi)
+        # Step the deterministic 50 Hz MetachronalSynthesizer
+        kin_frame = self.kinematics.step(
+            dt_s=dt,
+            commands={
+                'freq_hz': freq_hz,
+                'wing_commands': wing_commands,
+            },
+            pair_offsets_rad=self._pair_offsets,
+        )
 
-        # Dynamic amplitude clamping: 10:1 capstan drive with GoolRC 5010-14 360KV baseline
-        # (or T-Motor MN5008 heavy-duty option). Sector wheel has 200° total mechanical travel (±100°).
-        # Dynamic reciprocating stroke uses FLAP_AMP_LIMIT_MAX_DEG (96.0°, 192° peak-to-peak),
-        # leaving 4° dynamic cushion at each capstan stop to prevent slack/impact under overshoot.
-        # Torque: GoolRC 5010 (Kt ≈ 0.0265 Nm/A) produces 7.95 Nm cont / 10.6 Nm burst at root.
-        # MN5008 option (Kt ≈ 0.0477 Nm/A) produces 14.30 Nm cont / 22.0 Nm burst at root.
-        # I_wing = 0.020-0.024 kg*m^2. Dynamic limit ensures inertial reversal torque <= tau_root_max.
-        if freq_hz > 0.5:
-            max_amp_rad = 14.30 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
-            max_amp_deg = min(w.FLAP_AMP_LIMIT_MAX_DEG, math.degrees(max_amp_rad))
-        else:
-            max_amp_deg = w.FLAP_AMP_LIMIT_MAX_DEG
+        self._master_phase = kin_frame['master_phase_rad']
+        self._last_flap_degs = [round(x, 2) for x in kin_frame['flap_angle_deg']]
+        self._last_phases = list(kin_frame['flap_phases_norm'])
+        self._last_dirs = list(kin_frame['stroke_dir'])
+        self._last_pitch_servo_degs = [round(x, 2) for x in kin_frame['pitch_servo_deg']]
+        self._last_sweep_servo_degs = [round(x, 2) for x in kin_frame['sweep_servo_deg']]
+        self._last_motor_pos_turns = [round(x, 4) for x in kin_frame['motor_pos_turns']]
+        self._last_motor_vel_rps = [round(x, 4) for x in kin_frame['motor_vel_rps']]
 
         for i, cmd in enumerate(wing_commands[:8]):
-            raw_amp = cmd.get('flap_amp_deg', w.FLAP_AMP_DEG)
-            amp     = min(raw_amp, max_amp_deg)
-            pair_idx = i // 2
-            wing_phase = (self._master_phase - self._pair_offsets[pair_idx]) % (2.0 * math.pi)
+            if isinstance(cmd, dict):
+                cmd['flap_angle_deg'] = self._last_flap_degs[i]
+                cmd['stroke_dir'] = self._last_dirs[i]
+                cmd['pitch_servo_deg'] = self._last_pitch_servo_degs[i]
+                cmd['sweep_servo_deg'] = self._last_sweep_servo_degs[i]
+                cmd['motor_pos_turns'] = self._last_motor_pos_turns[i]
+                cmd['motor_vel_rps'] = self._last_motor_vel_rps[i]
 
-            flap_angle = amp * math.sin(wing_phase)
-            self._last_flap_degs[i] = round(flap_angle, 2)
-            self._last_phases[i]    = round(wing_phase / (2.0 * math.pi), 4)
-            self._last_dirs[i]      = +1 if math.cos(wing_phase) >= 0 else -1
+        if isinstance(result, dict):
+            result['kinematics_step'] = kin_frame
 
     def _send_odrive_velocity(self, freq_hz, wing_commands,
                                motor_positions_rad=None):
         """
         Send reciprocating velocity setpoints to ODrives via CAN.
 
-        Applies true sinusoidal stroke kinematics:
-            vel(t) = G * (amp / 360) * 2pi * f * cos(phase) * factor
-        with dynamic amplitude envelope limiting to keep peak motor current
-        within safe limits (<= 30A).
+        Uses the 50 Hz `MetachronalSynthesizer` velocity and position targets
+        combined with soft-stop taper protection inside the capstan travel limits.
         """
         import struct
-        from mco_wave_library import (soft_stop_apply_to_commands,
-                                       REDUCER_RATIO, FLAP_AMP_DEG,
-                                       FLAP_AMP_LIMIT_MAX_DEG)
+        from mco_wave_library import soft_stop_apply_to_commands
 
-        reducer = REDUCER_RATIO   # 10.0 (upgraded baseline)
-
-        if freq_hz > 0.5:
-            max_amp_rad = 14.30 / (0.0240 * ((2.0 * math.pi * freq_hz) ** 2))
-            max_amp_deg = min(FLAP_AMP_LIMIT_MAX_DEG, math.degrees(max_amp_rad))
-        else:
-            max_amp_deg = FLAP_AMP_LIMIT_MAX_DEG
-
-        # ── Apply soft-stop taper to all 8 wings ─────────────────
-        # ODrive S1 native velocity units are turns/s (vel_limit = 40.0 turns/s = 2400 RPM)
         vel_limit_overrides = soft_stop_apply_to_commands(
             wing_commands,
             motor_positions_rad or [None] * 8,
             base_vel_limit_rps=40.0
         )
 
-        # ── Send velocity + optional vel_limit per wing ───────────
         for i, cmd in enumerate(wing_commands[:8]):
-            raw_amp = cmd.get('flap_amp_deg', FLAP_AMP_DEG)
-            amp     = min(raw_amp, max_amp_deg)
-            factor  = cmd.get('soft_stop_factor', 1.0)
-
-            # Wing pair offset for 90° cascade (pairs: 0=W1, 1=W2, 2=W3, 3=W4)
-            pair_idx = i // 2
-            wing_phase = (self._master_phase - self._pair_offsets[pair_idx]) % (2.0 * math.pi)
-
-            # Reciprocating position and velocity in turns/s at motor shaft
-            flap_angle = amp * math.sin(wing_phase)
-            self._last_flap_degs[i] = round(flap_angle, 2)
-            self._last_phases[i]    = round(wing_phase / (2.0 * math.pi), 4)
-            self._last_dirs[i]      = +1 if math.cos(wing_phase) >= 0 else -1
-
-            # Motor shaft velocity in turns/s (ODrive CAN native unit)
-            # vel_turns_s = G * (amp_deg / 360.0) * (2*pi*f) * cos(wing_phase) * direction
+            factor   = cmd.get('soft_stop_factor', 1.0)
             flap_dir = w.FLAP_MOTOR_DIRECTION[i] if i < len(w.FLAP_MOTOR_DIRECTION) else +1
-            vel_turns_s = reducer * (math.radians(amp) / (2.0 * math.pi)) * (2.0 * math.pi * freq_hz) * math.cos(wing_phase) * factor * flap_dir
+            base_vel_rps = cmd.get(
+                'motor_vel_rps',
+                self._last_motor_vel_rps[i] if i < len(self._last_motor_vel_rps) else 0.0,
+            )
+            vel_turns_s = float(base_vel_rps) * float(factor) * float(flap_dir)
 
             arb_id = (i << 5) | 0x0D   # SET_INPUT_VEL
             data   = struct.pack('<ff', vel_turns_s, 0.0)
@@ -612,7 +604,6 @@ class MCOHardware:
             except Exception:
                 pass
 
-            # ── Per-wing vel_limit override inside soft-stop zone ─
             vl = vel_limit_overrides[i]
             if vl is not None and self.odi:
                 try:
@@ -620,7 +611,6 @@ class MCOHardware:
                 except Exception:
                     pass
 
-        # ── Restore vel_limits for wings that just left the zone ──
         for i, cmd in enumerate(wing_commands[:8]):
             if (not cmd.get('soft_stop_zone', False)
                     and vel_limit_overrides[i] is None):
@@ -647,7 +637,7 @@ class MCOMain:
     TICK_RATE_HZ = 50
     TICK_S       = 1.0 / TICK_RATE_HZ
 
-    def __init__(self, port='/dev/ttyAMA0', baud=921600, sim=False):
+    def __init__(self, port=MAVLINK_PORT, baud=MAVLINK_BAUD, sim=False):
         self.sim_mode = sim
         self.alive    = True
 
@@ -665,13 +655,6 @@ class MCOMain:
         self.fc                = self
         self.intent_interpreter = IntentInterpreter()
 
-        # Tactical Cursor-on-Target (CoT) ATAK Bridge
-        try:
-            from mco_cot_bridge import get_cot_bridge
-            self.cot_bridge = get_cot_bridge(auto_start=False)
-        except Exception:
-            self.cot_bridge = None
-
         # Initialise automated test card runners
         try:
             from mco_test_cards import init_test_runners, handle_tc_command
@@ -688,6 +671,7 @@ class MCOMain:
         self._tick_latencies = []
         self._deadline_miss_count = 0
         self._watchdog_trip_count = 0
+        self.cot_bridge = None
 
         # Graceful shutdown
         signal.signal(signal.SIGTERM, self._handle_signal)
@@ -1429,45 +1413,13 @@ class MCOMain:
                 _gc_counter = 0
             elif elapsed > self.TICK_S * 1.5:
                 pass   # tick overrun — log but don't skip
-            # ── Certification tools (structural loads + rope life) ──
-            try:
-                structural_recorder.record(sensors, result)
-                rope_tracker.update(sensors, result)
-            except Exception:
-                pass
 
         self._shutdown()
 
     def _shutdown(self):
         """Clean shutdown sequence."""
         print("\nShutdown: running post-flight export...")
-        try:
-            structural_recorder.end_flight()
-        except Exception:
-            pass
-        try:
-            rope_tracker._save()
-        except Exception:
-            pass
-        # Auto-run HQ analysis on the latest flight log
-        try:
-            from mco_logger import LOG_DIR
-            import glob, os
-            logs = sorted(glob.glob(os.path.join(LOG_DIR, 'mco_flight_*.csv')))
-            if logs:
-                latest = logs[-1]
-                for phase in ('hover', 'cruise'):
-                    hq_analyser.analyse_log(latest, phase)
-        except Exception:
-            pass
-        # Run Bayesian adaptive optimiser on post-flight data
-        try:
-            from mco_adaptive_optimiser import AdaptiveOptimiser
-            _ao = AdaptiveOptimiser()
-            _ao.post_flight_update()
-        except Exception:
-            pass
-        # Save all cross-flight learning state
+        # Save cross-flight state if supported
         try:
             w.persist_save_all(notes='end_of_flight')
         except Exception as e:
@@ -1478,11 +1430,6 @@ class MCOMain:
             print(f"  Export failed: {e}")
 
         print("Shutdown: stopping hardware...")
-        if getattr(self, 'cot_bridge', None):
-            try:
-                self.cot_bridge.close()
-            except Exception:
-                pass
         self.hardware.shutdown()
         self.logger.stop()
         self.gs_server.stop()
@@ -1493,19 +1440,15 @@ def main():
     # Disable automatic GC to prevent unbounded pause during 50 Hz loop.
     # GC is triggered manually between ticks in the control loop below.
     gc.disable()
-    _gc_collect_interval = 100   # collect every 100 ticks (~2 s at 50 Hz)
-    _gc_tick_counter     = [0]   # list so it can be mutated in nested scope
     parser = argparse.ArgumentParser(description='MCO-1D Flight Computer')
-    parser.add_argument('--port', default='/dev/ttyAMA0',
+    parser.add_argument('--port', default=MAVLINK_PORT,
                         help='MAVLink serial port')
-    parser.add_argument('--baud', type=int, default=921600,
+    parser.add_argument('--baud', type=int, default=MAVLINK_BAUD,
                         help='MAVLink baud rate')
     parser.add_argument('--sim',  action='store_true',
                         help='Simulation mode (no hardware output)')
     parser.add_argument('--wizard', action='store_true',
                         help='Launch MCO-1D first-run hardware configuration wizard')
-    parser.add_argument('--discover', action='store_true',
-                        help='Run autonomous physical plant self-discovery and parameter validation')
     parser.add_argument('--duration', type=float, default=None,
                         help='Run flight loop for specified duration (seconds) then shutdown cleanly')
     args = parser.parse_args()
@@ -1513,12 +1456,6 @@ def main():
     if args.wizard:
         from mco_first_run_wizard import run as run_wizard
         run_wizard()
-        return
-
-    if args.discover:
-        from mco_physical_discovery import AutonomousPhysicalDiscoveryEngine
-        engine = AutonomousPhysicalDiscoveryEngine(sim_mode=args.sim)
-        engine.run_full_discovery_phase()
         return
 
     mco = MCOMain(port=args.port, baud=args.baud, sim=args.sim)

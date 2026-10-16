@@ -11,22 +11,14 @@ ONE COMPLETE robotic flapping wing root assembly:
 
 Outputs:
   - cad/print_package_wing_root/ (individual STLs, STEPs, plate STLs, and README)
-  - /Users/drbell/Downloads/MCO-1D_Wing_Root_3D_Print_Package/
-  - /Users/drbell/Downloads/MCO-1D_Wing_Root_3D_Print_Package.zip
 """
 
 import os
-import shutil
-import zipfile
 import build123d as b3d
 
 OUT_DIR = "cad/print_package_wing_root"
-DL_DIR = "/Users/drbell/Downloads/MCO-1D_Wing_Root_3D_Print_Package"
-ZIP_OUT = "/Users/drbell/Downloads/MCO-1D_Wing_Root_3D_Print_Package.zip"
-PROJECT_ZIP = "cad/manufactured/MCO-1D_Wing_Root_3D_Print_Package.zip"
 
 os.makedirs(OUT_DIR, exist_ok=True)
-os.makedirs(DL_DIR, exist_ok=True)
 
 print("=" * 80)
 print("  PACKAGING 3D PRINTABLE ASSETS FOR ONE FULL WING ROOT ASSEMBLY")
@@ -221,10 +213,6 @@ for p in parts_manifest:
     b3d.export_stl(bed_ready_shape, out_stl)
     b3d.export_step(bed_ready_shape, out_step)
 
-    # Copy to user Downloads directory
-    shutil.copyfile(out_stl, os.path.join(DL_DIR, dest_stl_name))
-    shutil.copyfile(out_step, os.path.join(DL_DIR, dest_step_name))
-
     print(f"  ✓ Processed (Z=0 bed-leveled): {p['name']} ({p['desc']})")
 
 # -----------------------------------------------------------------------------
@@ -285,9 +273,6 @@ plate_stl_path = os.path.join(OUT_DIR, "PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl
 plate_step_path = os.path.join(OUT_DIR, "PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.step")
 b3d.export_stl(full_bed_plate, plate_stl_path)
 b3d.export_step(full_bed_plate, plate_step_path)
-
-shutil.copyfile(plate_stl_path, os.path.join(DL_DIR, "PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl"))
-shutil.copyfile(plate_step_path, os.path.join(DL_DIR, "PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.step"))
 
 print("  ✓ Generated: PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS (All 9 files / 11 parts, collision-free on Z=0!)")
 
@@ -352,56 +337,36 @@ readme_content = f"""# MCO-1D Wing Root 3D Print Package — Build Guide & BOM
 | Component | Specification | Quantity | Mechanical Location |
 | :--- | :--- | :---: | :--- |
 | **Main Motor** | GoolRC 5010 360KV BLDC (Ø50mm, 4mm shaft) | 1 | Powertrain Stand (slotted mount) |
-| **Flapping Controller** | ODrive Micro CAN-FD Controller | 1 | Stand Undercarriage Pocket |
-| **Magnetic Encoder** | Diametral Neodymium Magnet Ø6.35 × 2.5 mm | 1 | Motor Shaft Tail (1.50mm air gap to MA702) |
-| **Wrist Servos** | AGFRC B24CLM Micro Servos (Titanium Gears) | 2 | Stagecoach Sector Drum Side Bays |
-| **Wing Spar Tube** | 3K Woven Carbon Fiber Tube Ø10.0 × 8.0 mm | 1 | Wrist Gimbal Socket (500mm length) |
-| **Fuselage Spine** | 3K Pultruded Carbon Fiber Tube Ø20.0 × 17.0 mm | 1 | Central Fuselage Spine |
+| **Flapping Controller** | ODrive S1 CAN-FD Controller | 1 | Stand Undercarriage Pocket |
+| **Magnetic Encoder** | Diametral Neodymium Magnet Ø6.35 × 2.5 mm | 1 | Motor Shaft Tail (1.50mm air gap) |
+| **Wrist Servos** | AGFRC B24CLM / B44BLS Servos | 2 | Stagecoach Sector Drum Side Bays |
+| **Wing Spar Tube** | 3K Woven Carbon Fiber Tube Ø10.0 × 8.0 mm | 1 | Wrist Gimbal Socket |
+| **Fuselage Spine** | 3K Roll-Wrapped Carbon Fiber Tube Ø20.0 × 17.0 mm | 1 | Central Fuselage Spine |
 | **Flapping Bearings** | 6800-2RS Deep-Groove Bearings (10 × 19 × 5 mm) | 2 | Stagecoach Drum Hub & Tower Seat |
 | **Top Pinion Bearing** | 688-2RS Deep-Groove Bearing (8 × 16 × 5 mm) | 1 | Top Brace Pinion Pocket |
 | **Gimbal Bearings** | MR74-2RS Miniature Bearings (4 × 7 × 2.5 mm) | 2 | Differential Yoke Pivot |
 | **Flapping Axle** | Grade 5 Titanium Dead Axle Pin Ø10.0 × 44.0 mm | 1 | Main Pivot Centerline |
 | **Wrist Cross-Axle** | Ground Stainless Steel Pin Ø4.0 × 26.0 mm | 1 | Differential Gimbal Pitch Axis |
-| **Capstan Cable** | Braided Dyneema Line Ø0.75 mm (180 lb test) | 1.2 m | 10:1 Helical Capstan Drive Wrap |
+| **Capstan Cable** | Braided Dyneema SK99 Line Ø0.80 mm | 1.2 m | 10:1 Helical Capstan Drive Wrap |
 | **Fasteners (Clamping)** | M3 × 16 mm Socket Cap Screws (Grade 12.9) | 4 | Fuselage Collar Split Pinch Ears |
 | **Fasteners (Motor)** | M3 × 8 mm Button Head Screws (Grade 12.9) | 4 | GoolRC 5010 Motor Mount Slots |
 | **Fasteners (Top Brace)**| M3 × 12 mm Socket Cap Screws | 2 | Stand Tie-Down Struts |
 | **Fasteners (Cable Clamp)**| M3 × 6 mm Low-Profile Screws & Washers | 2 | Sector Drum Dyneema Clamps |
-| **Fasteners (ODrive)** | M3 × 6 mm Button Head Screws | 4 | ODrive Micro Undercarriage Standoffs |
 
 ---
 
 ## 5. Companion Installation Manuals
 
-- Complete 2-page publication-grade PDF assembly manual:  
-  `docs/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf` (also in user Downloads).
+- Complete 2-page PDF assembly manual:  
+  `docs/mark1/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf`
 - V10 Powertrain & ODrive installation guide:  
-  `docs/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf` (also in user Downloads).
+  `docs/mark1/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf`
 """
 
 with open(os.path.join(OUT_DIR, "README_3D_PRINT_GUIDE.md"), "w") as f:
     f.write(readme_content)
 
-with open(os.path.join(DL_DIR, "README_3D_PRINT_GUIDE.md"), "w") as f:
-    f.write(readme_content)
-
 print("  ✓ Written: README_3D_PRINT_GUIDE.md")
-
-# -----------------------------------------------------------------------------
-# 7. CREATE ZIP ARCHIVES
-# -----------------------------------------------------------------------------
-for zip_path in [ZIP_OUT, PROJECT_ZIP]:
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(OUT_DIR):
-            for file in files:
-                file_full = os.path.join(root, file)
-                rel_path = os.path.relpath(file_full, OUT_DIR)
-                zipf.write(file_full, arcname=os.path.join("MCO-1D_Wing_Root_3D_Print_Package", rel_path))
-    zip_size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-    print(f"  ✓ Archive created: {zip_path} ({zip_size_mb:.2f} MB)")
-
 print("=" * 80)
-print("  3D PRINT PACKAGE COMPLETE!")
-print(f"  Folder: {DL_DIR}")
-print(f"  ZIP   : {ZIP_OUT}")
+print(f"  3D PRINT PACKAGE COMPLETE: {OUT_DIR}")
 print("=" * 80)

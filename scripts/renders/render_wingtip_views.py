@@ -6,10 +6,6 @@ import pyvista as pv
 OUT_DIR = 'cad/manufactured'
 STL_PATH = os.path.join(OUT_DIR, 's1223_wingtip_smooth_starboard_2.4mm.stl')
 
-BRAIN_DIRS = [
-    '/Users/drbell/.gemini/antigravity/brain/6213fcb6-5e21-4842-8745-8b4c5b294586'
-]
-
 def render_wingtip():
     mesh = pv.read(STL_PATH)
     
@@ -69,22 +65,6 @@ def render_wingtip():
     te_file = os.path.join(OUT_DIR, 's1223_wingtip_skeleton_te_zoom.png')
     p_te.screenshot(te_file)
     print(f"Rendered: {te_file}")
-
-    # Sync to brain artifacts
-    synced_files = [
-        's1223_wingtip_skeleton_iso.png',
-        's1223_wingtip_root_connector.png',
-        's1223_wingtip_skeleton_top.png',
-        's1223_wingtip_skeleton_te_zoom.png'
-    ]
-    for bdir in BRAIN_DIRS:
-        if os.path.exists(bdir):
-            for f in synced_files:
-                src = os.path.join(OUT_DIR, f)
-                dst = os.path.join(bdir, f)
-                if os.path.exists(src):
-                    shutil.copyfile(src, dst)
-                    print(f"Synced to brain: {dst}")
 
 if __name__ == '__main__':
     render_wingtip()

@@ -13,6 +13,8 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+.pytest_cache/
+.ruff_cache/
 
 # Virtual environments
 venv/
@@ -21,21 +23,29 @@ env/
 .env
 ornithopter-cad/
 
-# Binary installers
+# Binary installers & archives
 *.dmg
 Antigravity.dmg
+*.zip
+
+# Slicer G-code & CAD backups
+*.bgcode
+*.gcode
+*.FCBak
+*.FCStd1
+*.bak
+*.lck
+cad/sliced_output/
+cad/bread_stamps/
+cad/reference/lego/
 
 # Runtime flight logs & calibration data
 logs/
 flight_logs/
 knowledge/
 *.log
+.local-evidence/
 
 # Ground station & slicer temp data
 temp/
 scratch/
-cad/sliced_output/
-
-# Archives
-files.zip
-

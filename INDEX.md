@@ -1,205 +1,101 @@
 # MCO-1D Master Catalog & File Index
 
-Comprehensive index of all assets in the MCO-1D repository grouped into 10 functional engineering domains.
+Comprehensive index of all active engineering assets and quarantined archives in the MCO-1D repository.
 
-> **Authoritative vs Archive Legend**:  
-> - **[ACTIVE]**: Current authoritative document or production code to be used for the physical build and flight operations.  
-> - **[ARCHIVE]**: Historical design iteration or earlier revision retained for engineering provenance and audit trace.
-
-## 0. MCO-1D Mark 1 Authoritative Engineering Suite (`docs/mark1/`)
-
-> **Consolidated Engineering Baseline**: The project documentation suite has been rewritten and consolidated from legacy revisions (v1–v25) and multiple appendices into a fresh, authoritative **MCO-1D Mark 1** baseline. All physical fabrication, component procurement, firmware commissioning, flight testing, and piloting reference these 7 core documents.
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [MCO-1D_Mark1_Master_Specification.md](docs/mark1/MCO-1D_Mark1_Master_Specification.md) | **[ACTIVE]** | Authoritative Master Design Specification: cascade geometry, S1223 aerodynamics, STOL performance envelope ($V_{cruise} = 9.0\text{ m/s}, L \ge 37\text{ N}$), 7:1 capstan drivetrain, mass balance, power budget. |
-| [MCO-1D_Mark1_Bill_of_Materials.md](docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md) | **[ACTIVE]** | Live 39-component procurement registry ($3,757.58 USD, 6.150 kg MTOW with spares). Automatically updates and verifies pricing when viewed via `./view_bom.sh`. |
-| [MCO-1D_Mark1_Manufacturing_Guide.md](docs/mark1/MCO-1D_Mark1_Manufacturing_Guide.md) | **[ACTIVE]** | Complete fabrication manual: 216 universal rib print run (LW-PLA, 1.5g), CNC cutting of 2mm CF sector wheels, spar assembly, 180 N Dyneema pre-tensioning, slide tray. |
-| [MCO-1D_Mark1_Commissioning_Manual.md](docs/mark1/MCO-1D_Mark1_Commissioning_Manual.md) | **[ACTIVE]** | Step-by-step airframe assembly, 8x ODrive S1 CAN-FD configuration, 16x AGF-RC servo 170° travel programming, MCP3208 SPI ADC calibration, pre-flight BIT. |
-| [MCO-1D_Mark1_Operator_Manual.md](docs/mark1/MCO-1D_Mark1_Operator_Manual.md) | **[ACTIVE]** | Pilot Operating Handbook (POH): Unified Lever zones (100% Sprint to 0% Max Airbrake, unified 50% Trim Detent for cruise & hover lock), STOL takeoff/landing profiles, helicopter hover transition ($V \le 3\text{ m/s}$), Gemini copilot integration (port 5759), emergency checklists. |
-| [MCO-1D_Mark1_Flight_Test_Protocol.md](docs/mark1/MCO-1D_Mark1_Flight_Test_Protocol.md) | **[ACTIVE]** | 4-Phase progressive test clearance: TC-01 (Ground bench static thrust), TC-02 (Tethered lift hunt), TC-03 (Truck advance-ratio sweep), TC-04 (First free flight STOL). |
-| [MCO-1D_Mark1_Software_Reference.md](docs/mark1/MCO-1D_Mark1_Software_Reference.md) | **[ACTIVE]** | Real-time software architecture: 50 Hz executive loop breakdown, Boyd $P_s$ PI controller, 232 biomimetic hypotheses (70 advanced suites), software-only reversal recoil engine, CAN-FD frame dictionary, and 368 ground station command catalogue. |
-| [MCO-1D_Mark1_Adversarial_Audit_Report.md](docs/mark1/MCO-1D_Mark1_Adversarial_Audit_Report.md) | **[ACTIVE]** | Comprehensive adversarial engineering audit: aerodynamic lift deficit, torque limits at 3.5 Hz, CAD spar bore correction, runtime crash remediations, and safety matrix. |
-| [MCO-1.5D_SD7062_Specification.md](docs/mark1/MCO-1.5D_SD7062_Specification.md) | **[ACTIVE]** | Authoritative MCO-1.5D SD7062 Design Option: 102.5g per-wing panel mass budget, 2.0mm robust oval lightening ribs, 61.6% sprint drag reduction, 4.306 kg AUW. |
-| [MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf](docs/mark1/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf) | **[ACTIVE]** | Publication-grade 2-page hierarchical installation manual (Tier 1 Bevel Wrist -> Tier 2 Stagecoach Flapping Shoulder -> Tier 3 Fuselage Collar). |
-| [MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf](docs/mark1/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf) | **[ACTIVE]** | V10 Powertrain Stand, Dual-Shear Top Brace, GoolRC 5010 motor, and ODrive Micro installation manual. |
-| [MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf](docs/mark1/MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf) | **[ACTIVE]** | V10 7-spoke Stagecoach sector drum and 2-DOF bevel differential wrist assembly guide. |
-| [MCO-1D_Electronics_and_Systems_Guide.pdf](docs/mark1/MCO-1D_Electronics_and_Systems_Guide.pdf) | **[ACTIVE]** | Avionics, CAN-FD bus topology, dual-zone 7.4V servo rail, and sensor integration manual. |
-| [MCO-1D_Low_Speed_CFD_Wave_Library_Audit.md](docs/mark1/MCO-1D_Low_Speed_CFD_Wave_Library_Audit.md) | **[ACTIVE]** | Low-speed ($0\text{--}8\text{ m/s}$) unsteady CFD and wave kinematics audit across S1223 & SD7062 cascades. |
-| [MCO-1D_Maneuverability_CFD_Adversarial_Audit.md](docs/mark1/MCO-1D_Maneuverability_CFD_Adversarial_Audit.md) | **[ACTIVE]** | PPL/CPL, BFM dogfighting, and Aresti aerobatic CFD envelope audit. |
-| [MCO-1D_Fasteners_and_Inserts_Mass_Budget.md](docs/mark1/MCO-1D_Fasteners_and_Inserts_Mass_Budget.md) | **[ACTIVE]** | Complete fastener, bearing, dead-axle, and heat-set insert mass ledger. |
-| [AGENTS.md](AGENTS.md) | **[ACTIVE]** | Repository organization contract, Python runtime policy, `./mco` workflow rules, and PrusaSlicer MCP validation gate. |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | **[ACTIVE]** | Developer contribution guide, Git workflows, pre-push verification gates, and `./mco` CLI standards. |
-| [mco](mco) / [Makefile](Makefile) / [mco_cli.py](scripts/mco_cli.py) | **[ACTIVE]** | Unified engineering workflow CLI (`./mco test`, `sim`, `cad`, `slice`, `bom`, `docs`, `doctor`). |
-| [prusaslicer_mcp_server.py](scripts/mcp/prusaslicer_mcp_server.py) | **[ACTIVE]** | Native Python `FastMCP` server driving PrusaSlicer 2.9.6 CLI & GUI on macOS. |
-| [view_bom.sh](view_bom.sh) / [mco_bom_tool.py](scripts/mco_bom_tool.py) | **[ACTIVE]** | Zero-dependency live BOM pricing and MTOW calculation engine. |
+- **[ACTIVE]**: Authoritative configuration, firmware, parametric CAD, or documentation used for the physical build.
+- **[ARCHIVE]**: Quarantined legacy iterations, duplicate modules, or unverified prototypes retained for reference.
 
 ---
 
-## 1. Core Flight Software & Executive (firmware/)
+## 1. Single Source of Truth & Governance (`config/`, `bom/`, `tools/`)
 
 | File | Status | Description |
 | :--- | :---: | :--- |
-| [mco_main.py](firmware/mco_main.py) | **[ACTIVE]** | Main 50 Hz flight computer executive loop, sensor polling, command dispatch, failsafe handling. |
-| [mco_wave_library.py](firmware/mco_wave_library.py) | **[ACTIVE]** | Authoritative 90k+ line metachronal kinematics library containing all 285 biomimetic hypotheses (H-01 to H-108, H-88A dynamic vectoring, H-88B sweep bias trim, aerobatic/wind suites), 5-modality Adaptive Learning Classifier (ALC), and ALSS adaptive state engine. |
-| [mco_flight_governor.py](firmware/mco_flight_governor.py) | **[ACTIVE]** | Flight governor & pilot intent arbitration: software-only reversal recoil engine (`compute_soft_recoil_trajectory`), `HardWIGFloorGovernor`, `SymmetricLoadFactorGovernor`, and `GroundWindSafetyGovernor`. |
-| [mco_advanced_physics.py](firmware/mco_advanced_physics.py) | **[ACTIVE]** | Advanced aerodynamic physics suite containing 70+ advanced hypotheses, ALC evolutionary genome optimization, and bounded parameter safety clamps. |
-| [mco_intent_control.py](firmware/mco_intent_control.py) | **[ACTIVE]** | Three-layer intent arbitration stack, unified lever parsing (100% Sprint to 0% Airbrake), Boyd energy-maneuvering controller. |
-| [mco_wave_library_clean.py](firmware/archive/mco_wave_library_clean.py) | **[ARCHIVE]** | Reference clean baseline of wave kinematics library prior to patch integration. |
-| [mco_wave_library_pre_audit.py](firmware/archive/mco_wave_library_pre_audit.py) | **[ARCHIVE]** | Pre-audit snapshot of wave kinematics library retained for DO-178C traceability. |
-| [wing_drone_firmware.py](firmware/archive/wing_drone_firmware.py) | **[ARCHIVE]** | Consolidated prototype firmware reference and self-contained flight model. |
+| [`config/airframe_spec.json`](config/airframe_spec.json) | **[ACTIVE]** | Canonical JSON specification for airframe mass (`3.642 kg` installed), geometry (`2.20 m` span, `0.28 m` chord, `2.24 m²` area), `10.0:1` capstan drivetrain, CAN nodes `0..7`, and GPIO pins. |
+| [`firmware/mco_config.py`](firmware/mco_config.py) | **[ACTIVE]** | Python loader exposing `MCOConfig` to all firmware modules, CAD generators, and tests. |
+| [`bom/bom.csv`](bom/bom.csv) | **[ACTIVE]** | Standard 39-component Bill of Materials CSV generated by [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py) and validated by [`tools/bom_lint.py`](tools/bom_lint.py). |
+| [`willem-suggestions.md`](willem-suggestions.md) | **[ACTIVE]** | Comprehensive technical audit, hardware/CAD/firmware bug post-mortem, and refactoring roadmap. |
+| [`AGENTS.md`](AGENTS.md) / [`CLAUDE.md`](CLAUDE.md) | **[ACTIVE]** | Root and domain-specific (`firmware/`, `cad/`, `scripts/`, `docs/`, `tests/`) AI agent instructions. |
+| [`tools/`](tools/) | **[ACTIVE]** | Collection standards linters (`agents_md_lint.py`, `ai_file_lint.py`, `bom_lint.py`, `check_docs.py`, `check_prints.py`). |
 
 ---
 
-## 2. Hardware Interfaces & Drivetrain Drivers (firmware/, scripts/)
+## 2. MCO-1D Mark 1 Documentation Suite (`docs/mark1/`)
 
 | File | Status | Description |
 | :--- | :---: | :--- |
-| [mco_odrive_interface.py](firmware/mco_odrive_interface.py) | **[ACTIVE]** | High-speed CAN-FD interface for 8x ODrive S1 motor controllers (nodes 0–7). |
-| [mco_odrive_setup.py](firmware/mco_odrive_setup.py) | **[ACTIVE]** | Automated provisioner and calibration utility for ODrive S1 controllers (pole pairs, current limits, vel_limit). |
-| [mco_servo_interface.py](firmware/mco_servo_interface.py) | **[ACTIVE]** | Hardware PWM controller via pigpio daemon for 16x AGFRC IB53BHU pitch and sweep servos. |
-| [mco_mavlink_bridge.py](firmware/mco_mavlink_bridge.py) | **[ACTIVE]** | Serial MAVLink bridge interfacing Pixhawk 4 Mini (telemetry, GPS, pitot airspeed, RC receiver). |
-| [mco_mavlink.py](firmware/mco_mavlink.py) | **[ACTIVE]** | MAVLink message definition parser and serial packet handler. |
-| [mco_loadcell.py](firmware/mco_loadcell.py) | **[ACTIVE]** | HX711 24-bit ADC interface for 5 kg S-type load cell static thrust measurements. |
-| [mco_can_setup.sh](scripts/mco_can_setup.sh) | **[ACTIVE]** | Linux socketCAN bringup script configuring CAN-FD at 1 Mbps nominal / 8 Mbps data. |
-| [mco-flight.service](scripts/mco-flight.service) | **[ACTIVE]** | Systemd service unit managing autostart of mco_main.py on boot. |
+| [`MCO-1D_Mark1_Master_Specification.md`](docs/mark1/MCO-1D_Mark1_Master_Specification.md) | **[ACTIVE]** | Master design specification: cascade geometry, S1223 aerodynamics, `10.0:1` capstan drivetrain, mass balance, and power budget. |
+| [`MCO-1D_Mark1_Bill_of_Materials.md`](docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md) | **[ACTIVE]** | Auto-generated 39-item procurement and mass ledger (`3,642 g` installed airframe mass; `6,150 g` shipped total; `$3,757.58 USD`). |
+| [`MCO-1D_Mark1_Manufacturing_Guide.md`](docs/mark1/MCO-1D_Mark1_Manufacturing_Guide.md) | **[ACTIVE]** | Airframe fabrication manual: LW-PLA rib printing, carbon spar assembly, and `180 N` Dyneema capstan rigging. |
+| [`MCO-1D_Mark1_Commissioning_Manual.md`](docs/mark1/MCO-1D_Mark1_Commissioning_Manual.md) | **[ACTIVE]** | Step-by-step airframe assembly, 8x ODrive CAN configuration, 16x AGFRC servo travel setup, and MCP3208 SPI ADC zeroing. |
+| [`MCO-1D_Mark1_Operator_Manual.md`](docs/mark1/MCO-1D_Mark1_Operator_Manual.md) | **[ACTIVE]** | Pilot Operating Handbook (POH): Unified Wave Lever zones, takeoff/landing profiles, and emergency checklists. |
+| [`MCO-1D_Mark1_Flight_Test_Protocol.md`](docs/mark1/MCO-1D_Mark1_Flight_Test_Protocol.md) | **[ACTIVE]** | 4-phase progressive test clearance: TC-01 (Bench), TC-02 (Tethered lift), TC-03 (Truck sweep), TC-04 (First free flight). |
+| [`MCO-1D_Mark1_Builder_Calibration_Sheet.md`](docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.md) | **[ACTIVE]** | Post-build hardware measurement manifest (`FIG-01` to `FIG-08`) and pre-flight signoff sheet ([`PDF`](docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf)). |
+| [`MCO-1D_Mark1_Test_Card_Worksheets.md`](docs/mark1/MCO-1D_Mark1_Test_Card_Worksheets.md) | **[ACTIVE]** | Field data worksheets (`WS-00` through `WS-04`) and printable PDFs in [`docs/mark1/worksheets/`](docs/mark1/worksheets/). |
+| [`MCO-1D_Mark1_Flight_Envelope_Specification.md`](docs/mark1/MCO-1D_Mark1_Flight_Envelope_Specification.md) | **[ACTIVE]** | Operating corridors, $V$-$n$ structural limits (`[-1.0g, +2.2g]`), and stall speed scaling. |
+| [`MCO-1D_Mark1_Software_Reference.md`](docs/mark1/MCO-1D_Mark1_Software_Reference.md) | **[ACTIVE]** | 50 Hz executive loop architecture, safety governors, and CAN frame reference. |
+| [`MCO-1.5D_SD7062_Specification.md`](docs/mark1/MCO-1.5D_SD7062_Specification.md) | **[ACTIVE]** | Alternate SD7062 lower-camber wing panel specification. |
+| [`MCO-1D_Fasteners_and_Inserts_Mass_Budget.md`](docs/mark1/MCO-1D_Fasteners_and_Inserts_Mass_Budget.md) | **[ACTIVE]** | Fastener, bearing, dead-axle, and heat-set insert mass ledger. |
+| [`MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf`](docs/mark1/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf) | **[ACTIVE]** | 2-page 3-tier installation guide (Bevel Wrist -> Stagecoach Shoulder -> Fuselage Collar). |
+| [`MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf`](docs/mark1/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf) | **[ACTIVE]** | V10 Powertrain Stand, Dual-Shear Top Brace, and ODrive mounting manual. |
+| [`MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf`](docs/mark1/MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf) | **[ACTIVE]** | V10 7-spoke Stagecoach sector drum and 2-DOF bevel wrist assembly guide. |
+| [`MCO-1D_Electronics_and_Systems_Guide.pdf`](docs/mark1/MCO-1D_Electronics_and_Systems_Guide.pdf) | **[ACTIVE]** | Avionics, CAN bus topology, and dual-SBEC 7.4V servo power distribution guide. |
 
 ---
 
-## 3. Flight Operations, Pre-Flight BIT & Test Cards (firmware/, docs/latest/)
+## 3. Core Flight Software (`firmware/`)
 
 | File | Status | Description |
 | :--- | :---: | :--- |
-| [mco_preflight.py](firmware/mco_preflight.py) | **[ACTIVE]** | Three-tier Built-In Test (BIT) framework: P-BIT (Power-up), Pre-Flight BIT, and C-BIT (Continuous). |
-| [mco_preflight_checks.py](firmware/mco_preflight_checks.py) | **[ACTIVE]** | Automated pre-flight verification script checking bus voltages, sensors, ADCs, and SD space. |
-| [mco_test_cards.py](firmware/mco_test_cards.py) | **[ACTIVE]** | Automated test card engine for TC-01 (Bench), TC-02 (Hover hunt), TC-03 (Truck test), TC-04 (Free flight). |
-| [mco_first_run_wizard.py](firmware/mco_first_run_wizard.py) | **[ACTIVE]** | Interactive commissioning wizard guiding new hardware bringup and calibration. |
-| [mco_rc_verify.py](firmware/mco_rc_verify.py) | **[ACTIVE]** | Transmitter channel mapping and lever detent verification tool. |
-| [mco_vibration_check.py](firmware/mco_vibration_check.py) | **[ACTIVE]** | MPU-6050 accelerometer spectrum analyzer checking structural resonance and rope slip. |
-| [mco_taxi_park.py](firmware/mco_taxi_park.py) | **[ACTIVE]** | Taxi, ground handling, and wing folding/parking kinematics coordinator. |
-| [MCO-1D_Test_Cards_v25.pdf](docs/latest/MCO-1D_Test_Cards_v25.pdf) | **[ACTIVE]** | Complete operational test card cards and test protocols for flight clearance. |
-| [MCO-1D_Field_Cards_v25.pdf](docs/latest/MCO-1D_Field_Cards_v25.pdf) | **[ACTIVE]** | Quick-reference laminated field checklist for pilot and flight engineer. |
-| [MCO-1D_Operator_Manual_v25.pdf](docs/latest/MCO-1D_Operator_Manual_v25.pdf) | **[ACTIVE]** | Pilot operating handbook, normal/abnormal procedures, lever zones, and emergency checklists. |
-| [MCO-1D_Commissioning_Manual_v25.pdf](docs/latest/MCO-1D_Commissioning_Manual_v25.pdf) | **[ACTIVE]** | Step-by-step mechanical assembly, electrical wiring, and first-flight commissioning manual. |
-| [MCO-1D_Build_Measurement_Sheet.pdf](docs/latest/MCO-1D_Build_Measurement_Sheet.pdf) | **[ACTIVE]** | Physical measurement sheet recording actual as-built weights, spans, and sector arcs. |
-| [MCO-1D_Preflight_Information_Required.md](docs/latest/MCO-1D_Preflight_Information_Required.md) | **[ACTIVE]** | Markdown guide to required physical measurements feeding mco_build_measurements.py. |
+| [`mco_main.py`](firmware/mco_main.py) | **[ACTIVE]** | 50 Hz flight executive loop, sensor polling, command dispatch, and failsafe handling. |
+| [`mco_config.py`](firmware/mco_config.py) | **[ACTIVE]** | Single-source-of-truth configuration loader reading [`config/airframe_spec.json`](config/airframe_spec.json). |
+| [`mco_kinematics.py`](firmware/mco_kinematics.py) | **[ACTIVE]** | Deterministic 50 Hz metachronal phase oscillator, control allocation mixer, and 8-wing kinematics synthesizer (`MetachronalSynthesizer`), verified by [`tests/test_mco_kinematics.py`](tests/test_mco_kinematics.py). |
+| [`mco_odrive_interface.py`](firmware/mco_odrive_interface.py) | **[ACTIVE]** | SocketCAN (`can0`) driver for 8x ODrive controllers (`10.0:1` capstan ratio, reciprocating velocity commands). |
+| [`mco_odrive_setup.py`](firmware/mco_odrive_setup.py) | **[ACTIVE]** | ODrive CAN provisioner and calibration script. |
+| [`mco_flight_governor.py`](firmware/mco_flight_governor.py) | **[ACTIVE]** | Envelope protection, WIG floor governor, load-factor limiter, and servo rate clamping. |
+| [`mco_intent_control.py`](firmware/mco_intent_control.py) | **[ACTIVE]** | 5-channel pilot stick and unified wave-lever intent arbitration. |
+| [`mco_performance_model.py`](firmware/mco_performance_model.py) | **[ACTIVE]** | Analytical aerodynamic performance estimator reading `MCOConfig`. |
+| [`mco_cg_estimator.py`](firmware/mco_cg_estimator.py) | **[ACTIVE]** | Longitudinal Center of Gravity moment-arm calculator. |
+| [`mco_build_measurements.py`](firmware/mco_build_measurements.py) | **[ACTIVE]** | Builder measurement ingestion tool (`knowledge/build_measurements.json`). |
+| [`mco_preflight_checks.py`](firmware/mco_preflight_checks.py) | **[ACTIVE]** | Pre-flight Built-In Test (BIT) checking bus voltages, sensors, ADCs, and disk space. |
+| [`mco_test_cards.py`](firmware/mco_test_cards.py) | **[ACTIVE]** | Test card runner for TC-01 through TC-04. |
+| [`mco_first_run_wizard.py`](firmware/mco_first_run_wizard.py) | **[ACTIVE]** | Interactive hardware commissioning wizard. |
+| [`mco_rc_verify.py`](firmware/mco_rc_verify.py) | **[ACTIVE]** | RC transmitter channel and detent verification utility. |
+| [`mco_vibration_check.py`](firmware/mco_vibration_check.py) | **[ACTIVE]** | MPU-6050 accelerometer FFT vibration and capstan slip check. |
+| [`mco_taxi_park.py`](firmware/mco_taxi_park.py) | **[ACTIVE]** | Ground taxi and wing stow/park coordinator. |
+| [`mco_loadcell.py`](firmware/mco_loadcell.py) | **[ACTIVE]** | HX711 24-bit ADC driver for bench load-cell thrust measurements. |
+| [`mco_logger.py`](firmware/mco_logger.py) / [`mco_log_analysis.py`](firmware/mco_log_analysis.py) | **[ACTIVE]** | 50 Hz CSV telemetry logger and post-flight log analyzer. |
+| [`mco_mavlink.py`](firmware/mco_mavlink.py) | **[ACTIVE]** | Serial MAVLink v2 heartbeat and telemetry interface. |
+| [`mco_ground_station.py`](firmware/mco_ground_station.py) / [`mco_gs_server.py`](firmware/mco_gs_server.py) / [`mco_ws_bridge.py`](firmware/mco_ws_bridge.py) | **[ACTIVE]** | Terminal CLI, HTTP server, and WebSocket telemetry bridge. |
+| [`mco_panel.py`](firmware/mco_panel.py) / [`mco_sync.py`](firmware/mco_sync.py) / [`mco_hypothesis_tool.py`](firmware/mco_hypothesis_tool.py) | **[ACTIVE]** | Onboard SPI touchscreen diagnostic panel, log sync, and hypothesis inspector. |
+| [`mco_wave_library.py`](firmware/mco_wave_library.py) / [`mco_advanced_physics.py`](firmware/mco_advanced_physics.py) | **[ACTIVE]** | Legacy wave hypothesis library (scheduled for replacement per [`willem-suggestions.md`](willem-suggestions.md)). |
 
 ---
 
-## 4. Adaptive Learning, Optimizers & Aerodynamic Modeling (firmware/)
+## 4. Parametric CAD, Print Packages & Tooling (`cad/`, `scripts/`)
 
-| File | Status | Description |
+| File / Directory | Status | Description |
 | :--- | :---: | :--- |
-| [mco_adaptive_optimiser.py](firmware/mco_adaptive_optimiser.py) | **[ACTIVE]** | Biomimetic hypothesis explorer adjusting metachronal phase, dihedral, and AoA dynamically. |
-| [mco_optimiser.py](firmware/mco_optimiser.py) | **[ACTIVE]** | Offline / online numerical optimizer for flap stroke waveforms. |
-| [mco_performance_model.py](firmware/mco_performance_model.py) | **[ACTIVE]** | First-principles aerodynamic model calculating thrust, power, lift, and stall speed. |
-| [mco_cg_estimator.py](firmware/mco_cg_estimator.py) | **[ACTIVE]** | Static and in-flight Center of Gravity estimator implementing FAA-H-8083-1B moment arm equations. |
-| [mco_build_measurements.py](firmware/mco_build_measurements.py) | **[ACTIVE]** | Interactive tool recording physical aircraft measurements to knowledge/build_measurements.json. |
-| [mco_hypothesis_tool.py](firmware/mco_hypothesis_tool.py) | **[ACTIVE]** | Ground station CLI for inspecting and mutating biomimetic hypotheses across all 232 hypotheses (H-01 to H-108 + advanced variants). |
-| [mco_sync.py](firmware/mco_sync.py) | **[ACTIVE]** | Two-way synchronizer syncing flight logs and learning state between Pi and ground station. |
+| [`scripts/mco_cli.py`](scripts/mco_cli.py) | **[ACTIVE]** | Unified CLI backing `./mco` (`doctor`, `test`, `sim`, `cad`, `slice`, `bom`, `docs`). |
+| [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py) | **[ACTIVE]** | Dynamic BOM calculator exporting [`bom/bom.csv`](bom/bom.csv), updating [`config/airframe_spec.json`](config/airframe_spec.json), and generating [`docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md`](docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md). |
+| [`scripts/cad/`](scripts/cad/) | **[ACTIVE]** | 15 parametric CadQuery and DXF generators for wing root, S1223/SD7062 wings, and fuselage. |
+| [`scripts/docs/`](scripts/docs/) | **[ACTIVE]** | ReportLab PDF assembly manual and field worksheet generators. |
+| [`scripts/renders/`](scripts/renders/) | **[ACTIVE]** | PyVista off-screen technical rendering scripts. |
+| [`scripts/mcp/prusaslicer_mcp_server.py`](scripts/mcp/prusaslicer_mcp_server.py) | **[ACTIVE]** | FastMCP server driving PrusaSlicer CLI & GUI. |
+| [`cad/print_package_wing_root/`](cad/print_package_wing_root/) | **[ACTIVE]** | Wing root 3D print package (`01`–`08` + `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl`). |
+| [`cad/manufactured/`](cad/manufactured/) | **[ACTIVE]** | Generated `.step`, `.stl`, `.3mf`, `.dxf`, and `.f3d` models and render directories. |
+| [`cad/slicer_profiles/`](cad/slicer_profiles/) | **[ACTIVE]** | PrusaSlicer `.ini` profiles (`pa12cf_structural`, `pa12cf_solid_gears`, `lwpla_aero_fairing`, `pla_prototype`). |
+| [`cad/coordinates/`](cad/coordinates/) | **[ACTIVE]** | Selig S1223 and SD7062 airfoil coordinate files. |
+| [`cad/drawings/`](cad/drawings/) | **[ACTIVE]** | 2D engineering drawings and HTML schematics. |
 
 ---
 
-## 5. Telemetry, Blackbox Logging & Analysis (firmware/)
+## 5. Quarantined Archives (`archive/`, `*/archive/`)
 
-| File | Status | Description |
+| Archive Location | Status | Contents |
 | :--- | :---: | :--- |
-| [mco_logger.py](firmware/mco_logger.py) | **[ACTIVE]** | High-rate CSV blackbox flight recorder logging 50 Hz telemetry to /home/pi/logs/. |
-| [mco_flight_recorder.py](firmware/mco_flight_recorder.py) | **[ACTIVE]** | Structured flight summary recorder saving post-flight debriefs to flight_logs/. |
-| [mco_log_analysis.py](firmware/mco_log_analysis.py) | **[ACTIVE]** | Post-flight telemetry log parser extracting handling qualities and power metrics. |
-| [mco_flight_test_protocol.py](firmware/mco_flight_test_protocol.py) | **[ACTIVE]** | Automated flight test executor recording structured aerodynamic sorties. |
-
----
-
-## 6. Certification, FMEA & Safety Tools (firmware/, docs/latest/)
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [mco_certification_tools.py](firmware/mco_certification_tools.py) | **[ACTIVE]** | Automated DO-178C requirements tracer, FMEA generator, and MIL-STD-1797B analyzer. |
-| [MCO_1D_Technical_Handover_v2.docx](docs/latest/MCO_1D_Technical_Handover_v2.docx) | **[ACTIVE]** | Complete Technical Handover Document Revision 2 detailing all engineering decisions. |
-| [MCO_Master_Specification_v2.pdf](docs/latest/MCO_Master_Specification_v2.pdf) | **[ACTIVE]** | Authoritative master design specification for MCO-1D and MCO-1A programmes. |
-
----
-
-## 7. Ground Station Servers, Bridges & Proxies (firmware/, scripts/)
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [mco_ground_station.py](firmware/mco_ground_station.py) | **[ACTIVE]** | Standalone terminal Ground Station with interactive telemetry and command CLI. |
-| [mco_gs_server.py](firmware/mco_gs_server.py) | **[ACTIVE]** | HTTP and WebSocket server hosting browser-based Ground Station UI. |
-| [mco_ws_bridge.py](firmware/mco_ws_bridge.py) | **[ACTIVE]** | Bi-directional WebSocket bridge streaming 50 Hz telemetry to web clients. |
-| [mco_api_proxy.py](firmware/mco_api_proxy.py) | **[ACTIVE]** | Ground station AI assistant proxy routing queries to Anthropic Claude Sonnet. |
-| [mco_panel.py](firmware/mco_panel.py) | **[ACTIVE]** | Waveshare 3.5 inch SPI touchscreen panel interface for onboard field diagnostics. |
-| [mco-panel.service](scripts/mco-panel.service) | **[ACTIVE]** | Systemd service managing onboard touchscreen UI. |
-
----
-
-## 8. User Interface, Dashboards & Visualizers (ui/)
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [mco_ai_ground_station.jsx](ui/mco_ai_ground_station.jsx) | **[ACTIVE]** | Mission Control dashboard with live telemetry meters, status alerts, and AI copilot window. |
-| [performance_dashboard.jsx](ui/performance_dashboard.jsx) | **[ACTIVE]** | Real-time aerodynamic performance visualizer (lift curves, power curves, Ps tracking). |
-| [wing_drone_visualizer.jsx](ui/wing_drone_visualizer.jsx) | **[ACTIVE]** | 3D canvas visualizer rendering live 8-wing flapping, sweeping, and pitching motions. |
-| [airfoil_maneuver_guide.jsx](ui/airfoil_maneuver_guide.jsx) | **[ACTIVE]** | Interactive aerodynamic reference guide illustrating vortex generation and S1223 flow. |
-| [mco_gs_assistant.jsx](ui/mco_gs_assistant.jsx) | **[ACTIVE]** | Chat interface component for Ground Station AI assistant. |
-
----
-
-## 9. Mechanical Drawings, 3D Print Packages & Slicer Profiles (`cad/`)
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [README_3D_PRINT_GUIDE.md](cad/print_package_wing_root/README_3D_PRINT_GUIDE.md) | **[ACTIVE]** | Complete CDR 3D Print Guide & Hardware BOM for 1 full Wing Root Assembly (`01`–`08` + `PLATE_01`). |
-| [PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl](cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl) | **[ACTIVE]** | Pre-arranged single-bed PA12-CF print plate containing all 8 structural wing root parts (fits 220x220mm bed). |
-| [v10_complete_wing_root_assembly.step](cad/manufactured/v10_complete_wing_root_assembly.step) | **[ACTIVE]** | Master 9-solid STEP assembly of complete wing root mechanism with 0.0000 mm³ interference. |
-| [MCO-1D_V10_Wing_Root_Assembly.f3d](cad/manufactured/MCO-1D_V10_Wing_Root_Assembly.f3d) | **[ACTIVE]** | Autodesk Fusion 360 parametric archive with 19 components, 18 As-Built kinematic joints, and exploded views. |
-| [mco_pa12cf_structural_coreone.ini](cad/slicer_profiles/mco_pa12cf_structural_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 profile for PA12-CF structural parts on Prusa CORE One (6 walls, 60% Gyroid). |
-| [mco_pa12cf_solid_gears_coreone.ini](cad/slicer_profiles/mco_pa12cf_solid_gears_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 profile for 100% solid PA12-CF bevel gears, capstan pinion, gimbal yoke, and top brace. |
-| [mco_lwpla_aero_fairing_coreone.ini](cad/slicer_profiles/mco_lwpla_aero_fairing_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 foaming LW-PLA profile for NACA 0018 aerodynamic fairing and wing ribs. |
-| [mco_pla_prototype_coreone.ini](cad/slicer_profiles/mco_pla_prototype_coreone.ini) | **[ACTIVE]** | PrusaSlicer 2.9.6 PLA profile for rapid fit-check prototyping on Prusa CORE One. |
-| [MCO_1D_Rib_Drawing.pdf](cad/drawings/MCO_1D_Rib_Drawing.pdf) | **[ACTIVE]** | Dimensioned engineering drawing of universal S1223 rib with 2.2mm spar holes and D-box. |
-| [MCO_1D_Wing_Construction.pdf](cad/drawings/MCO_1D_Wing_Construction.pdf) | **[ACTIVE]** | Rev H2 wing construction drawing showing spar stations, rib spacing, and membrane. |
-| [MCO_1D_wing_design.html](cad/drawings/MCO_1D_wing_design.html) | **[ACTIVE]** | Interactive HTML schematic of S1223 airfoil cross-section and structural stations. |
-| [MCO_1D_wing_schematic.html](cad/drawings/MCO_1D_wing_schematic.html) | **[ACTIVE]** | Detailed internal structural schematic of wing ribs, CF spars, and hinge plate. |
-| [MCO_1D_VG_Design.pdf](cad/drawings/MCO_1D_VG_Design.pdf) | **[ACTIVE]** | Vortex generator placement, height, and spacing spec along 17%c chord line. |
-| [MCO_1D_wing_design.pdf](cad/drawings/MCO_1D_wing_design.pdf) | **[ACTIVE]** | Static PDF export of wing design specification. |
-| [MCO_1D_wing_manufacturing.pdf](cad/drawings/MCO_1D_wing_manufacturing.pdf) | **[ACTIVE]** | Early wing manufacturing instructions (superseded by v20). |
-| [MCO_fuselage_spec.html](cad/drawings/MCO_fuselage_spec.html) | **[ACTIVE]** | Interactive schematic of fuselage keel line and cross-sections. |
-| [MCO_1A_schematic.html](cad/drawings/MCO_1A_schematic.html) | **[ACTIVE]** | MCO-1A full-scale piloted aircraft tadpole fuselage and wing cascade schematic. |
-| [MCO_wave_lever.html](cad/drawings/MCO_wave_lever.html) | **[ACTIVE]** | Interactive schematic of unified pilot wave lever mechanism. |
-
----
-
-## 10. Pre-Consolidation Document Archive & Snapshots (`docs/latest/`)
-
-> **Note on Pre-Consolidation Files**: The PDF documents in `docs/latest/` reflect pre-consolidation design milestones (Revisions v18–v25) prior to the **MCO-1D Mark 1** unification. For current active construction, commissioning, operations, and flight clearance, refer to [Section 0: MCO-1D Mark 1 Authoritative Engineering Suite (`docs/mark1/`)](#0-mco-1d-mark-1-authoritative-engineering-suite-docsmark1).
-
-| File | Status | Description |
-| :--- | :---: | :--- |
-| [MCO-1D_Bill_of_Materials_v18.pdf](docs/latest/MCO-1D_Bill_of_Materials_v18.pdf) | **[SUPERSEDED]** | Pre-consolidation BOM (Rev 18, superseded by `docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md`). |
-| [MCO_1D_BOM_USD.pdf](docs/latest/MCO_1D_BOM_USD.pdf) | **[ACTIVE]** | USD pricing breakdown and line-item budget summary. |
-| [MCO_1D_Electronics_BOM.pdf](docs/latest/MCO_1D_Electronics_BOM.pdf) | **[ACTIVE]** | Focused electrical BOM specifying wiring, connectors, and passive components. |
-| [MCO-1D_Software_Reference_v25.pdf](docs/latest/MCO-1D_Software_Reference_v25.pdf) | **[ACTIVE]** | Comprehensive software architecture reference manual (Rev 25). |
-| [MCO-1D_Wing_Manufacturing_v20.pdf](docs/latest/MCO-1D_Wing_Manufacturing_v20.pdf) | **[ACTIVE]** | Authoritative wing fabrication manual (universal 120mm rib, 216-rib print run, spar cuts). |
-| [MCO-1D_Wing_Manufacturing_Addendum_R21.pdf](docs/latest/MCO-1D_Wing_Manufacturing_Addendum_R21.pdf) | **[ACTIVE]** | Addendum R21 detailing TPU feather winglet sleeve manufacture and commissioning. |
-| [MCO1D_ODrive_Settings.pdf](docs/latest/MCO1D_ODrive_Settings.pdf) | **[ACTIVE]** | First-principles ODrive S1 motor parameter and velocity tuning manual. |
-| [MCO1D_ODrive_VelLimit_Diagnostic.pdf](docs/latest/MCO1D_ODrive_VelLimit_Diagnostic.pdf) | **[ACTIVE]** | Root cause fault analysis resolving 2 Hz motor stalling via vel_limit adjustment. |
-| [MCO1D_RattanRod_StressTest.pdf](docs/latest/MCO1D_RattanRod_StressTest.pdf) | **[ACTIVE]** | Static bending and torsional stress test data on flexible wing rod materials. |
-| [MCO_1D_Control_Map.pdf](docs/latest/MCO_1D_Control_Map.pdf) | **[ACTIVE]** | Full transmitter stick and switch allocation map across all modes. |
-| [MCO_1D_Preflight_Card.pdf](docs/latest/MCO_1D_Preflight_Card.pdf) | **[ACTIVE]** | Single-page laminated pre-flight inspection checklist. |
-| [MCO_1D_addendum_gear_stability.pdf](docs/latest/MCO_1D_addendum_gear_stability.pdf) | **[ACTIVE]** | Engineering analysis on landing gear stance and ground roll stability. |
-| [MCO_1D_engineering_proposal.pdf](docs/latest/MCO_1D_engineering_proposal.pdf) | **[ACTIVE]** | Original engineering design proposal for the MCO-1D prototype. |
-| [drone_engineering_proposal.pdf](docs/latest/drone_engineering_proposal.pdf) | **[ACTIVE]** | Programme proposal and research justification. |
-| [MCO_Flight_Test_Protocol.txt](docs/latest/MCO_Flight_Test_Protocol.txt) | **[ACTIVE]** | Textual flight test cards and sortie profiles. |
-| [MCO_performance.pdf](docs/latest/MCO_performance.pdf) | **[ACTIVE]** | Detailed flight performance calculations (L/D, sink rate, sprint speed). |
-| [MCO_wave_guide_v25.pdf](docs/latest/MCO_wave_guide_v25.pdf) | **[ACTIVE]** | Complete guide to metachronal wave kinematics, phase angles, and wake timing. |
-| [cascade_flapper_performance.pdf](docs/latest/cascade_flapper_performance.pdf) | **[ACTIVE]** | Aerodynamic wind tunnel and computational fluid dynamics analysis of wing cascades. |
-| [gs_command_catalogue.txt](docs/latest/gs_command_catalogue.txt) | **[ACTIVE]** | Exhaustive catalog of all Ground Station prompt commands. |
-| [project_state_template.txt](docs/latest/project_state_template.txt) | **[ACTIVE]** | Legacy project state template. |
-
----
-
-### Historical Archive (`docs/archive/`)
-
-The archive directory contains **66 historical revisions** of BOMs (v1 through v17), Commissioning Manuals (v1 through v24), Operator Manuals (v20 through v24), and early wave guides, preserved for DO-178C engineering provenance.
+| [`firmware/archive/legacy_modules/`](firmware/archive/legacy_modules/) | **[ARCHIVE]** | 14 duplicate/superseded firmware modules (`mco_preflight.py`, `mco_mavlink_bridge.py`, `mco_certification_tools.py`, etc.). |
+| [`scripts/archive/fake_audits/`](scripts/archive/fake_audits/) | **[ARCHIVE]** | 18 quarantined fake FEA/CFD/LEGO/interference scripts that printed hardcoded `CERTIFIED` banners. |
+| [`archive/tests_tautological/`](archive/tests_tautological/) | **[ARCHIVE]** | 47 quarantined tautological dictionary-lookup test suites. |
+| [`archive/ui_claude_artifacts/`](archive/ui_claude_artifacts/) | **[ARCHIVE]** | 5 orphaned React `.jsx` artifacts with no bundler or backend integration. |
+| [`docs/archive/`](docs/archive/) & [`docs/latest/`](docs/latest/) | **[ARCHIVE]** | Historical v1–v25 PDFs, quarantined synthetic CFD reports, and Mark 2 conceptual notes. |

@@ -27,13 +27,13 @@ flowchart LR
 To ensure zero data loss during testing, data collection is supported via two synchronized methods:
 
 1. **Printable Field Worksheets (Longhand Mode)**:
-   Pre-formatted PDF field cards are located in [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/):
-   * **Complete Binder (8 Pages)**: [`MCO-1D_Mark1_All_Worksheets_Binder.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_Mark1_All_Worksheets_Binder.pdf)
-   * **WS-00 (2 Pages)**: [`MCO-1D_WS00_As_Built_Physical_Inspection.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS00_As_Built_Physical_Inspection.pdf)
-   * **WS-01 (1 Page)**: [`MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
-   * **WS-02 (1 Page)**: [`MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
-   * **WS-03 (1 Page)**: [`MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
-   * **WS-04 (2 Pages)**: [`MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
+   Pre-formatted PDF field cards are located in [`worksheets/`](worksheets/):
+   * **Complete Binder (8 Pages)**: [`MCO-1D_Mark1_All_Worksheets_Binder.pdf`](worksheets/MCO-1D_Mark1_All_Worksheets_Binder.pdf)
+   * **WS-00 (2 Pages)**: [`MCO-1D_WS00_As_Built_Physical_Inspection.pdf`](worksheets/MCO-1D_WS00_As_Built_Physical_Inspection.pdf)
+   * **WS-01 (1 Page)**: [`MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
+   * **WS-02 (1 Page)**: [`MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
+   * **WS-03 (1 Page)**: [`MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
+   * **WS-04 (2 Pages)**: [`MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
    * *Procedure*: Print on Letter paper, complete on clipboard during testing in ink, photograph or scan, and paste directly into the engineering chat.
 
 2. **Automated Onboard Telemetry Logging (Vehicle-Generated Mode)**:
@@ -85,13 +85,13 @@ Or execute remotely via Ground Station:
 {"cmd": "tc01_start"}
 ```
 
-For formal pre-flight bench certification under the Path 2 physical calibration baseline, execute the comprehensive automated laboratory bench qualification harness:
+For pre-flight SITL bench checkout, execute the automated harness:
 ```bash
 python3 scripts/run_tc01_bench_checkout.py
 ```
 
-This harness executes 10 rigorous physics and safety validation gates:
-1. **Static Thrust Verification**: $T_{\text{static}} \ge 35.0\,\text{N}$ at $3.0\,\text{Hz}$ ($37.13\,\text{N}$ demonstrated).
+This harness executes 10 SITL physics and safety validation gates:
+1. **Static Thrust Verification**: $T_{\text{static}} \ge 35.0\,\text{N}$ at $3.0\,\text{Hz}$ ($37.13\,\text{N}$ predicted).
 2. **Active Electrical Power Model**: Flapping motor power factor $\text{PF} = 0.127$, reconciling active battery draw $\le 280\,\text{W}$ with back-EMF recovery.
 3. **ODrive Kinematic Velocity Ceiling**: Motor shaft velocity limit verified at $40.0\,\text{turns/s}$ ($2400\,\text{RPM}$), providing $14.3\%$ safety margin over $3.5\,\text{Hz}$ flapping on 10:1 capstan.
 4. **Loaded Servo Slew Derating**: Evaluates $\Omega_{\text{eff}} = \Omega_0 \cdot \max(0.35, 1 - M_h / M_{\text{stall}})$, verifying minimum $35\%$ control rate floor under peak aero hinge moments.
@@ -100,11 +100,11 @@ This harness executes 10 rigorous physics and safety validation gates:
 7. **Boyd $P_s$ Energy Climb Envelope**: Enforces steady climb ceiling $V_z \le 2.2\,\text{m/s}$ and climb angle $\gamma \le 15.5^\circ$, correctly classifying zoom surges.
 8. **CF-1 Clap-Fling Safety Dispatcher**: Confirms `run_cf1_clap_fling` enforces speed ceiling ($V_\infty \le 10\,\text{m/s}$) and time cutoff ($1.5\,\text{s}$).
 9. **Mountain Terrain Trigger Detection**: Confirms `detect_mountain_terrain_trigger` flags high-altitude / high-climb / terrain-slope flight regimes (`H-61`).
-10. **Hypothesis Tie-Break Exploration Balance**: Verifies `eval_counts` balancing across all 258 hypotheses during candidate arbitration.
+10. **Hypothesis Tie-Break Exploration Balance**: Verifies `eval_counts` balancing across hypotheses during candidate arbitration.
 
-Formal certification output is recorded to [`knowledge/tc01_bench_certification.json`](file:///Users/drbell/Code/flight/knowledge/tc01_bench_certification.json) and documented in [`docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_TC01_Bench_Certification_Report.md). All 10 gates must read `PASS` prior to proceeding to TC-02.
+SITL checkout output is recorded to `knowledge/tc01_bench_certification.json`. Physical load-cell bench signoff must be recorded on the field worksheet prior to proceeding to TC-02.
 
-* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
+* **Printable Field Worksheet**: [`worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf`](worksheets/MCO-1D_WS01_TC01_Ground_Bench_Test.pdf)
 * **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 1`
 
 ---
@@ -123,7 +123,7 @@ Establish vertical force balance and attitude stabilization authority while secu
 
 ### 3.3 Test Execution & Worksheets
 * **Automated Test Run**: `python3 firmware/mco_test_cards.py --tc 2` (or GS `tc02_start`).
-* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
+* **Printable Field Worksheet**: [`worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf`](worksheets/MCO-1D_WS02_TC02_Tethered_Lift_Hover.pdf)
 * **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 2`
 
 ---
@@ -149,7 +149,7 @@ Where $b = 1.584\text{ m}$ (total span) and $f$ is flapping frequency.
 
 ### 4.3 Test Execution & Worksheets
 * **Automated Test Run**: `python3 firmware/mco_test_cards.py --tc 3` (or GS `tc03_start`).
-* **Printable Field Worksheet**: [`docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
+* **Printable Field Worksheet**: [`worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf`](worksheets/MCO-1D_WS03_TC03_Advance_Ratio_Truck_Sweep.pdf)
 * **Automated Data Export**: `python3 scripts/export_test_card_telemetry.py --tc 3`
 
 ---
@@ -160,7 +160,7 @@ Where $b = 1.584\text{ m}$ (total span) and $f$ is flapping frequency.
 1. TC-01, TC-02, and TC-03 certified complete with zero open anomalies.
 2. Weight and balance certified with battery sled locked at **250 mm (26.5% MAC)**.
 3. Ambient surface winds $< 3.0\text{ m/s}$ aligned within $15^\circ$ of runway heading.
-4. **Printable Field Worksheet Ready on Clipboard**: [`docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
+4. **Printable Field Worksheet Ready on Clipboard**: [`worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf`](worksheets/MCO-1D_WS04_TC04_Free_Flight_STOL_Expansion.pdf)
 
 ### 5.2 Flight Profile & Maneuver Sequence
 

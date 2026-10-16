@@ -51,6 +51,14 @@ FAA-H-8083-1B CONNECTIONS:
 
 import math
 
+from mco_config import (
+    CG_AFT_LIMIT_PCT_MAC,
+    CG_FWD_LIMIT_PCT_MAC,
+    DESIGN_MASS_KG,
+    LEMAC_MM,
+    MAC_MM,
+)
+
 
 # =================================================================
 # PHYSICAL CONSTANTS AND PLACEHOLDER COMPONENT TABLE
@@ -59,15 +67,6 @@ import math
 # Datum: nose tip of fuselage. All arms measured aft = positive.
 # REPLACE all values marked # CAL: with measured data at first flight.
 DATUM_DESCRIPTION = "Nose tip of fuselage"
-
-# Mean Aerodynamic Chord position (Compact Delta Frame: [95, 275, 455, 635]mm)
-LEMAC_MM    = 365.0   # mm aft of datum (mean leading edge of 4 tandem stations)
-MAC_MM      = 165.0   # mm (= S1223 CHORD_MM, locked specification)
-
-# CG envelope limits (% MAC — referenced to LEMAC = 365.0mm, Neutral Point = 406.3mm)
-# Static Margin +5% to +20% corresponds to -10.0% to +20.0% MAC relative to LEMAC (348.5mm to 398.0mm)
-CG_FWD_LIMIT_PCT_MAC  = -10.0 # % MAC forward limit (348.5 mm aft of datum)
-CG_AFT_LIMIT_PCT_MAC  =  20.0 # % MAC aft limit (398.0 mm aft of datum)
 
 # Compensation authority limits
 CG_COMP_AUTHORITY_MM  = 30.0  # mm — max CG offset we can compensate
@@ -602,11 +601,11 @@ class DynamicPayloadEstimator:
     Uses aerodynamic lift-to-power balance and longitudinal pitch trim torque
     to infer cargo mass (kg) and CG displacement (mm) within <250ms of loading/drop.
     """
-    EMPTY_MASS_KG       = 5.687   # As-built operational empty MTOW (kg)
+    EMPTY_MASS_KG       = DESIGN_MASS_KG
     DESIGN_LOAD_FACTOR  = 3.50    # Clean airframe max positive g-load limit
     INNOVATION_THRESHOLD= 0.35    # Threshold (kg) to detect instantaneous drop/pickup
 
-    def __init__(self, empty_mass_kg=5.687):
+    def __init__(self, empty_mass_kg=DESIGN_MASS_KG):
         self.empty_mass_kg    = empty_mass_kg
         self._payload_kg      = 0.0
         self._delta_cg_mm     = 0.0

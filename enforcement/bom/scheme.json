@@ -1,0 +1,43 @@
+{
+  "label": "Research pick for Willem (recommended synthesis). Not an ASME or ISO scheme.",
+  "part_pattern": "^SD-[MAEPD]-\\d{4}$",
+  "categories": {
+    "M": "mechanical part",
+    "A": "assembly",
+    "E": "electrical",
+    "P": "purchased-modified",
+    "D": "document"
+  },
+  "revision_pattern": "^(-|[A-HJ-NPRTUVWY]{1,3})$",
+  "revision_note": "Letters I, O, Q, S, X, and Z are excluded. The gdt-drawings pick uses this set. Initial revision is -.",
+  "forbidden_in_part_no": ["/", "\\"],
+  "columns": [
+    "level",
+    "part_no",
+    "rev",
+    "description",
+    "qty",
+    "uom",
+    "make_buy",
+    "material",
+    "source",
+    "cad_file"
+  ],
+  "lfs_max_bytes": 52428800,
+  "warn_bytes": 1073741824,
+  "fail_bytes": 5368709120,
+  "cad_extensions": [".sldprt", ".sldasm", ".f3d", ".f3z", ".stl", ".step"],
+  "cad_text_extensions": [
+    ".kicad_sch",
+    ".kicad_pcb",
+    ".kicad_pro",
+    ".kicad_sym",
+    ".kicad_mod"
+  ],
+  "cad_text_note": "KiCad source files are text. Git diffs them. Do not store them in Git LFS.",
+  "junk_suffixes": [".bak", ".lck", ".kicad_prl"],
+  "junk_names": ["fp-info-cache", "#auto_saved_files#"],
+  "junk_prefixes": ["_autosave-"],
+  "junk_dir_names": ["autosave", ".history"],
+  "junk_dir_suffixes": ["-backups"]
+}

@@ -97,7 +97,7 @@ All 258 aerodynamic hypotheses operate **completely invisibly** beneath the cont
 
 ### 3.1 Pre-Flight Inspection & Calibration Handoff
 1. **Physical Calibration Sheet Verification (Step 0 - MANDATORY)**:
-   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) has all 8 fields (`FIG-01` through `FIG-08`) completed and signed.
+   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) has all 8 fields (`FIG-01` through `FIG-08`) completed and signed.
    * Confirm the as-built flying mass (`FIG-01`, target $< 5,600\text{ g}$, e.g. $3,670\text{--}4,800\text{ g}$) is loaded into firmware.
    * Verify sector wheel travel checks out to full $200.0^\circ$ physical arc ($\pm 100.0^\circ$), with dynamic stroke ceiling clamped to $\pm 24.0^\circ$ sprint / $\pm 18.0^\circ\text{--}22.0^\circ$ cruise.
 2. **Mechanical Walkaround**:
@@ -194,7 +194,7 @@ The Ground Station console directly controls automated test card execution and t
     ```bash
     python3 scripts/export_test_card_telemetry.py [--tc 1|2|3|4|all] [--json]
     ```
-    This outputs the formatted table corresponding to printable worksheets [`docs/mark1/worksheets/`](file:///Users/drbell/Code/flight/docs/mark1/worksheets/), providing immediate verification without manual pen recording during test sequences.
+    This outputs the formatted table corresponding to printable worksheets [`worksheets/`](worksheets/), providing immediate verification without manual pen recording during test sequences.
 
 ---
 

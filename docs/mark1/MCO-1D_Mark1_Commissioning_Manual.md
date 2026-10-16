@@ -19,7 +19,7 @@ Commissioning the **MCO-1D Mark 1** involves high-torque oscillating drivetrains
 
 ### 1.2 Initial Power-Up Checklist
 1. **Physical Calibration Sheet Verification (MANDATORY GATE)**:
-   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) is filled out and signed for all 8 figures (`FIG-01` through `FIG-08`).
+   * Verify that [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) is filled out and signed for all 8 figures (`FIG-01` through `FIG-08`).
    * Confirm the as-built flying mass (`FIG-01`, target $< 5,600\text{ g}$, e.g. $4,800\text{--}5,300\text{ g}$) is loaded into firmware.
    * Internal 6061-T6 aluminum spar crush ferrules epoxied (PHY-02).
    * 48-hour Dyneema SK99 creep bedding complete; re-tensioned to $180\,\text{N} \pm 5\,\text{N}$ with witness marks (PHY-01 / FIG-06).

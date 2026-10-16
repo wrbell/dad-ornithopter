@@ -41,22 +41,29 @@ import sys
 import time
 import argparse
 
+from mco_config import (
+    CAN_BITRATE_BPS,
+    CAN_NODE_IDS,
+    MOTOR_CURRENT_LIMIT_A,
+    MOTOR_KV as CONFIG_MOTOR_KV,
+    MOTOR_POLE_PAIRS,
+)
+
 # ── MCO-1D motor parameters (GoolRC 5010-14 360KV) ──────────────────────────
-POLE_PAIRS          = 7        # 12N14P: 14 magnetic poles / 2 = 7 pole pairs
-MOTOR_KV            = 200      # Option A T-Motor MN5008 (or 360 for GoolRC)
-CURRENT_LIM         = 25.0     # A per motor soft limit
+POLE_PAIRS          = MOTOR_POLE_PAIRS
+MOTOR_KV            = CONFIG_MOTOR_KV
+CURRENT_LIM         = MOTOR_CURRENT_LIMIT_A
 CURRENT_LIM_MARGIN  = 10.0     # A headroom above limit (35A hard max)
 CALIBRATION_CURRENT = 10.0     # A used during motor calibration
 VEL_LIMIT           = 40.0     # turns/s (rev/s) motor shaft — ODrive S1 native units (40 rps = 251.3 rad/s = 2400 RPM)
-                               # At 3.5 Hz sprint (θ0=±34°) × 10:1 ratio = 20.8 rps peak (or 30.7 rps at 2.2 Hz ±80°). 40 rps gives ~30-90% headroom.
 BANDWIDTH           = 1000.0   # Hz — velocity controller bandwidth
 BRAKE_RESISTANCE    = 2.0      # Ω — the included brake resistor per S1
 DC_BUS_OVERVOLTAGE  = 28.5     # V — overvoltage trip level for 6S LiPo with regen absorption
 WATCHDOG_TIMEOUT    = 0.100    # s — 100ms CAN communication loss watchdog
-CAN_BAUD            = 1_000_000 # 1 Mbps standard CAN (not CAN-FD for now)
+CAN_BAUD            = CAN_BITRATE_BPS
 
 # Node IDs for all 8 S1 boards
-ALL_NODES = list(range(8))   # 0 through 7
+ALL_NODES = list(CAN_NODE_IDS)
 
 WING_NAMES = [
     'W1 port', 'W1 stbd',

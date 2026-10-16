@@ -8,19 +8,11 @@
 
 ## 1. Quick-Start Slicing Recommendation
 
-- **Option A1 (Production Slicing — PA12-CF Carbon Nylon)**:
-  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` directly into PrusaSlicer, OrcaSlicer, or Bambu Studio.
-  - **Profile**: `pa12cf_structural` (`cad/slicer_profiles/mco_pa12cf_structural_coreone.ini`)
-  - **Estimated Print Time**: ~18 hrs (0.16mm layer height, 6 walls, 60% Gyroid).
-  - **Estimated Filament Usage**: ~155g of PA12-CF.
-  - **CLI Command**: `./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pa12cf_structural`
-
-- **Option A2 (Rapid Fit-Check Prototyping — Standard PLA)**:
-  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` (or pre-sliced `cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf`).
-  - **Profile**: `pla_prototype` (`cad/slicer_profiles/mco_pla_prototype_coreone.ini`)
-  - **Estimated Print Time**: ~11 hrs 27 mins (0.20mm layer height, 4 walls, 25% Gyroid).
-  - **Estimated Filament Usage**: ~129g of PLA (Nozzle: 230°C / Bed: 60°C).
-  - **CLI Command**: `./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pla_prototype`
+- **Option A (Fast Single-Bed Print — 100% Structural Parts)**:
+  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` directly into OrcaSlicer / Bambu Studio / PrusaSlicer.
+  Every structural part is pre-oriented flat on the build plate for optimal layer bonding and zero/minimal support.
+  - **Estimated Print Time**: ~5 hrs 30 mins (at 0.16mm layer height).
+  - **Estimated Filament Usage**: ~108g of PA12-CF.
 
 - **Option B (Individual Part Printing)**:
   Import individual `.stl` files from this folder according to the slicing parameters in the table below.
@@ -57,21 +49,6 @@
   - `PLATE_01` is pre-oriented flat to require **no supports** on functional faces.
   - Tree supports (organic) are only needed for the small underside clevis gap on the collar.
 
-### 3.2 Slicer Parameters for PLA Prototype Fit-Check (`pla_prototype`)
-
-- **Profile File**: [`cad/slicer_profiles/mco_pla_prototype_coreone.ini`](file:///Users/drbell/Code/flight/cad/slicer_profiles/mco_pla_prototype_coreone.ini)
-- **Target Filament**: Prusament PLA, Hatchbox PLA, eSUN PLA+ (1.75 mm).
-- **Layer Height**: 0.20 mm (First Layer: 0.20 mm).
-- **Walls / Perimeters**: 4 perimeters.
-- **Infill**: 25% Gyroid (monotonic top/bottom).
-- **Nozzle Temperature**: 215°C – 230°C.
-- **Bed Temperature**: 60°C (Smooth PEI or Satin sheet).
-- **Chamber Temperature**: Ambient (open door or unheated).
-- **Cooling Fan**: 100% active from layer 3 onward.
-- **Total Print Time**: 11 hrs 27 mins.
-- **Filament Consumption**: 129.3 g (104.3 cm³ / 43.3 m).
-- **Deliverables**: Pre-sliced project [`cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf`](file:///Users/drbell/Code/flight/cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf) & G-code ready in `/Users/drbell/Downloads/`.
-
 ---
 
 ## 4. Hardware Checklist to Complete 1 Full Wing Root Assembly
@@ -79,28 +56,27 @@
 | Component | Specification | Quantity | Mechanical Location |
 | :--- | :--- | :---: | :--- |
 | **Main Motor** | GoolRC 5010 360KV BLDC (Ø50mm, 4mm shaft) | 1 | Powertrain Stand (slotted mount) |
-| **Flapping Controller** | ODrive Micro CAN-FD Controller | 1 | Stand Undercarriage Pocket |
-| **Magnetic Encoder** | Diametral Neodymium Magnet Ø6.35 × 2.5 mm | 1 | Motor Shaft Tail (1.50mm air gap to MA702) |
-| **Wrist Servos** | AGFRC B24CLM Micro Servos (Titanium Gears) | 2 | Stagecoach Sector Drum Side Bays |
-| **Wing Spar Tube** | 3K Woven Carbon Fiber Tube Ø10.0 × 8.0 mm | 1 | Wrist Gimbal Socket (500mm length) |
-| **Fuselage Spine** | 3K Pultruded Carbon Fiber Tube Ø20.0 × 17.0 mm | 1 | Central Fuselage Spine |
+| **Flapping Controller** | ODrive S1 CAN-FD Controller | 1 | Stand Undercarriage Pocket |
+| **Magnetic Encoder** | Diametral Neodymium Magnet Ø6.35 × 2.5 mm | 1 | Motor Shaft Tail (1.50mm air gap) |
+| **Wrist Servos** | AGFRC B24CLM / B44BLS Servos | 2 | Stagecoach Sector Drum Side Bays |
+| **Wing Spar Tube** | 3K Woven Carbon Fiber Tube Ø10.0 × 8.0 mm | 1 | Wrist Gimbal Socket |
+| **Fuselage Spine** | 3K Roll-Wrapped Carbon Fiber Tube Ø20.0 × 17.0 mm | 1 | Central Fuselage Spine |
 | **Flapping Bearings** | 6800-2RS Deep-Groove Bearings (10 × 19 × 5 mm) | 2 | Stagecoach Drum Hub & Tower Seat |
 | **Top Pinion Bearing** | 688-2RS Deep-Groove Bearing (8 × 16 × 5 mm) | 1 | Top Brace Pinion Pocket |
 | **Gimbal Bearings** | MR74-2RS Miniature Bearings (4 × 7 × 2.5 mm) | 2 | Differential Yoke Pivot |
 | **Flapping Axle** | Grade 5 Titanium Dead Axle Pin Ø10.0 × 44.0 mm | 1 | Main Pivot Centerline |
 | **Wrist Cross-Axle** | Ground Stainless Steel Pin Ø4.0 × 26.0 mm | 1 | Differential Gimbal Pitch Axis |
-| **Capstan Cable** | Braided Dyneema Line Ø0.75 mm (180 lb test) | 1.2 m | 10:1 Helical Capstan Drive Wrap |
+| **Capstan Cable** | Braided Dyneema SK99 Line Ø0.80 mm | 1.2 m | 10:1 Helical Capstan Drive Wrap |
 | **Fasteners (Clamping)** | M3 × 16 mm Socket Cap Screws (Grade 12.9) | 4 | Fuselage Collar Split Pinch Ears |
 | **Fasteners (Motor)** | M3 × 8 mm Button Head Screws (Grade 12.9) | 4 | GoolRC 5010 Motor Mount Slots |
 | **Fasteners (Top Brace)**| M3 × 12 mm Socket Cap Screws | 2 | Stand Tie-Down Struts |
 | **Fasteners (Cable Clamp)**| M3 × 6 mm Low-Profile Screws & Washers | 2 | Sector Drum Dyneema Clamps |
-| **Fasteners (ODrive)** | M3 × 6 mm Button Head Screws | 4 | ODrive Micro Undercarriage Standoffs |
 
 ---
 
 ## 5. Companion Installation Manuals
 
-- Complete 2-page publication-grade PDF assembly manual:  
-  `docs/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf` (also in user Downloads).
+- Complete 2-page PDF assembly manual:  
+  `docs/mark1/MCO-1D_Hierarchical_Exploded_Installation_Guide.pdf`
 - V10 Powertrain & ODrive installation guide:  
-  `docs/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf` (also in user Downloads).
+  `docs/mark1/MCO-1D_V10_Powertrain_Mount_Installation_Guide.pdf`

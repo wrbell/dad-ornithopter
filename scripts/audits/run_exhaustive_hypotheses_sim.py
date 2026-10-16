@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 # Add project root and firmware to path
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / 'firmware'))
 
@@ -34,12 +34,13 @@ import firmware.mco_wave_library as wl
 import firmware.mco_intent_control as ic
 import firmware.mco_flight_governor as fg
 import firmware.mco_performance_model as pm
+from firmware.mco_config import MCOConfig
 
 
 class HypothesisFlightAuditor:
     def __init__(self):
         self.dt = 0.02  # 50 Hz
-        self.mass_kg = 5.687
+        self.mass_kg = MCOConfig.MASS_KG
         self.g = 9.80665
         self.weight_n = self.mass_kg * self.g
         self.fcc = wl.MCOFlightController()

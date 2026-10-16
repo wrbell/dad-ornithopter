@@ -25,7 +25,7 @@ import math
 import io
 
 # Ensure firmware path is present
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'firmware')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'firmware')))
 
 # Suppress import noise
 _old_stdout = sys.stdout
@@ -34,13 +34,14 @@ import mco_intent_control as ic
 import mco_advanced_physics as ap
 import mco_wave_library as wl
 import mco_performance_model as pm
+from mco_config import MCOConfig
 sys.stdout = _old_stdout
 
 
 class FullEnvelopeMissionSimulator:
     def __init__(self):
         self.dt = 0.02  # 50 Hz
-        self.mass_kg = 5.687
+        self.mass_kg = MCOConfig.MASS_KG
         self.g = 9.80665
         self.weight_n = self.mass_kg * self.g
         self.rho = 1.225

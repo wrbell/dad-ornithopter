@@ -34,13 +34,27 @@ import math
 import os
 import datetime
 
+from mco_config import (
+    ASPECT_RATIO_EFF,
+    BATTERY_NOMINAL_V,
+    CD_0,
+    CHORD_M as CONFIG_CHORD_M,
+    CL_MAX as CONFIG_CL_MAX,
+    DESIGN_MASS_KG,
+    GEAR_RATIO,
+    MOTOR_KV,
+    OSWALD_E,
+    RHO_SL,
+    TOTAL_WING_AREA_M2,
+    WING_SPAN_M,
+)
 
 # ─────────────────────────────────────────────────────────────────
-# PHYSICAL CONSTANTS  (unchanged from original)
+# PHYSICAL CONSTANTS  (loaded from mco_config.py)
 # ─────────────────────────────────────────────────────────────────
-RHO          = 1.225
+RHO          = RHO_SL
 G            = 9.81
-MTOW_KG      = 3.417  # Calibrated Mark 1 AUW (was 5.687 kg)
+MTOW_KG      = DESIGN_MASS_KG
 
 def atmospheric_density(altitude_m=0.0, temp_c=15.0):
     """
@@ -57,20 +71,20 @@ def atmospheric_density(altitude_m=0.0, temp_c=15.0):
     rho = (P0 / (R_spec * T0)) * ((T / T0) ** (9.80665 / (R_spec * L) - 1.0))
     return max(0.1, min(round(rho, 4), 1.4))
 
-CHORD_M      = 0.165
-SEMI_SPANS_M = {1: 1.000, 2: 1.000, 3: 1.000, 4: 1.000}
-AR           = 12.12
-E_OSWALD     = 0.92
-S_TOTAL_M2   = 1.320
-CL_MAX       = 1.60
-CD0          = 0.022
+CHORD_M      = CONFIG_CHORD_M
+SEMI_SPANS_M = {1: WING_SPAN_M, 2: WING_SPAN_M, 3: WING_SPAN_M, 4: WING_SPAN_M}
+AR           = ASPECT_RATIO_EFF
+E_OSWALD     = OSWALD_E
+S_TOTAL_M2   = TOTAL_WING_AREA_M2
+CL_MAX       = CONFIG_CL_MAX
+CD0          = CD_0
 
-REDUCER_RATIO = 10
-KV           = 360.0  # GoolRC 5010-14 360KV outrunner
+REDUCER_RATIO = int(GEAR_RATIO)
+KV           = float(MOTOR_KV)
 KT           = 60 / (2 * math.pi * KV)
 RI           = 0.08
-VBUS         = 22.2
-I_WING       = 0.0240  # kg*m^2 (1.0m wing panel + tip moment of inertia)
+VBUS         = BATTERY_NOMINAL_V
+I_WING       = 0.0240  # kg*m^2 (wing panel + tip moment of inertia)
 PF_FLAPPING  = 0.127   # Flapping power factor: active real shaft work / apparent voltamperes
 
 # ─────────────────────────────────────────────────────────────────

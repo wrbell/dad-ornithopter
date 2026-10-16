@@ -37,12 +37,10 @@ CARD_BG      = colors.HexColor("#ffffff")
 WARN_AMBER   = colors.HexColor("#d97706")   # Amber 600
 SUCCESS_GRN  = colors.HexColor("#16a34a")   # Green 600
 
-DOC_OUT = "docs/MCO-1D_V9_Wrist_Assembly_Guide.pdf"
-ARTIFACT_DIR = "/Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84"
-ART_OUT = os.path.join(ARTIFACT_DIR, "MCO-1D_V9_Wrist_Assembly_Guide.pdf")
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DOC_OUT = os.path.join(REPO_ROOT, "docs", "mark1", "MCO-1D_V10_Stagecoach_Wrist_Assembly_Guide.pdf")
 
-os.makedirs("docs", exist_ok=True)
-os.makedirs(ARTIFACT_DIR, exist_ok=True)
+os.makedirs(os.path.dirname(DOC_OUT), exist_ok=True)
 
 class NumberedCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
@@ -162,31 +160,31 @@ def build_pdf():
     # =========================================================================
     # PAGE 1: TITLE, EXPLODED VIEW & 3D PRINT BILL OF MATERIALS
     # =========================================================================
-    story.append(Paragraph("<a href='file:///Users/drbell/Code/flight/docs/MCO-1D_V9_Wrist_Assembly_Guide.pdf'><font color='#0f172a'>MCO-1D ROBOTIC WING ROOT WRIST ASSEMBLY GUIDE</font></a>", title_style))
-    story.append(Paragraph("V10 Stage-Coach Architecture: 10:1 Drivetrain, 25.7g Hollow Spoke Drum, Open Servos &amp; Quick-Swap Bevels | <a href='file:///Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84/v10_stagecoach_topological_optimization_audit.md'><font color='#0284c7'><u>Read Stage-Coach TO Audit</u></font></a>", subtitle_style))
+    story.append(Paragraph("<font color='#0f172a'>MCO-1D ROBOTIC WING ROOT WRIST ASSEMBLY GUIDE</font>", title_style))
+    story.append(Paragraph("V10 Stage-Coach Architecture: 10:1 Drivetrain, 25.7g Hollow Spoke Drum, Open Servos &amp; Quick-Swap Bevels", subtitle_style))
     story.append(Spacer(1, 4))
 
     # Exploded Diagram + Visual Callout Table (Side-by-Side)
-    exploded_img_path = "cad/manufactured/renders_v9/v9_10_exploded_assembly_view.png"
-    photo_gear_path = os.path.join(ARTIFACT_DIR, "prototype_3dprint_bevel_1791990036863.jpg")
-    photo_fairing_path = os.path.join(ARTIFACT_DIR, "faired_wrist_naca0018_1791995071448.jpg")
-    photo_stagecoach_path = os.path.join(ARTIFACT_DIR, "stagecoach_skeleton_wheel_1792063295623.jpg")
+    exploded_img_path = os.path.join(REPO_ROOT, "cad/manufactured/renders_v9/v9_10_exploded_assembly_view.png")
+    photo_gear_path = os.path.join(REPO_ROOT, "cad/manufactured/renders_v9/v9_08_quickswap_bevel_gear_zoom.png")
+    photo_fairing_path = os.path.join(REPO_ROOT, "cad/manufactured/renders_v9/v9_02_isometric_with_fairing_translucent.png")
+    photo_stagecoach_path = os.path.join(REPO_ROOT, "cad/manufactured/renders_v10/v10_01_isometric_stagecoach_drum.png")
 
     exploded_img = Image(exploded_img_path, width=4.6*inch, height=2.58*inch)
     
-    # Legend Table next to exploded view with live hyperlinks
+    # Legend Table next to exploded view
     legend_data = [
-        [Paragraph("<b>CALLOUT LEGEND</b>", table_cell_bold), Paragraph("<b>SUBSYSTEM &amp; HYPERLINK</b>", table_cell_bold)],
-        [Paragraph("<b>[1]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_fairing.stl'><font color='#0284c7'><u>NACA 0018 Fairing (0.4mm vase)</u></font></a>", table_cell)],
+        [Paragraph("<b>CALLOUT LEGEND</b>", table_cell_bold), Paragraph("<b>SUBSYSTEM &amp; PART</b>", table_cell_bold)],
+        [Paragraph("<b>[1]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>NACA 0018 Fairing (0.4mm vase)</u></font>", table_cell)],
         [Paragraph("<b>[2]</b>", table_cell_bold), Paragraph("<a href='https://agfrc.com'><font color='#0284c7'><u>Dual AGFRC B24CLM (7 kg·cm)</u></font></a>", table_cell)],
-        [Paragraph("<b>[3]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.stl'><font color='#0284c7'><u>Dual 6800-2RS Bearings (10x19x5)</u></font></a>", table_cell)],
-        [Paragraph("<b>[4]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.stl'><font color='#0284c7'><u>Stage-Coach Drum (25.7g)</u></font></a>", table_cell)],
-        [Paragraph("<b>[5]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl'><font color='#0284c7'><u>Diff Gimbal Yoke &amp; Collar</u></font></a>", table_cell)],
-        [Paragraph("<b>[6]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#0284c7'><u>3x Quick-Swap Gears (m=1.0)</u></font></a>", table_cell)],
-        [Paragraph("<b>[7]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl'><font color='#0284c7'><u>Ø4x30mm Steel Dowel Axle</u></font></a>", table_cell)],
-        [Paragraph("<b>[8]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_spar.stl'><font color='#0284c7'><u>Ø10mm Carbon Wing Spar</u></font></a>", table_cell)],
-        [Paragraph("<b>[9]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_stepped_pinion_assembly.stl'><font color='#0284c7'><u>Stepped Pinion Drum / 5010</u></font></a>", table_cell)],
-        [Paragraph("<b>[10]</b>", table_cell_bold), Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.stl'><font color='#0284c7'><u>0.75mm Dyneema SK75 Line</u></font></a>", table_cell)]
+        [Paragraph("<b>[3]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Dual 6800-2RS Bearings (10x19x5)</u></font>", table_cell)],
+        [Paragraph("<b>[4]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Stage-Coach Drum (25.7g)</u></font>", table_cell)],
+        [Paragraph("<b>[5]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Diff Gimbal Yoke &amp; Collar</u></font>", table_cell)],
+        [Paragraph("<b>[6]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>3x Quick-Swap Gears (m=1.0)</u></font>", table_cell)],
+        [Paragraph("<b>[7]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Ø4x30mm Steel Dowel Axle</u></font>", table_cell)],
+        [Paragraph("<b>[8]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Ø10mm Carbon Wing Spar</u></font>", table_cell)],
+        [Paragraph("<b>[9]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>Stepped Pinion Drum / 5010</u></font>", table_cell)],
+        [Paragraph("<b>[10]</b>", table_cell_bold), Paragraph("<font color='#0284c7'><u>0.75mm Dyneema SK75 Line</u></font>", table_cell)]
     ]
     t_legend = Table(legend_data, colWidths=[0.55*inch, 2.05*inch])
     t_legend.setStyle(TableStyle([
@@ -210,7 +208,7 @@ def build_pdf():
     story.append(t_top)
     story.append(Spacer(1, 6))
 
-    # SECTION 1: 3D PRINTING MANUFACTURING BOM WITH LIVE LINKS
+    # SECTION 1: 3D PRINTING MANUFACTURING BOM
     story.append(Paragraph("1. 3D PRINT MANUFACTURING SPECIFICATIONS &amp; BOM (PER WING ROOT)", section_h1))
     
     bom_data = [
@@ -224,7 +222,7 @@ def build_pdf():
             Paragraph("<b>Unit Cost</b>", table_cell_bold)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.stl'><font color='#0284c7'><b><u>v10_stagecoach_drum</u></b></font></a><br/><a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.stl'><font color='#0284c7'>[STL]</font></a> <a href='file:///Users/drbell/Code/flight/cad/manufactured/v10_stagecoach_sector_drum.step'><font color='#64748b'>[STEP]</font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><b><u>v10_stagecoach_drum</u></b></font><br/><font color='#0284c7'>[STL]</font> <font color='#64748b'>[STEP]</font>", table_cell),
             Paragraph("PA12-CF / PA6-CF", table_cell),
             Paragraph("1x", table_cell),
             Paragraph("0.4mm / 0.16mm", table_cell),
@@ -233,7 +231,7 @@ def build_pdf():
             Paragraph("~$1.15", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#0284c7'><b><u>v9_quickswap_bevel_gear</u></b></font></a><br/><a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#0284c7'>[STL]</font></a> <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.step'><font color='#64748b'>[STEP]</font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><b><u>v9_quickswap_bevel_gear</u></b></font><br/><font color='#0284c7'>[STL]</font> <font color='#64748b'>[STEP]</font>", table_cell),
             Paragraph("PA-CF or Tough Resin", table_cell),
             Paragraph("3x", table_cell),
             Paragraph("0.4mm / 0.12mm (35µm)", table_cell),
@@ -242,7 +240,7 @@ def build_pdf():
             Paragraph("<b>$0.20 (set)</b>", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl'><font color='#0284c7'><b><u>v9_diff_gimbal_yoke</u></b></font></a><br/><a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl'><font color='#0284c7'>[STL]</font></a> <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.step'><font color='#64748b'>[STEP]</font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><b><u>v9_diff_gimbal_yoke</u></b></font><br/><font color='#0284c7'>[STL]</font> <font color='#64748b'>[STEP]</font>", table_cell),
             Paragraph("PA12-CF or PET-CF", table_cell),
             Paragraph("1x", table_cell),
             Paragraph("0.4mm / 0.12mm", table_cell),
@@ -251,7 +249,7 @@ def build_pdf():
             Paragraph("~$0.37", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_fairing.stl'><font color='#0284c7'><b><u>v9_topological_fairing</u></b></font></a><br/><a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_fairing.stl'><font color='#0284c7'>[STL]</font></a> <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_fairing.step'><font color='#64748b'>[STEP]</font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><b><u>v9_topological_fairing</u></b></font><br/><font color='#0284c7'>[STL]</font> <font color='#64748b'>[STEP]</font>", table_cell),
             Paragraph("Foaming LW-PLA", table_cell),
             Paragraph("1x", table_cell),
             Paragraph("0.4mm / 0.20mm", table_cell),
@@ -260,7 +258,7 @@ def build_pdf():
             Paragraph("~$0.25", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_stepped_pinion_assembly.stl'><font color='#0284c7'><b><u>v9_stepped_pinion</u></b></font></a><br/><a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_stepped_pinion_assembly.stl'><font color='#0284c7'>[STL]</font></a> <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_stepped_pinion_assembly.step'><font color='#64748b'>[STEP]</font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><b><u>v9_stepped_pinion</u></b></font><br/><font color='#0284c7'>[STL]</font> <font color='#64748b'>[STEP]</font>", table_cell),
             Paragraph("High-Temp PA-CF / 6061", table_cell),
             Paragraph("1x", table_cell),
             Paragraph("0.4mm / 0.12mm", table_cell),
@@ -296,13 +294,13 @@ def build_pdf():
             Paragraph("<b>Assembly Function &amp; Torque Spec</b>", table_cell_bold)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_sector_drum.stl'><font color='#0284c7'><u>Flapping Hub Bearings</u></font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><u>Flapping Hub Bearings</u></font>", table_cell),
             Paragraph("6800-2RS (10mm ID x 19mm OD x 5mm W)", table_cell),
             Paragraph("2x", table_cell),
             Paragraph("Dual radial-thrust couple; light press-fit into drum", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl'><font color='#0284c7'><u>Gimbal Cross-Axle</u></font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><u>Gimbal Cross-Axle</u></font>", table_cell),
             Paragraph("Ø4.0mm x 30.0mm Ground Steel Dowel Pin (h6)", table_cell),
             Paragraph("1x", table_cell),
             Paragraph("Carries 4g lift bending &amp; bevel gears; zero flex", table_cell)
@@ -314,13 +312,13 @@ def build_pdf():
             Paragraph("Feathering &amp; sweep differential; hex output spline", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_sector_drum.stl'><font color='#0284c7'><u>Capstan Drive Cable</u></font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><u>Capstan Drive Cable</u></font>", table_cell),
             Paragraph("0.75mm Dyneema SK75/SK99 (12-strand braided)", table_cell),
             Paragraph("~1m", table_cell),
-            Paragraph("D:d = 10.0:1 on Ø7.5mm pinion; 180N pre-tension", table_cell)
+            Paragraph("D:d = 10.0:1 on Ø15.4mm pinion; 180N pre-tension", table_cell)
         ],
         [
-            Paragraph("<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_bevel_wrist_cartridge.stl'><font color='#0284c7'><u>Fastener Assortment</u></font></a>", table_cell),
+            Paragraph("<font color='#0284c7'><u>Fastener Assortment</u></font>", table_cell),
             Paragraph("Grade 12.9 Socket Head Cap Screws", table_cell),
             Paragraph("Kit", table_cell),
             Paragraph("3x M2x8 (gears), 2x M2.5x12 (clamp), 2x M2.5x6 (cable), 1x M3x5 (pinion)", table_cell)
@@ -337,10 +335,10 @@ def build_pdf():
     story.append(t_hw)
     story.append(Spacer(1, 4))
 
-    # Red-Team Slicing Callout Box with Hyperlink
+    # Red-Team Slicing Callout Box
     alert_data = [[
         Paragraph(
-            "<b>CRITICAL RED-TEAM SLICING MANDATE:</b> Quick-swap bevel gears (<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#b45309'><u>v9_quickswap_bevel_gear.stl</u></font></a>) <b>must be sliced with ≥ 5 concentric wall perimeters</b> (or 100% concentric infill). Slicing with grid/rectilinear infill leaves the 5.05mm hex hub corners unsupported and vulnerable to radial wedging burst under 7.0 kg·cm servo stall torque. Pre-treat gear teeth with dry PTFE aerosol or MoS₂ powder before final mesh. <a href='file:///Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84/v9_wrist_adversarial_engineering_audit.md'><font color='#b45309'>[See Audit Section 3]</font></a>",
+            "<b>CRITICAL SLICING MANDATE:</b> Quick-swap bevel gears (<font color='#b45309'><u>v9_quickswap_bevel_gear.stl</u></font>) <b>must be sliced with ≥ 5 concentric wall perimeters</b> (or 100% concentric infill). Slicing with grid/rectilinear infill leaves the 5.05mm hex hub corners unsupported and vulnerable to radial wedging burst under 7.0 kg·cm servo stall torque. Pre-treat gear teeth with dry PTFE aerosol or MoS₂ powder before final mesh.",
             callout_box
         )
     ]]
@@ -358,25 +356,25 @@ def build_pdf():
     story.append(PageBreak())
 
     # =========================================================================
-    # PAGE 2: STEP-BY-STEP PICTORIAL ASSEMBLY SEQUENCE WITH HYPERLINKS
+    # PAGE 2: STEP-BY-STEP PICTORIAL ASSEMBLY SEQUENCE
     # =========================================================================
-    story.append(Paragraph("3. STEP-BY-STEP PICTORIAL BENCH ASSEMBLY SEQUENCE | <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_bevel_wrist_cartridge.step'><font color='#0284c7'><u>[Open Master Cartridge 3D STEP]</u></font></a>", section_h1))
-    story.append(Paragraph("Follow stages 1 through 6 in exact sequence. Click any stage heading or part link to inspect full 3D geometry.", body_style))
+    story.append(Paragraph("3. STEP-BY-STEP PICTORIAL BENCH ASSEMBLY SEQUENCE", section_h1))
+    story.append(Paragraph("Follow stages 1 through 6 in exact sequence.", body_style))
     story.append(Spacer(1, 4))
 
     step_img_w = 1.35 * inch
     step_img_h = 0.85 * inch
 
     img_bench_gear = Image(photo_gear_path, width=step_img_w, height=step_img_h)
-    img_diff_cad = Image("cad/manufactured/renders_v9/v9_09_differential_cartridge_assembly.png", width=step_img_w, height=step_img_h)
-    img_trumpet = Image("cad/manufactured/renders_v10/v10_04_front_elevation_ram_air_vents.png", width=step_img_w, height=step_img_h)
-    img_planform = Image("cad/manufactured/renders_v10/v10_03_top_planform_stagecoach_spokes.png", width=step_img_w, height=step_img_h)
+    img_diff_cad = Image(os.path.join(REPO_ROOT, "cad/manufactured/renders_v9/v9_09_differential_cartridge_assembly.png"), width=step_img_w, height=step_img_h)
+    img_trumpet = Image(os.path.join(REPO_ROOT, "cad/manufactured/renders_v10/v10_04_front_elevation_ram_air_vents.png"), width=step_img_w, height=step_img_h)
+    img_planform = Image(os.path.join(REPO_ROOT, "cad/manufactured/renders_v10/v10_03_top_planform_stagecoach_spokes.png"), width=step_img_w, height=step_img_h)
     img_diff_photo = Image(photo_stagecoach_path, width=step_img_w, height=step_img_h)
     img_fairing = Image(photo_fairing_path, width=step_img_w, height=step_img_h)
 
-    def make_step_card(step_num, title, target_link, text_lines, img_obj, gate_text):
+    def make_step_card(step_num, title, text_lines, img_obj, gate_text):
         content = [
-            Paragraph(f"<b><a href='{target_link}'><font color='#0f172a'>STAGE {step_num}: {title.upper()}</font></a></b>", table_cell_bold),
+            Paragraph(f"<b><font color='#0f172a'>STAGE {step_num}: {title.upper()}</font></b>", table_cell_bold),
             Spacer(1, 2)
         ]
         for line in text_lines:
@@ -396,7 +394,6 @@ def build_pdf():
 
     card_s1 = make_step_card(
         "1", "Bearing Hub Press-Fit",
-        "file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_sector_drum.stl",
         [
             "Inspect PA12-CF sector drum bearing seats (19.0mm OD).",
             "Press-fit lower 6800-2RS bearing flush to Z=0.0mm datum.",
@@ -409,7 +406,6 @@ def build_pdf():
 
     card_s2 = make_step_card(
         "2", "Differential Cartridge Assembly",
-        "file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_bevel_wrist_cartridge.stl",
         [
             "Slide central spider bevel gear onto yoke aft hex boss.",
             "Thread M2x8mm axial cap screw into spider gear counterbore (0.35 N·m).",
@@ -422,7 +418,6 @@ def build_pdf():
 
     card_s3 = make_step_card(
         "3", "Servo Installation & Wiring",
-        "https://agfrc.com",
         [
             "Drop dual AGFRC B24CLM micro-servos into isolated bays.",
             "Verify 1.8mm center web isolates servo cases at X=0.",
@@ -435,7 +430,6 @@ def build_pdf():
 
     card_s4 = make_step_card(
         "4", "Wing Spar Clamp & Trumpet Fit",
-        "file:///Users/drbell/Code/flight/cad/manufactured/v9_differential_gimbal_yoke.stl",
         [
             "Insert gimbal yoke assembly through front drum cavity.",
             "Slide Ø10.0mm carbon spar tube 26mm deep into clamp collar.",
@@ -448,11 +442,10 @@ def build_pdf():
 
     card_s5 = make_step_card(
         "5", "0.75mm Dyneema Capstan Rigging",
-        "file:///Users/drbell/Code/flight/cad/manufactured/v9_stepped_pinion_assembly.stl",
         [
             "Anchor Dyneema line at terminal -190° with M2.5 clamp washer.",
-            "Wrap line around 210° continuous rim (Z=2.8-5.4mm groove).",
-            "Wrap 3 full figure-8 turns around Ø7.5mm stepped pinion drum.",
+            "Wrap line around 200° continuous rim (Z=2.8-5.4mm groove).",
+            "Wrap 3 full figure-8 turns around Ø15.4mm stepped pinion drum.",
             "Tension line to 180 N; lock M2.5 terminal anchor screw (0.40 N·m).",
             "Tighten M3x5mm grub screw onto motor shaft D-flat (1.10 N·m)."
         ],
@@ -462,7 +455,6 @@ def build_pdf():
 
     card_s6 = make_step_card(
         "6", "NACA 0018 Fairing & Final Q/A",
-        "file:///Users/drbell/Code/flight/cad/manufactured/v9_topological_fairing.stl",
         [
             "Slide LW-PLA aerodynamic fairing over assembled wing root.",
             "Confirm nose aperture centers over carbon spar tube.",
@@ -470,7 +462,7 @@ def build_pdf():
             "Connect servo harness to flight controller; sweep pitch/roll."
         ],
         img_fairing,
-        "Full ±36° pitch and 210° flapping stroke with zero friction."
+        "Full ±36° pitch and 200° flapping stroke with zero friction."
     )
 
     grid_stages = [
@@ -496,17 +488,17 @@ def build_pdf():
     story.append(t_stages)
     story.append(Spacer(1, 4))
 
-    # SECTION 4: 90-SECOND QUICK-SWAP PROTOCOL WITH HYPERLINK
+    # SECTION 4: 90-SECOND QUICK-SWAP PROTOCOL
     quickswap_box = [
         [
-            Paragraph("<b>FIELD PROTOCOL: 90-SECOND QUICK-SWAP BEVEL GEAR REPLACEMENT</b> | <a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#0284c7'><u>[Direct STL Download: v9_quickswap_bevel_gear.stl]</u></font></a>", table_cell_bold)
+            Paragraph("<b>FIELD PROTOCOL: 90-SECOND QUICK-SWAP BEVEL GEAR REPLACEMENT</b>", table_cell_bold)
         ],
         [
             Paragraph(
                 "<b>Inspection Trigger:</b> If pre-flight bench checks detect gear backlash exceeding <b>1.0°</b> or tooth flank wear, initiate cartridge swap: <br/>"
                 "<b>1.</b> Remove fairing shell (2x M2 nose retaining clips). <br/>"
                 "<b>2.</b> Unthread axial M2x8mm socket cap screw from worn bevel gear. <br/>"
-                "<b>3.</b> Slide worn gear off 5.05mm hex drive shaft; slide on fresh 3D-printed replacement gear (<a href='file:///Users/drbell/Code/flight/cad/manufactured/v9_quickswap_bevel_gear.stl'><font color='#0284c7'><u>v9_quickswap_bevel_gear.stl</u></font></a>, pre-treated with dry PTFE). <br/>"
+                "<b>3.</b> Slide worn gear off 5.05mm hex drive shaft; slide on fresh 3D-printed replacement gear (<u>v9_quickswap_bevel_gear.stl</u>, pre-treated with dry PTFE). <br/>"
                 "<b>4.</b> Re-torque M2 screw to 0.35 N·m; verify backlash &lt; 0.3°. Re-install fairing. <i>Total downtime: &lt; 90 seconds. Cost: $0.07.</i>",
                 body_style
             )
@@ -524,14 +516,9 @@ def build_pdf():
     story.append(t_qs)
 
     doc.build(story, canvasmaker=NumberedCanvas)
-    
-    # Copy to artifact path
-    with open(DOC_OUT, 'rb') as f_in, open(ART_OUT, 'wb') as f_out:
-        f_out.write(f_in.read())
 
     print(f"Publication-grade PDF successfully created:")
     print(f"  Local  : {DOC_OUT}")
-    print(f"  Artifact: {ART_OUT}")
 
 if __name__ == '__main__':
     build_pdf()

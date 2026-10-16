@@ -1417,20 +1417,6 @@ class TC03Runner:
         odi.idle_all(); odi.close()
         _tc['tc03']['ct_j_curve'] = ct_j
 
-        # Auto-record flutter boundary data from CT-J speed points
-        try:
-            from mco_certification_tools import flutter_logger
-            n_active = sum(_fault_state.get('wing_healthy', [True]*8))
-            for pt in ct_j:
-                flutter_logger.record(
-                    V_ms=pt.get('V_ms', 0.0),
-                    imu_rms_g=pt.get('imu_rms_g', 0.0),
-                    n_active_wings=n_active,
-                    hypothesis_id=_tc['tc03'].get('active_hyp', '')
-                )
-        except Exception:
-            pass
-
         return _rec('tc03','03-03-ct-j', len(ct_j) >= 4,
                     {'ct_j': ct_j},
                     f'CT-J curve: {len(ct_j)} points across speed range. '

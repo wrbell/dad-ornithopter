@@ -26,7 +26,7 @@ import math
 import io
 
 # Ensure firmware path is present
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'firmware')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'firmware')))
 
 # Suppress import print noise
 _old_stdout = sys.stdout

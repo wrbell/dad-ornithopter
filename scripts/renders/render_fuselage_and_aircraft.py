@@ -174,34 +174,7 @@ def render_views():
             ptip_te.screenshot(os.path.join(OUT_DIR, 's1223_wingtip_skeleton_te_zoom.png'))
             print("  ✓ Rendered: s1223_wingtip_skeleton_te_zoom.png")
 
-    # Sync all rendered PNGs to current and previous brain artifacts directories
-    BRAIN_DIRS = [
-        '/Users/drbell/.gemini/antigravity/brain/fcfca30b-4f75-4837-ba9b-50a1b0b3caba',
-        '/Users/drbell/.gemini/antigravity/brain/6213fcb6-5e21-4842-8745-8b4c5b294586'
-    ]
-    png_files = [
-        'mco_aircraft_photo1_match.png',
-        'mco_aircraft_photo2_match.png',
-        'mco_aircraft_photo3_match.png',
-        'mco_aircraft_photo4_match.png',
-        'mco_fuselage_side.png',
-        'mco_fuselage_iso.png',
-        'mco_fuselage_front.png',
-        's1223_full_wing_skeleton_assembly.png',
-        's1223_wing_rib_lightening_holes_zoom.png',
-        's1223_wingtip_skeleton_iso.png',
-        's1223_wingtip_skeleton_top.png',
-        's1223_wingtip_skeleton_te_zoom.png',
-    ]
-    for bdir in BRAIN_DIRS:
-        if os.path.exists(bdir):
-            for pf in png_files:
-                src = os.path.join(OUT_DIR, pf)
-                dst = os.path.join(bdir, pf)
-                if os.path.exists(src):
-                    shutil.copyfile(src, dst)
-
-    print("\nAll renders and artifact synchronization completed successfully!")
+    print("\nAll renders completed successfully!")
 
 if __name__ == '__main__':
     render_views()

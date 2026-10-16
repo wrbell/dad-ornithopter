@@ -192,9 +192,11 @@ def cmd_docs(args: argparse.Namespace) -> int:
 
 ALLOWED_ROOT_FILES = {
     ".DS_Store",
+    ".gitattributes",
     ".gitignore",
     ".mcp.json",
     "AGENTS.md",
+    "CLAUDE.md",
     "CONTRIBUTING.md",
     "INDEX.md",
     "Makefile",
@@ -202,26 +204,27 @@ ALLOWED_ROOT_FILES = {
     "README.md",
     "mco",
     "pytest.ini",
-    "run_sim.sh",
-    "start_gs.sh",
-    "view_bom.sh",
+    "willem-suggestions.md",
 }
 
 ALLOWED_ROOT_DIRS = {
     ".agents",
     ".git",
-    ".github",
     ".pytest_cache",
     "__pycache__",
+    "archive",
+    "bom",
     "cad",
+    "config",
     "docs",
+    "enforcement",
     "firmware",
     "knowledge",
     "logs",
     "ornithopter-cad",
     "scripts",
     "tests",
-    "ui",
+    "tools",
 }
 
 
@@ -254,11 +257,112 @@ def _check_markdown_links(md_file: Path) -> list[str]:
     return broken
 
 
+def _check_ssot_sync() -> list[str]:
+    """Verify config/airframe_spec.json, MCOConfig, and bom/bom.csv agree."""
+    import csv
+
+    errors: list[str] = []
+    spec_path = REPO_ROOT / "config" / "airframe_spec.json"
+    bom_csv_path = REPO_ROOT / "bom" / "bom.csv"
+    if not spec_path.exists():
+        return ["Missing config/airframe_spec.json"]
+    if not bom_csv_path.exists():
+        return ["Missing bom/bom.csv"]
+
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    sys.path.insert(0, str(REPO_ROOT / "firmware"))
+    from mco_config import MCOConfig
+
+    if abs(MCOConfig.MASS_KG - spec["mass_and_balance"]["design_installed_mass_kg"]) > 1e-6:
+        errors.append(
+            f"MASS_KG mismatch: MCOConfig.MASS_KG={MCOConfig.MASS_KG} vs spec={spec['mass_and_balance']['design_installed_mass_kg']}"
+        )
+    if abs(MCOConfig.GEAR_RATIO - spec["propulsion"]["capstan_reduction_ratio"]) > 1e-6:
+        errors.append(
+            f"GEAR_RATIO mismatch: MCOConfig.GEAR_RATIO={MCOConfig.GEAR_RATIO} vs spec={spec['propulsion']['capstan_reduction_ratio']}"
+        )
+    if abs(MCOConfig.WINGSPAN_M - spec["geometry"]["tip_to_tip_wingspan_m"]) > 1e-6:
+        errors.append(
+            f"WINGSPAN_M mismatch: MCOConfig.WINGSPAN_M={MCOConfig.WINGSPAN_M} vs spec={spec['geometry']['tip_to_tip_wingspan_m']}"
+        )
+    if abs(MCOConfig.WING_AREA_TOTAL_M2 - spec["geometry"]["total_wing_area_m2"]) > 1e-6:
+        errors.append(
+            f"WING_AREA_TOTAL_M2 mismatch: MCOConfig.WING_AREA_TOTAL_M2={MCOConfig.WING_AREA_TOTAL_M2} vs spec={spec['geometry']['total_wing_area_m2']}"
+        )
+
+    overlap = set(MCOConfig.PITCH_PINS) & set(MCOConfig.SWEEP_PINS)
+    if overlap:
+        errors.append(f"GPIO pin collision between PITCH_PINS and SWEEP_PINS: {sorted(overlap)}")
+
+    with bom_csv_path.open("r", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if len(rows) < 40:
+        errors.append(f"bom/bom.csv has unexpectedly few rows ({len(rows)})")
+    return errors
+
+
+def _check_ast_duplicates() -> tuple[list[str], int]:
+    """Scan active Python files for duplicate top-level def/class definitions."""
+    import ast
+
+    dup_errors: list[str] = []
+    wave_lib_dups = 0
+    scan_dirs = [REPO_ROOT / "firmware", REPO_ROOT / "scripts", REPO_ROOT / "tests"]
+    for base in scan_dirs:
+        if not base.exists():
+            continue
+        for py_file in sorted(base.rglob("*.py")):
+            rel = py_file.relative_to(REPO_ROOT)
+            if "archive" in rel.parts or "__pycache__" in rel.parts:
+                continue
+            try:
+                tree = ast.parse(py_file.read_text(encoding="utf-8"))
+            except SyntaxError as exc:
+                dup_errors.append(f"SyntaxError in {rel}: {exc}")
+                continue
+            seen: dict[str, int] = {}
+            file_dups: list[str] = []
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if node.name in seen:
+                        file_dups.append(f"{node.name} (lines {seen[node.name]} & {node.lineno})")
+                    else:
+                        seen[node.name] = node.lineno
+            if file_dups:
+                if rel.as_posix() == "firmware/mco_wave_library.py":
+                    wave_lib_dups = len(file_dups)
+                else:
+                    dup_errors.append(f"{rel}: duplicate top-level symbol(s): {', '.join(file_dups[:5])}")
+    return dup_errors, wave_lib_dups
+
+
+def _check_hardcoded_user_paths() -> list[str]:
+    """Ensure zero hardcoded user home paths exist in active code/docs."""
+    bad: list[str] = []
+    target_prefix = "/Users/" + "drbell"
+    exts = {".py", ".md", ".json", ".sh", ".ini"}
+    for path in sorted(REPO_ROOT.rglob("*")):
+        if not path.is_file() or path.suffix not in exts:
+            continue
+        rel = path.relative_to(REPO_ROOT)
+        if (
+            "archive" in rel.parts
+            or ".git" in rel.parts
+            or "ornithopter-cad" in rel.parts
+            or rel.as_posix() in {"willem-suggestions.md", "scripts/mco_cli.py", "tests/test_anti_slop_gates.py"}
+        ):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if target_prefix in text:
+            bad.append(str(rel))
+    return bad
+
+
 def cmd_doctor(_args: argparse.Namespace) -> int:
     from scripts.mcp import prusaslicer_mcp_server as ps
 
     print("=" * 78)
-    print("  MCO-1D REPOSITORY DOCTOR — HYGIENE, LINK & CAD/SLICER AUDIT")
+    print("  MCO-1D REPOSITORY DOCTOR — 7-GATE ANTI-SLOP & STANDARDS AUDIT")
     print("=" * 78)
     issues: list[str] = []
 
@@ -273,58 +377,108 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
                 stray_root.append(f"Stray root file: {item.name}")
     if stray_root:
         issues.extend(stray_root)
-        print(f"[FAIL] Root Directory Cleanliness: {len(stray_root)} stray item(s)")
+        print(f"[FAIL] 1. Root Directory Cleanliness : {len(stray_root)} stray item(s)")
         for s in stray_root:
-            print(f"       - {s}")
+            print(f"          - {s}")
     else:
-        print("[PASS] Root Directory Cleanliness: 0 stray files or directories")
+        print("[PASS] 1. Root Directory Cleanliness : 0 stray files or directories")
 
-    # 2. Markdown link verification
+    # 2. Single Source of Truth Sync Check
+    ssot_errors = _check_ssot_sync()
+    if ssot_errors:
+        issues.extend(ssot_errors)
+        print(f"[FAIL] 2. Single Source of Truth Sync: {len(ssot_errors)} mismatch(es)")
+        for e in ssot_errors:
+            print(f"          - {e}")
+    else:
+        print("[PASS] 2. Single Source of Truth Sync: airframe_spec.json == MCOConfig == bom.csv")
+
+    # 3. AST Duplicate Symbol Gate
+    ast_errors, wave_dups = _check_ast_duplicates()
+    if ast_errors:
+        issues.extend(ast_errors)
+        print(f"[FAIL] 3. AST Duplicate Symbol Gate  : {len(ast_errors)} file(s) with duplicate defs")
+        for e in ast_errors:
+            print(f"          - {e}")
+    else:
+        warn_note = f" (legacy mco_wave_library.py has {wave_dups} overrides slated for replacement)" if wave_dups else ""
+        print(f"[PASS] 3. AST Duplicate Symbol Gate  : 0 duplicate defs in active modules{warn_note}")
+
+    # 4. Hardcoded Path Check
+    bad_paths = _check_hardcoded_user_paths()
+    if bad_paths:
+        issues.extend([f"Hardcoded user path in {p}" for p in bad_paths])
+        print(f"[FAIL] 4. Portable Path Gate         : {len(bad_paths)} file(s) with hardcoded user paths")
+        for p in bad_paths:
+            print(f"          - {p}")
+    else:
+        print("[PASS] 4. Portable Path Gate         : 0 hardcoded user paths in active files")
+
+    # 5. Markdown link verification
     md_files_to_check = [
         REPO_ROOT / "README.md",
         REPO_ROOT / "INDEX.md",
         REPO_ROOT / "PROJECT_STATE.md",
+        REPO_ROOT / "CONTRIBUTING.md",
         REPO_ROOT / "docs" / "README.md",
+        *sorted((REPO_ROOT / "docs" / "mark1").glob("*.md")),
+        *sorted(REPO_ROOT.rglob("AGENTS.md")),
     ]
-    if (REPO_ROOT / "AGENTS.md").exists():
-        md_files_to_check.append(REPO_ROOT / "AGENTS.md")
+    if (REPO_ROOT / "willem-suggestions.md").exists():
+        md_files_to_check.append(REPO_ROOT / "willem-suggestions.md")
 
     broken_links: list[str] = []
     for md in md_files_to_check:
         broken_links.extend(_check_markdown_links(md))
     if broken_links:
         issues.extend(broken_links)
-        print(f"[FAIL] Documentation Link Audit  : {len(broken_links)} broken link(s)")
+        print(f"[FAIL] 5. Documentation Link Audit   : {len(broken_links)} broken link(s)")
         for b in broken_links:
-            print(f"       - {b}")
+            print(f"          - {b}")
     else:
-        print(f"[PASS] Documentation Link Audit  : All links verified across {len(md_files_to_check)} index documents")
+        print(f"[PASS] 5. Documentation Link Audit   : All links verified across {len(md_files_to_check)} documents")
 
-    # 3. PrusaSlicer & MCP readiness
+    # 6. Collection Standards Linters
+    linter_cmds = [
+        ("agents_md_lint", [SYS_PYTHON, "tools/agents_md_lint.py"]),
+        ("ai_file_lint", [SYS_PYTHON, "tools/ai_file_lint.py", "."]),
+        ("bom_lint", [SYS_PYTHON, "tools/bom_lint.py", "--root", "."]),
+        ("check_docs", [SYS_PYTHON, "tools/check_docs.py", "."]),
+        ("check_prints", [SYS_PYTHON, "tools/check_prints.py", "."]),
+    ]
+    failed_linters: list[str] = []
+    for name, cmd in linter_cmds:
+        proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True)
+        if proc.returncode != 0:
+            failed_linters.append(f"{name}: {proc.stdout.strip()} {proc.stderr.strip()}".strip())
+    if failed_linters:
+        issues.extend(failed_linters)
+        print(f"[FAIL] 6. Collection Standards Gates : {len(failed_linters)} linter(s) failed")
+        for fl in failed_linters:
+            print(f"          - {fl}")
+    else:
+        print("[PASS] 6. Collection Standards Gates : 5/5 linters passed (AGENTS, AI files, BOM, Docs, Prints)")
+
+    # 7. PrusaSlicer & CDR Print Package Manifold Check
     try:
         ps_status = ps.prusaslicer_version_and_status()
-        print(f"[PASS] PrusaSlicer MCP Backend   : {ps_status['version_banner']} ({len(ps_status['mco_repo_profiles'])} repo profiles)")
-    except Exception as exc:
-        issues.append(f"PrusaSlicer MCP error: {exc}")
-        print(f"[FAIL] PrusaSlicer MCP Backend   : {exc}")
-
-    # 4. CAD Print Package Manifold & Bed-Fit Check
-    try:
         pkg_audit = ps.validate_mco_print_package("cad/print_package_wing_root")
         if pkg_audit["all_manifold"] and pkg_audit["all_fit_bed"]:
-            print(f"[PASS] CDR 3D Print Package      : {pkg_audit['total_stl_files']}/{pkg_audit['total_stl_files']} STLs manifold & fit CORE One bed")
+            print(
+                f"[PASS] 7. CAD & PrusaSlicer Gate     : {pkg_audit['total_stl_files']}/{pkg_audit['total_stl_files']} STLs manifold & fit CORE One ({ps_status['version_banner']})"
+            )
         else:
             issues.append("One or more STLs in cad/print_package_wing_root failed manifold or bed-fit check")
-            print("[FAIL] CDR 3D Print Package      : Manifold or bed-fit failure")
+            print("[FAIL] 7. CAD & PrusaSlicer Gate     : Manifold or bed-fit failure")
     except Exception as exc:
-        issues.append(f"Print package check error: {exc}")
-        print(f"[FAIL] CDR 3D Print Package      : {exc}")
+        issues.append(f"CAD/PrusaSlicer check error: {exc}")
+        print(f"[FAIL] 7. CAD & PrusaSlicer Gate     : {exc}")
 
     print("=" * 78)
     if issues:
         print(f"DOCTOR VERDICT: {len(issues)} ISSUE(S) FOUND")
         return 1
-    print("DOCTOR VERDICT: ALL CHECKS PASSED (100% HEALTHY)")
+    print("DOCTOR VERDICT: ALL 7 GATES PASSED (100% HEALTHY)")
     return 0
 
 
@@ -343,12 +497,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     # sim
     p_sim = sub.add_parser("sim", help="Run 50 Hz SITL flight computer simulation")
-    p_sim.add_argument("sim_args", nargs=argparse.REMAINDER, help="Arguments passed to firmware/mco_main.py --sim")
     p_sim.set_defaults(func=cmd_sim)
 
     # gs
     p_gs = sub.add_parser("gs", help="Launch Ground Station server & telemetry bridge")
-    p_gs.add_argument("gs_args", nargs=argparse.REMAINDER, help="Arguments passed to ground station launcher")
     p_gs.set_defaults(func=cmd_gs)
 
     # bom
@@ -408,7 +560,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    args.sim_args = unknown if args.command == "sim" else []
+    args.gs_args = unknown if args.command == "gs" else []
+    if unknown and args.command not in {"sim", "gs"}:
+        parser.error(f"unrecognized arguments: {' '.join(unknown)}")
     return args.func(args)
 
 

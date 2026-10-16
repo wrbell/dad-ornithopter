@@ -233,8 +233,7 @@ def run_vibration_sweep(quick=False):
 
             for freq in FREQ_SWEEP:
                 print(f"\n   {freq:.1f} Hz: ", end='', flush=True)
-                odi.set_cascade_freq(freq)
-                time.sleep(2.0)  # settle
+                odi.oscillate_cascade(freq, duration_s=2.0, stroke_half_angle_deg=20.0)
 
                 # IMU under vibration
                 imu_v = read_imu_rms(n_samples=25)

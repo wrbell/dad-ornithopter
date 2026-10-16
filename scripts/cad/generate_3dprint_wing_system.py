@@ -127,12 +127,6 @@ def generate_wing_system():
     cq.exporters.export(mount_wp, mount_step_path)
     cq.exporters.export(mount_wp, mount_3mf_path, tolerance=0.01, angularTolerance=0.1)
     # Also export under direct name s1223_starboard_mount_2.4mm
-    for ext, fpath in [('stl', mount_stl_path), ('step', mount_step_path), ('3mf', mount_3mf_path)]:
-        target = os.path.join(OUT_DIR, f's1223_starboard_mount_2.4mm.{ext}')
-        if ext == 'step':
-            cq.exporters.export(mount_wp, target)
-        else:
-            cq.exporters.export(mount_wp, target, tolerance=0.01, angularTolerance=0.1)
     print(f"  ✓ Exported: {mount_stl_path}")
     print(f"  ✓ Exported: {mount_step_path}")
     print(f"  ✓ Exported: {mount_3mf_path}")
@@ -248,25 +242,6 @@ def generate_wing_system():
     print(f"  ✓ Exported: {seg_stl_path}")
     print(f"  ✓ Exported: {seg_step_path}")
     print(f"  ✓ Exported: {seg_3mf_path}")
-
-    # Export requested starboard aliases: s1223_starboard_25cm_segment_2.4mm, s1223_starboard_25acm_segment_2.4mm, s1223_wing_segment_25cm_starboard_2.4mm
-    for alias_base in [
-        's1223_starboard_25cm_segment_2.4mm',
-        's1223_starboard_25acm_segment_2.4mm',
-        's1223_wing_segment_25cm_starboard_2.4mm',
-    ]:
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.stl'), tolerance=0.01, angularTolerance=0.1)
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.step'))
-        cq.exporters.export(seg_wp, os.path.join(OUT_DIR, f'{alias_base}.3mf'), tolerance=0.01, angularTolerance=0.1)
-        print(f"  ✓ Exported: {alias_base}")
-
-    # Also update/export default s1223_wing_segment_10cm_2.4mm alias
-    seg_stl_alias = os.path.join(OUT_DIR, 's1223_wing_segment_10cm_2.4mm.stl')
-    seg_step_alias = os.path.join(OUT_DIR, 's1223_wing_segment_10cm_2.4mm.step')
-    seg_3mf_alias = os.path.join(OUT_DIR, 's1223_wing_segment_10cm_2.4mm.3mf')
-    cq.exporters.export(seg_wp, seg_stl_alias, tolerance=0.01, angularTolerance=0.1)
-    cq.exporters.export(seg_wp, seg_step_alias)
-    cq.exporters.export(seg_wp, seg_3mf_alias, tolerance=0.01, angularTolerance=0.1)
 
     # -------------------------------------------------------------------------
     # 3. Generate Hollow Aerodynamic Wingtip with Reinforced 3.0mm Skeletonized TE
@@ -405,30 +380,13 @@ def generate_wing_system():
     print(f"  • Mass in PLA: {tip_stbd_final.Volume()/1000 * 1.24:.1f} g | LW-PLA: {tip_stbd_final.Volume()/1000 * 0.55:.1f} g (SAVED >70%!)")
 
     # Export TRUE Starboard Wingtip
-    stbd_stl_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_starboard_2.4mm.stl')
-    stbd_step_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_starboard_2.4mm.step')
-    stbd_3mf_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_starboard_2.4mm.3mf')
+    stbd_stl_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.stl')
+    stbd_step_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.step')
+    stbd_3mf_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.3mf')
     cq.exporters.export(tip_wp, stbd_stl_path, tolerance=0.01, angularTolerance=0.1)
     cq.exporters.export(tip_wp, stbd_step_path)
     cq.exporters.export(tip_wp, stbd_3mf_path, tolerance=0.01, angularTolerance=0.1)
-    print(f"  ✓ Exported TRUE Starboard Wingtip: {stbd_stl_path}")
-    print(f"  ✓ Exported TRUE Starboard Wingtip: {stbd_step_path}")
-    print(f"  ✓ Exported TRUE Starboard Wingtip: {stbd_3mf_path}")
-
-    # Export direct alias s1223_starboard_wingtip_2.4mm
-    stbd_alias_base = 's1223_starboard_wingtip_2.4mm'
-    cq.exporters.export(tip_wp, os.path.join(OUT_DIR, f'{stbd_alias_base}.stl'), tolerance=0.01, angularTolerance=0.1)
-    cq.exporters.export(tip_wp, os.path.join(OUT_DIR, f'{stbd_alias_base}.step'))
-    cq.exporters.export(tip_wp, os.path.join(OUT_DIR, f'{stbd_alias_base}.3mf'), tolerance=0.01, angularTolerance=0.1)
-    print(f"  ✓ Exported: {stbd_alias_base}")
-
-    # Export default alias
-    tip_stl_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.stl')
-    tip_step_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.step')
-    tip_3mf_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_2.4mm.3mf')
-    cq.exporters.export(tip_wp, tip_stl_path, tolerance=0.01, angularTolerance=0.1)
-    cq.exporters.export(tip_wp, tip_step_path)
-    cq.exporters.export(tip_wp, tip_3mf_path, tolerance=0.01, angularTolerance=0.1)
+    print(f"  ✓ Exported Starboard Wingtip: {stbd_stl_path}")
 
     # Export Port Wingtip
     port_stl_path = os.path.join(OUT_DIR, 's1223_wingtip_smooth_port_2.4mm.stl')

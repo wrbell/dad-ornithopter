@@ -10,9 +10,7 @@ import os
 import pyvista as pv
 
 OUT_DIR = "cad/manufactured/renders_package"
-ART_DIR = "/Users/drbell/.gemini/antigravity/brain/a5a482f2-2cea-48ab-945b-be0d2fd94a84/renders"
 os.makedirs(OUT_DIR, exist_ok=True)
-os.makedirs(ART_DIR, exist_ok=True)
 
 pv.OFF_SCREEN = True
 pv.set_plot_theme("document")
@@ -57,10 +55,8 @@ for v in views:
     plotter.add_text(v["title"], position="upper_left", font_size=13, color="white")
     
     out_file = os.path.join(OUT_DIR, v["filename"])
-    art_file = os.path.join(ART_DIR, v["filename"])
     plotter.screenshot(out_file)
-    plotter.screenshot(art_file)
     plotter.close()
-    print(f"Rendered: {out_file} & {art_file}")
+    print(f"Rendered: {out_file}")
 
 print("Plate rendering complete.")

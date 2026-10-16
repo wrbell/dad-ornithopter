@@ -63,7 +63,7 @@ Hardware safety boundaries, ground protection, and turnaround dynamics are enfor
    * Strictly clamps normal load factor to **$N_z \in [-2.20g, +2.20g]$** across all maneuvers.
    * With the bidirectional capstan drive and reinforced battery tray, limits are completely symmetric, protecting carbon spars from overload during inside and outside push loops.
 3. **Dynamic As-Built Mass Scaling (`scale_flight_laws_to_mass`)**:
-   * Accepts live as-built gross weight from [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](file:///Users/drbell/Code/flight/docs/mark1/MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) (`FIG-01`).
+   * Accepts live as-built gross weight from [`MCO-1D_Mark1_Builder_Calibration_Sheet.pdf`](MCO-1D_Mark1_Builder_Calibration_Sheet.pdf) (`FIG-01`).
    * Dynamically rescales stall speed floor $V_s \propto \sqrt{m}$, required lift $L = mg$, Boyd specific excess power $P_s$, and hover thrust-to-weight ratio.
 4. **Software-Only Reversal Recoil Engine (`compute_soft_recoil_trajectory`)**: 
    * Trajectory shaping with a tuned 3rd-harmonic counter-acceleration component:

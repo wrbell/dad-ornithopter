@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from tests.test_adversarial_simulation_flight import AdversarialFlightSimulator
 import firmware.mco_wave_library as wl

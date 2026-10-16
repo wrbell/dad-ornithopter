@@ -13,9 +13,11 @@ for MCO-1D Option B prototyping:
 
 import math
 import os
+from pathlib import Path
 import build123d as b3d
 
-OUT_DIR = "cad/manufactured"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+OUT_DIR = str(REPO_ROOT / "cad" / "manufactured")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # ------------------------------------------------------------------------------
@@ -26,6 +28,7 @@ z = 18               # Number of teeth
 alpha_deg = 25.0     # deg (Stubby pressure angle for maximum root thickness)
 delta_deg = 45.0     # deg (Pitch cone angle for 90° shaft intersection)
 b = 5.0              # mm (Face width)
+backlash_mm = 0.12   # mm per flank for PA12-CF FDM printability
 
 d_pitch = m * z      # 18.0 mm (Pitch diameter)
 r_pitch = d_pitch / 2.0 # 9.0 mm
@@ -71,28 +74,54 @@ with b3d.BuildPart() as printable_bevel_gear:
         b3d.Polygon(pts_blank, align=None)
     b3d.revolve(axis=b3d.Axis.Z)
 
-    # 1.2 Parametric Bevel Gear Teeth Cuts (18 teeth around 360°)
-    tooth_angle = 360.0 / z # 20.0 deg
+    # 1.2 Parametric Bevel Gear Teeth Cuts (18 teeth around 360°, 7-point Tredgold involute profile)
+    tooth_angle = 360.0 / z  # 20.0 deg
+    alpha_rad = math.radians(alpha_deg)
+    delta_rad = math.radians(delta_deg)
+    inv_alpha = math.tan(alpha_rad) - alpha_rad
+
+    # Tredgold virtual spur gear geometry on the back-cone
+    r_virt_pitch = r_pitch / math.cos(delta_rad)
+    r_virt_base = r_virt_pitch * math.cos(alpha_rad)
+    r_ded = r_pitch - 1.25 * m          # Dedendum radius (7.75 mm)
+    r_flank_root = r_pitch - 1.0 * m    # Active root flank radius above virtual base circle (8.00 mm)
+    r_add = r_pitch + 1.0 * m           # Addendum radius (10.00 mm)
+    r_cut = r_outer + 1.2 * m           # Outer cutter clearance radius (10.91 mm)
+
+    # Half-widths of tooth space at root flank, pitch circle, and addendum/cutter clearance
+    y_pitch = (math.pi * m / 4.0) + backlash_mm
+    phi_root = math.acos(min(1.0, r_virt_base / (r_virt_pitch - 1.0 * m)))
+    inv_root = math.tan(phi_root) - phi_root
+    y_root = y_pitch * (r_flank_root / r_pitch) - (r_virt_pitch - 1.0 * m) * (inv_alpha - inv_root)
+    phi_add = math.acos(min(1.0, r_virt_base / (r_virt_pitch + 1.0 * m)))
+    inv_add = math.tan(phi_add) - phi_add
+    y_add = y_pitch * (r_add / r_pitch) + (r_virt_pitch + 1.0 * m) * (inv_add - inv_alpha)
+    y_outer = y_add + (r_cut - r_add) * math.tan(phi_add)
+
+    def _tredgold_space_pts(scale: float) -> list[tuple[float, float]]:
+        return [
+            (scale * r_ded, 0.0),
+            (scale * r_flank_root, -scale * y_root),
+            (scale * r_pitch, -scale * y_pitch),
+            (scale * r_cut, -scale * y_outer),
+            (scale * r_cut, scale * y_outer),
+            (scale * r_pitch, scale * y_pitch),
+            (scale * r_flank_root, scale * y_root),
+        ]
+
+    s_heel = 1.0
+    s_toe = (r_tip_inner - 0.5 * math.sin(delta_rad)) / r_pitch
+    pts_heel = _tredgold_space_pts(s_heel)
+    pts_toe = _tredgold_space_pts(s_toe)
+
     for i in range(z):
         ang = i * tooth_angle
         with b3d.BuildSketch(b3d.Plane.XY.offset(hub_len - 1.5)):
             with b3d.Locations(b3d.Location((0, 0), ang)):
-                pts_root = [
-                    (r_pitch * 0.74, -0.85),
-                    (r_outer + 1.2, -1.65),
-                    (r_outer + 1.2, 1.65),
-                    (r_pitch * 0.74, 0.85)
-                ]
-                b3d.Polygon(pts_root, align=None)
+                b3d.Polygon(pts_heel, align=None)
         with b3d.BuildSketch(b3d.Plane.XY.offset(total_len + 0.5)):
             with b3d.Locations(b3d.Location((0, 0), ang)):
-                pts_tip = [
-                    (r_pitch * 0.52, -0.55),
-                    (r_outer * 0.72, -1.10),
-                    (r_outer * 0.72, 1.10),
-                    (r_pitch * 0.52, 0.55)
-                ]
-                b3d.Polygon(pts_tip, align=None)
+                b3d.Polygon(pts_toe, align=None)
         b3d.loft(mode=b3d.Mode.SUBTRACT)
 
     # 1.3 Quick-Swap Hexagonal Drive Socket (5.0mm Across Flats) with 45-deg conical ceiling transition
