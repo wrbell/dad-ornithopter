@@ -1,6 +1,5 @@
 # MCO-1D Metachronal Cascade Ornithopter
 
-[![CI Engineering Verification](https://github.com/wrbell/dad-ornithopter/actions/workflows/ci.yml/badge.svg)](https://github.com/wrbell/dad-ornithopter/actions/workflows/ci.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Standards: DO-178C / DO-160G](https://img.shields.io/badge/Aviation%20Standards-DO--178C%20%7C%20DO--160G-orange.svg)](docs/mark1/MCO-1D_Mark1_Software_Reference.md)
@@ -198,9 +197,6 @@ dad-ornithopter/
 ├── view_bom.sh                    # Live BOM pricing & MTOW auto-updater / inspector
 ├── run_sim.sh                     # Launch simulation mode in one command
 ├── start_gs.sh                    # Launch Ground Station & telemetry bridge
-│
-├── .github/                       # Continuous integration workflows
-│   └── workflows/ci.yml           # Automated GitHub Actions test & doctor pipeline
 │
 ├── docs/mark1/                    # MCO-1D Mark 1 Authoritative Engineering Suite & PDFs
 │   ├── MCO-1D_Mark1_Master_Specification.md

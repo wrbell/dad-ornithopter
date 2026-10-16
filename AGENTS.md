@@ -86,7 +86,15 @@ Whenever you create or modify any 3D printable part (`.stl`, `.step`, `.3mf`):
 
 ---
 
-## 5. Documentation & Pre-Completion Checklist
+## 5. Strict No-GitHub-Actions Policy
+
+**DO NOT use GitHub Actions or create `.github/workflows/` files in this repository under any circumstances.**
+- All continuous integration, unit testing (1,020+ tests), 50 Hz SITL flight simulation, CAD manifold verification, and doctor health audits **MUST** run locally on macOS via `./mco test`, `./mco doctor`, `./mco sim`, and `Makefile`.
+- Never create, commit, or push `.github/workflows` or any remote CI pipelines. Verification is 100% local.
+
+---
+
+## 6. Documentation & Pre-Completion Checklist
 
 Before concluding any task that adds files, changes hardware/mass parameters, or modifies flight laws:
 1. If component masses or part counts changed, update [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py) and run `./mco bom --view` to refresh [`docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md`](docs/mark1/MCO-1D_Mark1_Bill_of_Materials.md).

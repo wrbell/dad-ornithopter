@@ -30,7 +30,6 @@ Comprehensive index of all assets in the MCO-1D repository grouped into 10 funct
 | [MCO-1D_Fasteners_and_Inserts_Mass_Budget.md](docs/mark1/MCO-1D_Fasteners_and_Inserts_Mass_Budget.md) | **[ACTIVE]** | Complete fastener, bearing, dead-axle, and heat-set insert mass ledger. |
 | [AGENTS.md](AGENTS.md) | **[ACTIVE]** | Repository organization contract, Python runtime policy, `./mco` workflow rules, and PrusaSlicer MCP validation gate. |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | **[ACTIVE]** | Developer contribution guide, Git workflows, pre-push verification gates, and `./mco` CLI standards. |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | **[ACTIVE]** | GitHub Actions CI workflow running Doctor, 1,020 unit tests, 50 Hz SITL, TC-01 bench qualification, and BOM verification. |
 | [mco](mco) / [Makefile](Makefile) / [mco_cli.py](scripts/mco_cli.py) | **[ACTIVE]** | Unified engineering workflow CLI (`./mco test`, `sim`, `cad`, `slice`, `bom`, `docs`, `doctor`). |
 | [prusaslicer_mcp_server.py](scripts/mcp/prusaslicer_mcp_server.py) | **[ACTIVE]** | Native Python `FastMCP` server driving PrusaSlicer 2.9.6 CLI & GUI on macOS. |
 | [view_bom.sh](view_bom.sh) / [mco_bom_tool.py](scripts/mco_bom_tool.py) | **[ACTIVE]** | Zero-dependency live BOM pricing and MTOW calculation engine. |

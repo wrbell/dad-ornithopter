@@ -86,4 +86,5 @@ Before pushing changes to GitHub (`origin/main`):
 - [ ] **Run Verification Suite**: `./mco test` passes all 1,020 tests.
 - [ ] **Run SITL Simulation**: `./mco sim` executes cleanly without NaN or actuator fault warnings.
 - [ ] **Refresh BOM**: If part counts or masses changed, update [`scripts/mco_bom_tool.py`](scripts/mco_bom_tool.py) and run `./mco bom --view`.
+- [ ] **Zero GitHub Actions CI**: Do not add or push `.github/workflows/`. Continuous integration and verification are strictly local on macOS.
 - [ ] **Update Documentation Catalogs**: Ensure any newly created or moved files are referenced in [`INDEX.md`](INDEX.md), [`README.md`](README.md), and [`docs/README.md`](docs/README.md).
