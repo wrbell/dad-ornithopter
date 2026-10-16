@@ -1,7 +1,7 @@
 # MCO-1D Metachronal Cascade Ornithopter — Engineering Makefile
 # Delegates standard workflows to ./mco (scripts/mco_cli.py)
 
-.PHONY: help test tc01 sim gs bom cad cad-verify slice-plate docs doctor clean
+.PHONY: help test tc01 sim gs bom cad cad-verify slice-plate slice-pla docs doctor clean
 
 help:
 	@echo "======================================================================"
@@ -15,6 +15,7 @@ help:
 	@echo "  make cad-verify   Verify all CDR 3D print STLs via PrusaSlicer CLI"
 	@echo "  make cad          Regenerate & package Wing Root CDR 3D print files"
 	@echo "  make slice-plate  Slice PLATE_01 in PA12-CF with PrusaSlicer 2.9.6"
+	@echo "  make slice-pla    Slice PLATE_01 in PLA prototype profile with PrusaSlicer"
 	@echo "  make docs         Regenerate all PDF installation & calibration guides"
 	@echo "  make doctor       Audit repo cleanliness, markdown links & CAD/MCP"
 	@echo "  make clean        Clean Python caches and temporary sliced output"
@@ -43,6 +44,9 @@ cad:
 
 slice-plate:
 	./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pa12cf_structural
+
+slice-pla:
+	./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pla_prototype
 
 docs:
 	./mco docs all

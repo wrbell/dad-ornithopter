@@ -8,11 +8,19 @@
 
 ## 1. Quick-Start Slicing Recommendation
 
-- **Option A (Fast Single-Bed Print — 100% Structural Parts)**:
-  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` directly into OrcaSlicer / Bambu Studio / PrusaSlicer.
-  Every structural part is pre-oriented flat on the build plate for optimal layer bonding and zero/minimal support.
-  - **Estimated Print Time**: ~5 hrs 30 mins (at 0.16mm layer height).
-  - **Estimated Filament Usage**: ~108g of PA12-CF.
+- **Option A1 (Production Slicing — PA12-CF Carbon Nylon)**:
+  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` directly into PrusaSlicer, OrcaSlicer, or Bambu Studio.
+  - **Profile**: `pa12cf_structural` (`cad/slicer_profiles/mco_pa12cf_structural_coreone.ini`)
+  - **Estimated Print Time**: ~18 hrs (0.16mm layer height, 6 walls, 60% Gyroid).
+  - **Estimated Filament Usage**: ~155g of PA12-CF.
+  - **CLI Command**: `./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pa12cf_structural`
+
+- **Option A2 (Rapid Fit-Check Prototyping — Standard PLA)**:
+  Import `PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl` (or pre-sliced `cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf`).
+  - **Profile**: `pla_prototype` (`cad/slicer_profiles/mco_pla_prototype_coreone.ini`)
+  - **Estimated Print Time**: ~11 hrs 27 mins (0.20mm layer height, 4 walls, 25% Gyroid).
+  - **Estimated Filament Usage**: ~129g of PLA (Nozzle: 230°C / Bed: 60°C).
+  - **CLI Command**: `./mco slice cad/print_package_wing_root/PLATE_01_PA12CF_ALL_STRUCTURAL_PARTS.stl --profile pla_prototype`
 
 - **Option B (Individual Part Printing)**:
   Import individual `.stl` files from this folder according to the slicing parameters in the table below.
@@ -48,6 +56,21 @@
 - **Supports**: 
   - `PLATE_01` is pre-oriented flat to require **no supports** on functional faces.
   - Tree supports (organic) are only needed for the small underside clevis gap on the collar.
+
+### 3.2 Slicer Parameters for PLA Prototype Fit-Check (`pla_prototype`)
+
+- **Profile File**: [`cad/slicer_profiles/mco_pla_prototype_coreone.ini`](file:///Users/drbell/Code/flight/cad/slicer_profiles/mco_pla_prototype_coreone.ini)
+- **Target Filament**: Prusament PLA, Hatchbox PLA, eSUN PLA+ (1.75 mm).
+- **Layer Height**: 0.20 mm (First Layer: 0.20 mm).
+- **Walls / Perimeters**: 4 perimeters.
+- **Infill**: 25% Gyroid (monotonic top/bottom).
+- **Nozzle Temperature**: 215°C – 230°C.
+- **Bed Temperature**: 60°C (Smooth PEI or Satin sheet).
+- **Chamber Temperature**: Ambient (open door or unheated).
+- **Cooling Fan**: 100% active from layer 3 onward.
+- **Total Print Time**: 11 hrs 27 mins.
+- **Filament Consumption**: 129.3 g (104.3 cm³ / 43.3 m).
+- **Deliverables**: Pre-sliced project [`cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf`](file:///Users/drbell/Code/flight/cad/sliced_output/PLATE_01_PLA_COMPLETE_WING_ROOT.3mf) & G-code ready in `/Users/drbell/Downloads/`.
 
 ---
 
