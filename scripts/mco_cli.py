@@ -166,6 +166,7 @@ def cmd_slice(args: argparse.Namespace) -> int:
 
 
 DOC_TARGETS: dict[str, str] = {
+    "review": "scripts/docs/generate_engineering_review_pdf.py",
     "exploded": "scripts/docs/generate_hierarchical_exploded_assembly_pdf.py",
     "powertrain": "scripts/docs/generate_v10_powertrain_guide_pdf.py",
     "wrist": "scripts/docs/generate_wrist_assembly_guide_pdf.py",
@@ -175,16 +176,28 @@ DOC_TARGETS: dict[str, str] = {
 }
 
 
+def _resolve_docs_python() -> str:
+    import shutil
+
+    candidates = [SYS_PYTHON, shutil.which("python3") or "python3", "/usr/bin/python3"]
+    for py in candidates:
+        res = subprocess.run([py, "-c", "import reportlab"], capture_output=True)
+        if res.returncode == 0:
+            return py
+    return SYS_PYTHON
+
+
 def cmd_docs(args: argparse.Namespace) -> int:
     target = args.target
     targets = list(DOC_TARGETS.keys()) if target == "all" else [target]
+    docs_py = _resolve_docs_python()
     for t in targets:
         if t not in DOC_TARGETS:
             print(f"Unknown docs target '{t}'. Choose from: all, {', '.join(DOC_TARGETS.keys())}")
             return 1
         script_rel = DOC_TARGETS[t]
         print(f"=== Generating Documentation PDF: {script_rel} ===")
-        rc = _run([CAD_PYTHON, script_rel])
+        rc = _run([docs_py, script_rel])
         if rc != 0:
             return rc
     return 0
